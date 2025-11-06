@@ -303,14 +303,14 @@ export default function ChatInterface({
                 {/* Multi-model group header */}
                 {isMultiModel && (
                   <div className="text-center py-2">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-600">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100/80 backdrop-blur-sm rounded-full text-xs text-gray-600 font-medium border border-gray-200/50">
                       <span>Responses from {groupMessages.length} AIs</span>
                     </div>
                   </div>
                 )}
                 
                 {/* Group container */}
-                <div className={`${isMultiModel ? 'bg-gray-50 rounded-lg p-3 space-y-3' : 'space-y-3'}`}>
+                <div className={`${isMultiModel ? 'bg-gray-50/60 rounded-xl p-4 space-y-3 border border-gray-100' : 'space-y-3'}`}>
                   {groupMessages.map((msg, index) => (
             <motion.div
               key={msg.id}
@@ -342,7 +342,7 @@ export default function ChatInterface({
                     e.preventDefault()
                     e.stopPropagation()
                   }}
-                  className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 hover:bg-blue-200 flex items-center justify-center text-blue-600 hover:text-blue-800 transition-colors duration-150 mt-1 z-10 relative"
+                  className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600 hover:text-blue-700 transition-all duration-200 mt-1 z-10 relative shadow-sm hover:shadow"
                   title="Branch from this message"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -353,7 +353,7 @@ export default function ChatInterface({
                 // AI message - branch button on right
                 <div className="flex items-start gap-3">
                   {/* Simple message bubble */}
-                  <div className="max-w-[90%] bg-white rounded-2xl border border-gray-200 shadow-sm px-6 py-4">
+                  <div className="max-w-[90%] bg-white rounded-2xl border border-gray-200/80 shadow-sm hover:shadow-md transition-shadow duration-200 px-6 py-4">
                     <div className="flex items-center gap-2 mb-2">
                       <div className={`w-2 h-2 rounded-full ${
                         msg.isUser ? 'bg-blue-500' : 'bg-gray-400'
@@ -447,7 +447,7 @@ export default function ChatInterface({
                       e.preventDefault()
                       e.stopPropagation()
                     }}
-                    className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 hover:bg-blue-200 flex items-center justify-center text-blue-600 hover:text-blue-800 transition-colors duration-150 mt-1 z-10 relative"
+                    className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600 hover:text-blue-700 transition-all duration-200 mt-1 z-10 relative shadow-sm hover:shadow"
                     title="Branch from this message"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -525,7 +525,7 @@ export default function ChatInterface({
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                           onClick={handleCreateBranches}
-                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors duration-200"
+                          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95"
                         >
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -603,7 +603,7 @@ export default function ChatInterface({
           exit={{ opacity: 0, y: -4 }}
           className="flex justify-start mb-4"
         >
-          <div className="relative flex items-center gap-2 px-4 py-2 rounded-full bg-gray-50 border border-gray-100">
+          <div className="relative flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-50/80 border border-gray-200/60 shadow-sm focus-within:shadow-md focus-within:border-gray-300 transition-all duration-200">
             {/* Animated dots */}
             <div className="flex space-x-1">
               <motion.div

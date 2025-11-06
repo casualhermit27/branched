@@ -214,21 +214,35 @@ export default function Sidebar({
           {!hasChildren && <div className="w-6 flex-shrink-0"></div>}
           
           {/* Node Content */}
-          <button
+          <motion.button
             onClick={() => onSelectBranch(node.id)}
-            className={`flex-1 text-left p-3 rounded-lg text-sm transition-colors min-w-0 ${
+            className={`flex-1 text-left p-3 rounded-xl text-sm transition-all duration-200 min-w-0 ${
               isActive
-                ? 'bg-purple-50 text-purple-700 border border-purple-200 shadow-sm'
-                : 'hover:bg-gray-50 text-gray-700'
+                ? 'bg-gradient-to-r from-purple-50 to-purple-50/50 text-purple-700 border border-purple-200/60 shadow-sm'
+                : 'hover:bg-gray-50/80 text-gray-700 border border-transparent'
             }`}
+            whileHover={{ scale: 1.01, x: 2 }}
+            whileTap={{ scale: 0.99 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
           >
             <div className="flex items-center min-w-0">
-              <div className={`w-3 h-3 rounded-full mr-2.5 flex-shrink-0 ${
-                node.type === 'main' ? 'bg-blue-500' : 'bg-green-500'
-              }`}></div>
-              <span className="font-medium truncate min-w-0 flex-1" title={getNodeTitle(node)}>{getNodeTitle(node)}</span>
+              <motion.div 
+                className={`w-2.5 h-2.5 rounded-full mr-3 flex-shrink-0 ${
+                  node.type === 'main' ? 'bg-blue-500' : 'bg-emerald-500'
+                }`}
+                animate={{ scale: isActive ? [1, 1.2, 1] : 1 }}
+                transition={{ duration: 0.5, repeat: isActive ? Infinity : 0, repeatDelay: 2 }}
+              />
+              <span className="font-medium truncate min-w-0 flex-1 text-sm" title={getNodeTitle(node)}>{getNodeTitle(node)}</span>
               {isActive && (
-                <span className="ml-2 text-xs text-purple-600 flex-shrink-0">●</span>
+                <motion.span 
+                  className="ml-2 text-xs text-purple-600 flex-shrink-0"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  ●
+                </motion.span>
               )}
             </div>
             <div className="text-xs text-gray-500 mt-2 flex items-center justify-between min-w-0">
@@ -237,15 +251,23 @@ export default function Sidebar({
                 <span className="text-xs text-gray-400 flex-shrink-0 ml-2">Branch</span>
               )}
             </div>
-          </button>
+          </motion.button>
         </div>
         
         {/* Children with proper indentation */}
-        {hasChildren && isExpanded && (
-          <div className="ml-6 border-l border-gray-200 pl-3 mt-2 space-y-2">
-            {node.children.map(child => renderTreeNode(child, depth + 1))}
-          </div>
-        )}
+        <AnimatePresence>
+          {hasChildren && isExpanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="ml-6 border-l-2 border-gray-200/60 pl-3 mt-2 space-y-2"
+            >
+              {node.children.map(child => renderTreeNode(child, depth + 1))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     )
   }
@@ -253,61 +275,84 @@ export default function Sidebar({
   return (
     <>
       {/* Toggle Button - Positioned to not overlap with sidebar */}
-      <button
+      <motion.button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-4 left-4 z-40 p-2 bg-white border border-gray-200 rounded-full shadow-sm hover:shadow-md transition-shadow"
+        className="fixed top-4 left-4 z-40 p-2.5 bg-white border border-gray-200 rounded-full shadow-sm hover:shadow-md transition-all duration-200"
         aria-label={isOpen ? "Close sidebar" : "Open sidebar"}
-        style={{ 
-          left: isOpen ? '320px' : '16px', // Move right when sidebar is open (fixed width)
-          transition: 'left 0.3s ease-in-out'
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        animate={{ 
+          left: isOpen ? 320 : 16,
+          rotate: isOpen ? 90 : 0
         }}
+        transition={{ type: "spring", stiffness: 300, damping: 25 }}
       >
         {isOpen ? <X size={18} /> : <List size={18} />}
-      </button>
+      </motion.button>
       
       {/* Sidebar */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ x: -300, opacity: 0 }}
+            initial={{ x: -320, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            exit={{ x: -300, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="fixed top-0 left-0 z-40 h-full bg-white border-r border-gray-200 shadow-lg w-80 flex flex-col"
+            exit={{ x: -320, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            className="fixed top-0 left-0 z-40 h-full bg-white border-r border-gray-200 shadow-xl w-80 flex flex-col backdrop-blur-sm bg-white/95"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-gray-100">
-              <h2 className="text-lg font-medium">Conversations</h2>
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gradient-to-r from-white to-gray-50/50">
+              <h2 className="text-lg font-semibold text-gray-900 tracking-tight">Conversations</h2>
             </div>
             
             {/* Tabs */}
-            <div className="flex border-b border-gray-100">
-              <button
+            <div className="flex border-b border-gray-100 bg-white">
+              <motion.button
                 onClick={() => setActiveTab('history')}
-                className={`flex-1 py-4 text-sm font-medium ${
+                className={`flex-1 py-4 text-sm font-medium relative transition-colors duration-200 ${
                   activeTab === 'history' 
-                    ? 'text-purple-600 border-b-2 border-purple-600' 
+                    ? 'text-purple-600' 
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
+                whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)' }}
+                whileTap={{ scale: 0.98 }}
               >
-                <span className="flex items-center justify-center gap-2.5">
-                  <Clock size={17} />
+                <span className="flex items-center justify-center gap-2.5 relative z-10">
+                  <Clock size={17} weight={activeTab === 'history' ? 'fill' : 'regular'} />
                   History
                 </span>
-              </button>
-              <button
+                {activeTab === 'history' && (
+                  <motion.div
+                    layoutId="activeTab"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600 rounded-t-full"
+                    initial={false}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  />
+                )}
+              </motion.button>
+              <motion.button
                 onClick={() => setActiveTab('branches')}
-                className={`flex-1 py-4 text-sm font-medium ${
+                className={`flex-1 py-4 text-sm font-medium relative transition-colors duration-200 ${
                   activeTab === 'branches' 
-                    ? 'text-purple-600 border-b-2 border-purple-600' 
+                    ? 'text-purple-600' 
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
+                whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)' }}
+                whileTap={{ scale: 0.98 }}
               >
-                <span className="flex items-center justify-center gap-2.5">
-                  <GitBranch size={17} />
+                <span className="flex items-center justify-center gap-2.5 relative z-10">
+                  <GitBranch size={17} weight={activeTab === 'branches' ? 'fill' : 'regular'} />
                   Branches
                 </span>
-              </button>
+                {activeTab === 'branches' && (
+                  <motion.div
+                    layoutId="activeTab"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600 rounded-t-full"
+                    initial={false}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  />
+                )}
+              </motion.button>
             </div>
             
             {/* Content */}
@@ -338,9 +383,9 @@ export default function Sidebar({
             </div>
             
             {/* Footer */}
-            <div className="p-4 border-t border-gray-100 text-xs text-gray-500 flex items-center justify-between">
-              <span>{branches.length} conversations</span>
-              <span className="text-purple-500 font-medium">AI Canvas</span>
+            <div className="p-4 border-t border-gray-100 bg-gray-50/50 text-xs text-gray-500 flex items-center justify-between">
+              <span className="font-medium">{branches.length} conversations</span>
+              <span className="text-purple-600 font-semibold tracking-wide">AI Canvas</span>
             </div>
           </motion.div>
         )}

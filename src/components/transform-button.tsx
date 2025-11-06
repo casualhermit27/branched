@@ -49,15 +49,18 @@ export default function TransformButton({
       disabled={isDisabled && !isGenerating}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      whileHover={{ scale: isDisabled && !isGenerating ? 1 : 1.02 }}
+      whileTap={{ scale: isDisabled && !isGenerating ? 1 : 0.98 }}
       className={`
         flex items-center justify-center
         w-10 h-10
         ${isGenerating 
-          ? 'bg-red-50 hover:bg-red-100 text-red-600' 
-          : 'bg-purple-50 hover:bg-purple-100 text-purple-600'}
+          ? 'bg-red-50 hover:bg-red-100 text-red-600 border border-red-200/50' 
+          : 'bg-purple-50 hover:bg-purple-100 text-purple-600 border border-purple-200/50'}
         ${isDisabled && !isGenerating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-        shadow-sm hover:shadow
-        transition-colors duration-200
+        shadow-sm
+        transition-all duration-200
+        active:opacity-80
       `}
     >
       <motion.div

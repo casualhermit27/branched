@@ -67,7 +67,7 @@ export default function ConversationHistory({
       <div className="p-4 border-b border-gray-100">
         <button 
           onClick={onCreateNewConversation}
-          className="w-full py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm font-medium"
+          className="w-full py-2.5 px-4 bg-gradient-to-r from-purple-50 to-purple-50/50 hover:from-purple-100 hover:to-purple-100/50 text-purple-700 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 text-sm font-medium border border-purple-200/60 shadow-sm hover:shadow-md active:scale-[0.98]"
         >
           <PlusCircle size={16} weight="bold" />
           New Conversation
@@ -94,10 +94,10 @@ export default function ConversationHistory({
                     <div key={conversation._id} className="flex items-center gap-2 group relative">
                       <button
                         onClick={() => onSelectConversation(conversation._id)}
-                        className={`flex-1 text-left p-3 rounded-lg text-sm transition-all duration-200 ease-in-out min-w-0 overflow-hidden ${
+                        className={`flex-1 text-left p-3 rounded-xl text-sm transition-all duration-200 ease-in-out min-w-0 overflow-hidden ${
                           currentConversationId === conversation._id
-                            ? 'bg-purple-50 text-purple-700 border border-purple-200 shadow-sm pr-10'
-                            : 'hover:bg-gray-50 text-gray-700 group-hover:pr-10 pr-3'
+                            ? 'bg-gradient-to-r from-purple-50 to-purple-50/50 text-purple-700 border border-purple-200/60 shadow-sm pr-10'
+                            : 'hover:bg-gray-50/80 text-gray-700 border border-transparent group-hover:pr-10 pr-3 hover:shadow-sm'
                         }`}
                       >
                         <div className="font-medium truncate block whitespace-nowrap overflow-hidden text-ellipsis">
@@ -115,7 +115,7 @@ export default function ConversationHistory({
                             onDeleteConversation(conversation._id)
                           }
                         }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-2 hover:bg-gray-100 rounded-full transition-all duration-200 ease-in-out transform scale-90 group-hover:scale-100 z-10"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-2 hover:bg-gray-100 rounded-full transition-all duration-200 ease-in-out transform scale-90 group-hover:scale-100 z-10 hover:bg-red-50 hover:text-red-600"
                         title="Delete conversation"
                       >
                         <Trash className="w-3.5 h-3.5 text-gray-500" />

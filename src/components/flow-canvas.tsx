@@ -925,15 +925,24 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
   // Update nodes when minimize state changes
   useEffect(() => {
     setNodes(nds => 
-      validateNodePositions(nds.map(n => ({
+      validateNodePositions(nds.map(n => {
+        const isMinimized = minimizedNodes.has(n.id)
+        return {
         ...n,
+          style: {
+            ...n.style,
+            width: isMinimized ? 280 : 1000,
+            height: isMinimized ? 'auto' : 750,
+            minHeight: isMinimized ? 'auto' : 750
+          },
         data: {
           ...n.data,
-          isMinimized: minimizedNodes.has(n.id)
+            isMinimized: isMinimized
         }
-      })))
+        }
+      }))
     )
-  }, [minimizedNodes, validateNodePositions])
+  }, [minimizedNodes, validateNodePositions, setNodes])
 
   // MagnifyingGlass functionality
   const performMagnifyingGlass = useCallback((query: string) => {

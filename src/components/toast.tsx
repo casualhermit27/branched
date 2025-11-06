@@ -116,8 +116,8 @@ const ToastItem = ({ toast, onRemove }: { toast: Toast, onRemove: (id: string) =
       initial={{ opacity: 0, y: -50, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -50, scale: 0.95 }}
-      transition={{ duration: 0.2 }}
-      className={`max-w-sm w-full border rounded-lg p-5 shadow-lg ${getToastStyles(toast.type)}`}
+      transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+      className={`max-w-sm w-full border rounded-xl p-5 shadow-lg backdrop-blur-sm ${getToastStyles(toast.type)}`}
     >
       <div className="flex items-start space-x-4">
         <div className="flex-shrink-0 pt-0.5">
