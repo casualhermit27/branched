@@ -32,6 +32,13 @@ export interface IMessage {
   isStreaming?: boolean
   streamingText?: string
   nodeId?: string // Which node this message belongs to
+  // New fields for advanced features
+  confidenceScore?: number // Model confidence for this response
+  reasoningScore?: number // Quality/reasoning score
+  latency?: number // Response time in ms
+  tokensUsed?: number
+  cost?: number
+  contextUsed?: string[] // Memory IDs that were used
 }
 
 const MessageSchema = new Schema<IMessage>({
@@ -47,16 +54,25 @@ const MessageSchema = new Schema<IMessage>({
   groupId: { type: String },
   isStreaming: { type: Boolean, default: false },
   streamingText: { type: String },
-  nodeId: { type: String }
+  nodeId: { type: String },
+  // New fields
+  confidenceScore: { type: Number, min: 0, max: 1 },
+  reasoningScore: { type: Number, min: 0, max: 1 },
+  latency: { type: Number },
+  tokensUsed: { type: Number },
+  cost: { type: Number },
+  contextUsed: { type: [String], default: [] }
 })
 
-// Branch Schema
+// Branch Schema - Refactored with clear separation
 export interface IBranch {
   id: string
   label: string
-  parentId?: string
-  messages: IMessage[]
-  selectedAIs: IAIModel[]
+  parentId?: string // Parent node ID (e.g., 'main' or another branch ID)
+  parentMessageId: string // Message ID that created this branch
+  inheritedMessages: IMessage[] // All messages from root till the parent message (for context)
+  branchMessages: IMessage[] // Only new messages within this branch
+  selectedAIs: IAIModel[] // Which model(s) this branch is exploring
   multiModelMode: boolean
   isMinimized: boolean
   isActive: boolean
@@ -68,13 +84,29 @@ export interface IBranch {
   }
   createdAt: Date
   updatedAt: Date
+  // New fields for advanced features
+  depthLevel?: number // Tree depth for layout
+  metadata?: {
+    temperature?: number
+    topP?: number
+    maxTokens?: number
+    [key: string]: any
+  }
+  confidenceScore?: number // 0-1 score for model comparison
+  reasoningScore?: number // Quality score
+  isPromoted?: boolean // Whether this branch is promoted to main
+  upvotes?: number // User feedback
+  downvotes?: number
+  contextLinks?: string[] // Links to other branches for context sharing
 }
 
 const BranchSchema = new Schema<IBranch>({
-  id: { type: String, required: true }, // Remove unique constraint as branches are nested in arrays
+  id: { type: String, required: true },
   label: { type: String, required: true },
-  parentId: { type: String },
-  messages: [MessageSchema],
+  parentId: { type: String }, // Parent node ID
+  parentMessageId: { type: String, required: true }, // Message that created this branch
+  inheritedMessages: [MessageSchema], // Context messages from root
+  branchMessages: [MessageSchema], // Messages within this branch only
   selectedAIs: [AIModelSchema],
   multiModelMode: { type: Boolean, default: false },
   isMinimized: { type: Boolean, default: false },
@@ -86,17 +118,27 @@ const BranchSchema = new Schema<IBranch>({
     y: { type: Number, required: true }
   },
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  updatedAt: { type: Date, default: Date.now },
+  // New fields
+  depthLevel: { type: Number, default: 0 },
+  metadata: { type: Schema.Types.Mixed, default: {} },
+  confidenceScore: { type: Number, min: 0, max: 1 },
+  reasoningScore: { type: Number, min: 0, max: 1 },
+  isPromoted: { type: Boolean, default: false },
+  upvotes: { type: Number, default: 0 },
+  downvotes: { type: Number, default: 0 },
+  contextLinks: { type: [String], default: [] }
 })
 
-// Main Conversation Schema
+// Main Conversation Schema - Refactored structure
 export interface IConversation {
   _id?: string
   title: string
-  mainMessages: IMessage[]
-  selectedAIs: IAIModel[]
-  multiModelMode: boolean
-  branches: IBranch[]
+  main: {
+    messages: IMessage[] // Main conversation thread
+    selectedAIs: IAIModel[] // Active models for main thread
+  }
+  branches: IBranch[] // Side explorations
   contextLinks: string[] // Edge IDs for context connections
   collapsedNodes: string[]
   minimizedNodes: string[]
@@ -109,14 +151,19 @@ export interface IConversation {
   createdAt: Date
   updatedAt: Date
   userId?: string // For future user authentication
+  // Legacy fields for backward compatibility (will be migrated)
+  mainMessages?: IMessage[]
+  selectedAIs?: IAIModel[]
+  multiModelMode?: boolean
 }
 
 const ConversationSchema = new Schema<IConversation>({
   title: { type: String, required: true, default: 'New Conversation' },
-  mainMessages: [MessageSchema],
-  selectedAIs: [AIModelSchema],
-  multiModelMode: { type: Boolean, default: false },
-  branches: [BranchSchema],
+  main: {
+    messages: { type: [MessageSchema], default: [] },
+    selectedAIs: { type: [AIModelSchema], default: [] }
+  },
+  branches: { type: [BranchSchema], default: [] },
   contextLinks: { type: [String], default: [] },
   collapsedNodes: { type: [String], default: [] },
   minimizedNodes: { type: [String], default: [] },
@@ -128,7 +175,11 @@ const ConversationSchema = new Schema<IConversation>({
   },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
-  userId: { type: String }
+  userId: { type: String },
+  // Legacy fields for backward compatibility
+  mainMessages: { type: [MessageSchema], required: false },
+  selectedAIs: { type: [AIModelSchema], required: false },
+  multiModelMode: { type: Boolean, required: false }
 })
 
 // Update timestamps

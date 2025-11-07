@@ -1100,8 +1100,34 @@ export default function Home() {
   
   // Stop AI generation
   const stopGeneration = () => {
+    console.log('🛑 Stop generation requested for main node')
     setIsGenerating(false)
-    // In a real app, you would cancel any ongoing API requests here
+    
+    // Abort ongoing API requests
+    if (mainAbortControllerRef.current) {
+      mainAbortControllerRef.current.abort()
+      mainAbortControllerRef.current = null
+      console.log('🛑 Aborted main node generation')
+    }
+    
+    // Finalize any streaming messages
+    setMessages(prev => prev.map(msg => {
+      if (msg.isStreaming && msg.streamingText) {
+        return {
+          ...msg,
+          text: msg.streamingText || '[Generation stopped]',
+          isStreaming: false,
+          streamingText: undefined
+        }
+      }
+      return msg
+    }).filter(msg => {
+      // Remove streaming messages that have no text
+      if (msg.isStreaming && !msg.streamingText) {
+        return false
+      }
+      return true
+    }))
   }
 
   const sendMessage = async (text: string, branchId?: string) => {
@@ -1139,6 +1165,10 @@ export default function Home() {
     
     // Start generating response
     setIsGenerating(true)
+    
+    // CRITICAL: Create abort controller for this generation
+    const abortController = new AbortController()
+    mainAbortControllerRef.current = abortController
     
     // If we're in an active branch, save it
     if (activeBranchId) {
@@ -1230,11 +1260,21 @@ export default function Home() {
           // Add streaming message to UI immediately
           setMessages(prev => [...prev, streamingMessage])
           
+          // Check if aborted before starting
+          if (abortController.signal.aborted) {
+            throw new Error('Generation aborted')
+          }
+          
           const response = await aiService.generateResponse(
             modelName,
             text,
             context,
             (chunk: string) => {
+              // Check if aborted during streaming
+              if (abortController.signal.aborted) {
+                return
+              }
+              
               // Handle streaming response - update the streaming message
               console.log(`Streaming from ${ai.name}:`, chunk)
               setMessages(prev => prev.map(msg => 
@@ -1242,7 +1282,8 @@ export default function Home() {
                   ? { ...msg, streamingText: (msg.streamingText || '') + chunk }
                   : msg
               ))
-            }
+            },
+            abortController.signal
           )
           console.log(`✅ Got response from ${ai.name}:`, response.text.substring(0, 50) + '...')
 
@@ -1271,6 +1312,42 @@ export default function Home() {
           }
         } catch (error) {
           console.error(`Error generating response for ${ai.name}:`, error)
+          
+          // Check if it was aborted
+          const wasAborted = error instanceof Error && (error.message.includes('aborted') || error.message.includes('AbortError'))
+          
+          if (wasAborted) {
+            // Finalize streaming message with current text
+            setMessages(prev => prev.map(msg => {
+              if (msg.id === streamingMessageId && msg.isStreaming) {
+                return {
+                  ...msg,
+                  text: msg.streamingText || '[Generation stopped]',
+                  isStreaming: false,
+                  streamingText: undefined
+                }
+              }
+              return msg
+            }).filter(msg => {
+              // Remove streaming messages that have no text
+              if (msg.isStreaming && !msg.streamingText && msg.id === streamingMessageId) {
+                return false
+              }
+              return true
+            }))
+            
+            return {
+              id: streamingMessageId,
+              text: '[Generation stopped]',
+              isUser: false,
+              timestamp: Date.now(),
+              parentId: newMessage.id,
+              children: [],
+              aiModel: ai.id,
+              groupId: groupId
+            }
+          }
+          
           return {
             id: `msg-${Date.now()}-${ai.id}-${index}`,
             text: `${ai.name} error: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -1303,6 +1380,7 @@ export default function Home() {
           // If this is the last AI, stop generating
           if (index === aiResponses.length - 1) {
             setIsGenerating(false)
+            mainAbortControllerRef.current = null // Clean up abort controller
           }
         }, (index + 1) * 500)
       })
@@ -1348,11 +1426,21 @@ export default function Home() {
           // Add streaming message to UI immediately
           setMessages(prev => [...prev, streamingMessage])
           
+          // Check if aborted before starting
+          if (abortController.signal.aborted) {
+            throw new Error('Generation aborted')
+          }
+          
           const response = await aiService.generateResponse(
             modelName,
             text,
             context,
             (chunk: string) => {
+              // Check if aborted during streaming
+              if (abortController.signal.aborted) {
+                return
+              }
+              
               // Handle streaming response - update the streaming message
               console.log(`Streaming from ${selectedAI?.name}:`, chunk)
               setMessages(prev => prev.map(msg => 
@@ -1360,7 +1448,8 @@ export default function Home() {
                   ? { ...msg, streamingText: (msg.streamingText || '') + chunk }
                   : msg
               ))
-            }
+            },
+            abortController.signal
           )
           console.log(`✅ Single mode: Got response from ${selectedAI?.name}:`, response.text.substring(0, 50) + '...')
           
@@ -1415,20 +1504,50 @@ export default function Home() {
         }
         
         setIsGenerating(false)
+        mainAbortControllerRef.current = null // Clean up abort controller
       } catch (error) {
         console.error('Error generating AI response:', error)
         
-        const errorResponse: Message = {
-          id: `msg-${Date.now()}`,
-          text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          isUser: false,
-          timestamp: Date.now(),
-          parentId: newMessage.id,
-          children: [],
-          aiModel: selectedAI?.id
+        // Check if it was aborted
+        const wasAborted = error instanceof Error && (error.message.includes('aborted') || error.message.includes('AbortError'))
+        
+        // Clean up abort controller
+        mainAbortControllerRef.current = null
+        
+        // If aborted, finalize with current streaming text
+        if (wasAborted) {
+          console.log('🛑 Main node generation aborted by user')
+          setMessages(prev => prev.map(msg => {
+            if (msg.isStreaming && msg.streamingText) {
+              return {
+                ...msg,
+                text: msg.streamingText || '[Generation stopped]',
+                isStreaming: false,
+                streamingText: undefined
+              }
+            }
+            return msg
+          }).filter(msg => {
+            // Remove streaming messages that have no text
+            if (msg.isStreaming && !msg.streamingText) {
+              return false
+            }
+            return true
+          }))
+        } else {
+          const errorResponse: Message = {
+            id: `msg-${Date.now()}`,
+            text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            isUser: false,
+            timestamp: Date.now(),
+            parentId: newMessage.id,
+            children: [],
+            aiModel: selectedAI?.id
+          }
+          
+          setMessages(prev => [...prev, errorResponse])
         }
         
-        setMessages(prev => [...prev, errorResponse])
         setIsGenerating(false)
       }
     }
@@ -1464,108 +1583,17 @@ export default function Home() {
 
   const [pendingBranchMessageId, setPendingBranchMessageId] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const mainAbortControllerRef = useRef<AbortController | null>(null) // Track abort controller for main node
   const [savedBranches, setSavedBranches] = useState<Branch[]>([])
   const [lastBranchTime, setLastBranchTime] = useState<number>(0)
 
-  const branchFromMessage = (messageId: string) => {
-    console.log('📍 branchFromMessage called with:', messageId)
-    console.log('📍 Current branches length:', branches.length)
-    console.log('📍 Current messages:', messages.map(m => ({ id: m.id, text: m.text.substring(0, 20) + '...' })))
-    
+  const branchFromMessage = (messageId: string, isMultiBranch: boolean = false) => {
+    console.log('📍 branchFromMessage called with:', { messageId, isMultiBranch })
     if (!messageId) return
     
-    // Prevent duplicates when effect runs twice in StrictMode
-    if (creatingBranchRef.current.has(messageId)) {
-      console.log('📍 Branch already being created for this message, skipping')
-      return
-    }
-    
-    // Debounce rapid branch creation (prevent multiple clicks within 500ms)
-    const now = Date.now()
-    if (now - lastBranchTime < 500) {
-      console.log('📍 Branch creation debounced - too soon after last branch')
-      return
-    }
-    setLastBranchTime(now)
-    
-    // Mark this message as being branched
-    creatingBranchRef.current.add(messageId)
-    
-    // Set the current branch
-    setCurrentBranch(messageId)
-    
-    // Create branch data for MongoDB
-    const branchId = `branch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    const newBranch = {
-      id: branchId,
-      title: generateBranchTitle(messages),
-      messages: [...messages],
-      timestamp: Date.now(),
-      parentId: 'main',
-      selectedAIs: selectedAIs.map(ai => ({
-        id: ai.id,
-        name: ai.name,
-        color: ai.color,
-        functional: ai.functional
-      })),
-      multiModelMode: multiModelMode,
-      position: { x: 0, y: 0 },
-      isActive: true,
-      isMain: false
-    }
-    
-    // Store branch data in ref for saving
-    const branchNode = {
-      id: branchId,
-      type: 'branch',
-      title: newBranch.title,
-      messages: newBranch.messages,
-      timestamp: newBranch.timestamp,
-      parentId: newBranch.parentId,
-      children: [],
-      isActive: true,
-      selectedAIs: newBranch.selectedAIs,
-      multiModelMode: newBranch.multiModelMode,
-      isMain: false,
-      isMinimized: false,
-      showAIPill: true,
-      position: newBranch.position,
-      nodeData: {}
-    }
-    branchDataRef.current.set(branchId, branchNode)
-    
-    // Add to conversationNodes immediately so it gets saved
-    // FlowCanvas will update it via onNodesUpdate with full data later
-    setConversationNodes(prev => {
-      const updated = [...prev, branchNode]
-      console.log('📦 Added branch to conversationNodes:', {
-        branchId,
-        totalNodes: updated.length,
-        nodeIds: updated.map(n => n.id),
-        branchData: {
-          type: branchNode.type,
-          parentId: branchNode.parentId,
-          messagesCount: branchNode.messages.length
-        }
-      })
-      return updated
-    })
-    
-    // Add to branches array for saving (this triggers canvas mode)
-    setBranches(prev => {
-      if (prev.length === 0) {
-        console.log('📍 Switching to canvas mode for first branch')
-        return [{ id: branchId }]
-      } else {
-        console.log('📍 Adding branch to existing branches')
-        return [...prev, { id: branchId }]
-      }
-    })
-    
-    // Only set pending branch message ID if this is the first branch
+    // When in chat mode, switch to canvas mode first
     if (branches.length === 0) {
-      
-      // Set the initial branch message after canvas is mounted
+      console.log('📍 Switching to canvas mode for first branch')
       setTimeout(() => {
         setPendingBranchMessageId(messageId)
       }, 50)
@@ -1631,22 +1659,22 @@ export default function Home() {
   ]
   
   return (
-    <div className="h-screen bg-gray-50 overflow-hidden">
+    <div className="h-screen bg-background overflow-hidden">
       {/* MongoDB Save Status Indicator */}
       {(isSaving || lastSaved) && (
         <div className="fixed bottom-4 right-4 z-50">
-          <div className="bg-white border border-gray-200 rounded-lg px-4 py-2 shadow-lg flex items-center gap-2 text-sm">
+          <div className="bg-card border border-border rounded-lg px-4 py-2 shadow-lg flex items-center gap-2 text-sm">
             {isSaving ? (
               <>
                 <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <span className="text-gray-600">Saving...</span>
+                <span className="text-muted-foreground">Saving...</span>
               </>
             ) : lastSaved ? (
               <>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-green-500">
                   <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-                <span className="text-gray-600">Saved {lastSaved.toLocaleTimeString()}</span>
+                <span className="text-muted-foreground">Saved {lastSaved.toLocaleTimeString()}</span>
               </>
             ) : null}
           </div>
@@ -1670,7 +1698,7 @@ export default function Home() {
       {/* Simple Layout - No Canvas Initially */}
       {branches.length === 0 && conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length === 0 ? (
         <div className="flex items-center justify-center h-screen p-4">
-          <div className="w-full max-w-4xl border border-gray-200 rounded-2xl bg-white shadow-lg p-6">
+          <div className="w-full max-w-4xl border border-border rounded-2xl bg-card shadow-lg p-6">
             {/* Header with AI Pills and Mode Toggle */}
             <div className="flex items-center justify-between mb-6">
               {/* AI Selector */}
@@ -1686,14 +1714,14 @@ export default function Home() {
               
               {/* Multi-Model Toggle */}
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Mode:</span>
-                <div className="flex bg-gray-100 rounded-lg p-1">
+                <span className="text-sm text-muted-foreground">Mode:</span>
+                <div className="flex bg-muted rounded-lg p-1">
                   <button
                     onClick={() => setMultiModelMode(false)}
                     className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
                       !multiModelMode
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-800'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     Single
@@ -1702,8 +1730,8 @@ export default function Home() {
                     onClick={() => setMultiModelMode(true)}
                     className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
                       multiModelMode
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-800'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     Multi
@@ -1714,7 +1742,7 @@ export default function Home() {
               {/* Export/Import Button */}
               <button
                 onClick={() => setShowExportImport(true)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>

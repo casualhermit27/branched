@@ -68,7 +68,7 @@ interface FlowCanvasProps {
   onRemoveAI: (aiId: string) => void
   mainMessages: Message[]
   onSendMainMessage: (text: string) => void
-  onBranchFromMain: (messageId: string) => void
+  onBranchFromMain: (messageId: string, isMultiBranch?: boolean) => void
   initialBranchMessageId?: string
   pendingBranchMessageId?: string
   onPendingBranchProcessed?: () => void
@@ -145,6 +145,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
   const [highlightedPath, setHighlightedPath] = useState<string[]>([])
   const [generatingBranchId, setGeneratingBranchId] = useState<string | null>(null)
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map()) // Track abort controllers for each node
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set())
   const [focusModeNode, setFocusModeNode] = useState<any>(null)
   const [minimizedNodes, setMinimizedNodes] = useState<Set<string>>(new Set())
@@ -1069,11 +1070,11 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     }
   }, [onNodeDoubleClick])
 
-  // Define handleBranch with stable reference
-  const handleBranchRef = useRef<(parentNodeId: string, messageId?: string) => void | undefined>(undefined)
+  // Define handleBranch with stable reference - NEW SIMPLIFIED SIGNATURE
+  const handleBranchRef = useRef<(parentNodeId: string, messageId?: string, isMultiBranch?: boolean) => void | undefined>(undefined)
   
   // Clean duplicate prevention: Single source of truth
-  const branchCreationLockRef = useRef<Map<string, number>>(new Map()) // Maps branchKey -> timestamp
+  const branchCreationLockRef = useRef<Map<string, boolean>>(new Map()) // Maps messageId -> isLocked
   const branchIdCounterRef = useRef<number>(0) // Counter for unique branch IDs
   
   // Helper function to check if branch exists for a messageId from a parent
@@ -1086,8 +1087,8 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
       // Check if this is a branch from the parent
       if (node.data?.parentId !== parentNodeId) return false
       
-      // Check if this branch contains the target message
-      return node.data?.messages?.some((m: any) => m.id === messageId)
+      // Check if this branch's parentMessageId matches
+      return node.data?.parentMessageId === messageId
     })
   }, [])
   
@@ -1097,943 +1098,308 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     return `branch-${Date.now()}-${branchIdCounterRef.current}-${Math.random().toString(36).substr(2, 9)}`
   }, [])
   
-  handleBranchRef.current = (parentNodeId: string, messageId?: string) => {
+  // ✅ NEW: Deduplicate messages helper
+  const deduplicateMessages = useCallback((msgs: any[]): any[] => {
+    const seen = new Set<string>()
+    return msgs.filter(m => {
+      const key = m.id || `${m.parentId}-${m.aiModel}-${m.timestamp}`
+      if (seen.has(key)) {
+        console.warn('⚠️ Duplicate message removed:', key)
+        return false
+      }
+      seen.add(key)
+      return true
+    })
+  }, [])
+  
+  // ✅ NEW: Deduplicate by AI model helper
+  const deduplicateByModel = useCallback((msgs: any[]): any[] => {
+    const seen = new Set<string>()
+    return msgs.filter(m => {
+      if (!m.aiModel) return false
+      if (seen.has(m.aiModel)) {
+        console.warn('⚠️ Duplicate AI model removed:', m.aiModel)
+        return false
+      }
+      seen.add(m.aiModel)
+      return true
+    })
+  }, [])
+  
+  // ✅ NEW: Get messages till a specific message ID (for inherited context)
+  const getMessagesTill = useCallback((messageId: string, allMsgs: any[]): any[] => {
+    const result: any[] = []
+    for (const msg of allMsgs) {
+      result.push(msg)
+      if (msg.id === messageId) break
+    }
+    return result
+  }, [])
+  
+  // ✅ NEW: Calculate branch position
+  const getBranchPosition = useCallback((parentNodeId: string, branchIndex: number, totalBranches: number): { x: number, y: number } => {
+    const parentNode = nodesRef.current.find(n => n.id === parentNodeId)
+    if (!parentNode) return { x: 0, y: 0 }
+    
+    const baseX = parentNode.position.x + 400 // Offset to the right
+    const baseY = parentNode.position.y
+    
+    if (totalBranches === 1) {
+      return { x: baseX, y: baseY }
+    }
+    
+    // Spread branches vertically
+    const spacing = 200
+    const startY = baseY - ((totalBranches - 1) * spacing) / 2
+    return {
+      x: baseX,
+      y: startY + (branchIndex * spacing)
+    }
+  }, [])
+  
+  // ✅ NEW: Create branch node helper
+  const createBranchNode = useCallback((
+    parentNodeId: string,
+    inheritedMessages: any[],
+    aiResponse: any,
+    branchIndex: number,
+    totalBranches: number
+  ): Node => {
+    const ai = selectedAIs.find(a => a.id === aiResponse.aiModel) || selectedAIs[0]
+    const newId = generateBranchId()
+    const position = getBranchPosition(parentNodeId, branchIndex, totalBranches)
+    
+    return {
+      id: newId,
+      type: 'chatNode',
+      position,
+      data: {
+        label: ai?.name || 'Branch',
+        inheritedMessages: [...inheritedMessages],
+        branchMessages: [{ ...aiResponse, isUser: false }],
+        parentMessageId: aiResponse.parentId || aiResponse.id,
+        selectedAIs: [ai],
+        onBranch: (nodeId: string, msgId?: string) => handleBranchRef.current?.(nodeId, msgId, false),
+        onSendMessage: (nodeId: string, msg: string) => handleSendMessageRef.current?.(nodeId, msg),
+        isMain: false,
+        showAIPill: true,
+        parentId: parentNodeId,
+        onAddAI: (ai: AI) => handleBranchAddAI(newId, ai),
+        onRemoveAI: (aiId: string) => handleBranchRemoveAI(newId, aiId),
+        onSelectSingle: (aiId: string) => handleBranchSelectSingle(newId, aiId),
+        onToggleMultiModel: (nodeId: string) => handleBranchToggleMultiModel(nodeId),
+        getBestAvailableModel: getBestAvailableModel,
+        multiModelMode: false,
+        nodeId: newId,
+        isMinimized: minimizedNodes.has(newId),
+        isActive: activeNodeId === newId,
+        onToggleMinimize: toggleNodeMinimize
+      }
+    }
+  }, [selectedAIs, generateBranchId, getBranchPosition, handleBranchAddAI, handleBranchRemoveAI, handleBranchSelectSingle, handleBranchToggleMultiModel, getBestAvailableModel, minimizedNodes, activeNodeId, toggleNodeMinimize])
+  
+  // ✅ NEW SIMPLIFIED handleBranch - Single entry point
+  handleBranchRef.current = (parentNodeId: string, messageId?: string, isMultiBranch: boolean = false) => {
     if (!messageId) {
       console.warn('⚠️ handleBranch called without messageId')
       return
     }
     
-    const branchKey = `${parentNodeId}-${messageId}`
-    const now = Date.now()
+    console.log('🌿 handleBranch called:', { parentNodeId, messageId, isMultiBranch })
     
-    console.log('🌿 handleBranch called:', { parentNodeId, messageId, branchKey })
+    // ✅ Lock check - prevent double execution
+    if (branchCreationLockRef.current.get(messageId)) {
+      console.warn('⚠️ Branch creation already in progress for messageId:', messageId)
+      return
+    }
     
-    // STEP 1: Check if branch already exists (single source of truth)
+    // ✅ Check if branch already exists
     if (branchExistsForMessage(parentNodeId, messageId)) {
-      console.log('⚠️ Branch already exists for:', branchKey)
+      console.log('⚠️ Branch already exists for:', { parentNodeId, messageId })
       return
     }
     
-    // STEP 2: Debounce rapid calls (3000ms lock)
-    const lastCreationTime = branchCreationLockRef.current.get(branchKey) || 0
-    if (now - lastCreationTime < 3000) {
-      console.log('⚠️ Branch creation locked (debounced):', {
-        branchKey,
-        timeSinceLastCall: now - lastCreationTime,
-        threshold: 3000
-      })
+    // ✅ Set lock
+    branchCreationLockRef.current.set(messageId, true)
+    
+    // ✅ Get all messages from parent node
+    const parentNode = nodesRef.current.find(n => n.id === parentNodeId)
+    if (!parentNode) {
+      console.error('❌ Parent node not found:', parentNodeId)
+      branchCreationLockRef.current.delete(messageId)
       return
     }
     
-    // STEP 3: Lock this branch creation
-    branchCreationLockRef.current.set(branchKey, now)
+    // Get messages from parent (main or branch)
+    const allMessages = parentNodeId === 'main' 
+      ? mainMessages 
+      : (parentNode.data.messages || [])
     
-    // STEP 4: Clear lock after delay
-    setTimeout(() => {
-      branchCreationLockRef.current.delete(branchKey)
-    }, 3000)
+    // ✅ Deduplicate messages FIRST
+    const deduplicatedMessages = deduplicateMessages(allMessages)
     
-    setNodeId(prev => {
-      // STEP 5: Double-check branch doesn't exist (defensive check inside state update)
-      if (branchExistsForMessage(parentNodeId, messageId)) {
-        console.log('⚠️ Branch already exists (double-check in state update):', branchKey)
-        branchCreationLockRef.current.delete(branchKey)
-        return prev
-      }
-      
-      const currentNodesInState = nodesRef.current
-      const currentEdges = edgesRef.current
-      
-      const parentNode = currentNodesInState.find(n => n.id === parentNodeId)
-      if (!parentNode) {
-        console.log('❌ Parent node not found:', parentNodeId)
-        branchCreationLockRef.current.delete(branchKey)
-        return prev
-      }
-      
-      console.log('✅ Parent node found:', parentNode.id)
-      
-      // Check if this is a multi-model branch creation (from any node with multiple AI responses)
-      const isMultiModelBranch = !!messageId
-      let aiResponses: any[] = []
-      let isCreateBranchesForAll = false
-      
-      if (isMultiModelBranch) {
-        // Get the parent node's messages
-        const parentMessages = parentNode.data.messages || []
-        
-        // CRITICAL: Deduplicate parentMessages FIRST before any operations
-        // This prevents duplicate message IDs from causing issues
-        const seenParentIds = new Set<string>()
-        const deduplicatedParentMessagesInitial = parentMessages.filter((m: any) => {
-          if (seenParentIds.has(m.id)) {
-            console.warn('⚠️ Duplicate message ID found in parentNode.data.messages, removing duplicate:', m.id)
-            return false
-          }
-          seenParentIds.add(m.id)
-          return true
-        })
-        
-        // Find the message to determine if it's a user message or AI response
-        // CRITICAL: First deduplicate messages by ID, then find the target message
-        let targetMessage: any = null
-        let deduplicatedMainMessages = mainMessages
-        let deduplicatedParentMessages = deduplicatedParentMessagesInitial
-        
-        if (parentNodeId === 'main') {
-          // Deduplicate mainMessages by ID - keep only the first occurrence
-          const seenIds = new Set<string>()
-          deduplicatedMainMessages = mainMessages.filter(m => {
-            if (seenIds.has(m.id)) {
-              console.warn('⚠️ Duplicate message ID found in mainMessages, removing duplicate:', m.id)
-              return false
-            }
-            seenIds.add(m.id)
-            return true
-          })
-          
-          if (deduplicatedMainMessages.length !== mainMessages.length) {
-            console.warn('⚠️ Duplicate message IDs found in mainMessages (this is expected and fixed):', {
-              originalCount: mainMessages.length,
-              deduplicatedCount: deduplicatedMainMessages.length,
-              duplicatesRemoved: mainMessages.length - deduplicatedMainMessages.length
-            })
-          }
-          
-          // Now find the target message from deduplicated array
-          targetMessage = deduplicatedMainMessages.find(m => m.id === messageId)
-          
-          // If target message not found in deduplicated, check if it was removed as a duplicate
-          if (!targetMessage) {
-            const allMatches = mainMessages.filter(m => m.id === messageId)
-            if (allMatches.length > 0) {
-              // Use the first occurrence (which should be in deduplicated)
-              targetMessage = allMatches[0]
-              console.log('🔧 Target message found in original array (was duplicate), using first occurrence')
-            }
-          }
-          
-          // Log all messages to debug
-          console.log('🔍 All mainMessages:', {
-            total: mainMessages.length,
-            deduplicated: deduplicatedMainMessages.length,
-            messageIds: deduplicatedMainMessages.map(m => m.id),
-            messageWithTargetId: deduplicatedMainMessages.filter(m => m.id === messageId).length
-          })
-        } else {
-          // Deduplicate parentMessages by ID (already deduplicated above, but double-check)
-          // This is a defensive check - parentMessages should already be deduplicated
-          const seenIds = new Set<string>()
-          deduplicatedParentMessages = deduplicatedParentMessages.filter((m: any) => {
-            if (seenIds.has(m.id)) {
-              console.warn('⚠️ Duplicate message ID found in parentMessages (second pass), removing duplicate:', m.id)
-              return false
-            }
-            seenIds.add(m.id)
-            return true
-          })
-          
-          // Only log if duplicates were found in this second pass (shouldn't happen)
-          if (deduplicatedParentMessages.length !== deduplicatedParentMessagesInitial.length) {
-            console.warn('⚠️ Additional duplicates found in second deduplication pass:', {
-              originalCount: deduplicatedParentMessagesInitial.length,
-              deduplicatedCount: deduplicatedParentMessages.length
-            })
-          }
-          
-          targetMessage = deduplicatedParentMessages.find((m: any) => m.id === messageId)
-        }
-        
-        if (targetMessage) {
-          console.log('✅ Target message found:', {
-            id: targetMessage.id,
-            isUser: targetMessage.isUser,
-            aiModel: targetMessage.aiModel,
-            groupId: targetMessage.groupId,
-            parentId: targetMessage.parentId,
-            text: targetMessage.text?.substring(0, 50)
-          })
-          
-          if (targetMessage.isUser) {
-            // This is "Create Branches for All Models" - find all AI responses to this user message
-            isCreateBranchesForAll = true
-            if (parentNodeId === 'main') {
-              // Use deduplicated messages to avoid duplicates
-              aiResponses = deduplicatedMainMessages.filter(m => 
-          !m.isUser && m.parentId === messageId && m.aiModel
-        )
-              // CRITICAL: Deduplicate by both ID and aiModel to ensure only one branch per AI model
-              const seenResponseIds = new Set<string>()
-              const seenAiModels = new Set<string>()
-              aiResponses = aiResponses.filter(m => {
-                // Remove duplicates by ID
-                if (seenResponseIds.has(m.id)) {
-                  console.warn('⚠️ Duplicate message ID in AI responses, removing:', m.id)
-                  return false
-                }
-                // Remove duplicates by aiModel (keep only the first response from each AI)
-                if (seenAiModels.has(m.aiModel)) {
-                  console.warn('⚠️ Duplicate AI model in responses, removing duplicate:', m.aiModel, m.id)
-                  return false
-                }
-                seenResponseIds.add(m.id)
-                seenAiModels.add(m.aiModel)
-                return true
-              })
-            } else {
-              aiResponses = deduplicatedParentMessages.filter((m: any) => 
-                !m.isUser && m.parentId === messageId && m.aiModel
-              )
-              // CRITICAL: Deduplicate by both ID and aiModel
-              const seenResponseIds = new Set<string>()
-              const seenAiModels = new Set<string>()
-              aiResponses = aiResponses.filter((m: any) => {
-                if (seenResponseIds.has(m.id)) {
-                  console.warn('⚠️ Duplicate message ID in AI responses, removing:', m.id)
-                  return false
-                }
-                if (seenAiModels.has(m.aiModel)) {
-                  console.warn('⚠️ Duplicate AI model in responses, removing duplicate:', m.aiModel, m.id)
-                  return false
-                }
-                seenResponseIds.add(m.id)
-                seenAiModels.add(m.aiModel)
-                return true
-              })
-            }
-            console.log('🌿 "Create Branches for All Models" - found AI responses:', {
-              count: aiResponses.length,
-              aiModels: aiResponses.map(r => r.aiModel),
-              responseIds: aiResponses.map(r => r.id)
-            })
-          } else {
-            // This is a single branch click on an AI response - only use that ONE response
-            isCreateBranchesForAll = false
-            
-            // CRITICAL: Only use the exact message that was clicked
-            // Use deduplicated messages to avoid duplicates
-            // Check if there are other messages with same ID or groupId that might cause duplicates
-            let potentialDuplicates: any[] = []
-            if (parentNodeId === 'main') {
-              // Check for messages with same ID or groupId (using deduplicated messages)
-              potentialDuplicates = deduplicatedMainMessages.filter(m => 
-                (m.id === messageId || (targetMessage.groupId && m.groupId === targetMessage.groupId)) && 
-                !m.isUser && 
-                m.id !== messageId // Exclude the clicked message
-              )
-            } else {
-              potentialDuplicates = deduplicatedParentMessages.filter((m: any) => 
-                (m.id === messageId || (targetMessage.groupId && m.groupId === targetMessage.groupId)) && 
-                !m.isUser && 
-                m.id !== messageId
-              )
-            }
-            
-            if (potentialDuplicates.length > 0) {
-              console.warn('⚠️ Found potential duplicate messages:', {
-                clickedMessageId: messageId,
-                groupId: targetMessage.groupId,
-                duplicatesCount: potentialDuplicates.length,
-                duplicates: potentialDuplicates.map(m => ({ id: m.id, aiModel: m.aiModel }))
-              })
-            }
-            
-            // CRITICAL: Only use the exact message that was clicked, NOT duplicates
-            // Ensure targetMessage exists before using it
-            if (!targetMessage) {
-              console.error('❌ Target message not found after deduplication')
-              branchCreationLockRef.current.delete(branchKey)
-              return prev
-            }
-            
-            aiResponses = [targetMessage]
-            
-            console.log('🌿 Single branch click - using only this AI response:', {
-              messageId: targetMessage.id,
-              aiModel: targetMessage.aiModel,
-              parentId: targetMessage.parentId,
-              groupId: targetMessage.groupId,
-              text: targetMessage.text?.substring(0, 50),
-              isUser: targetMessage.isUser,
-              potentialDuplicatesFound: potentialDuplicates.length,
-              aiResponsesCount: aiResponses.length
-            })
-            
-            // Double-check: if somehow we have multiple responses, only use the first one
-            if (aiResponses.length !== 1) {
-              console.error('❌ CRITICAL: Single branch click but aiResponses.length !== 1:', aiResponses.length)
-              aiResponses = [targetMessage]
-            }
-          }
-        } else {
-          console.error('❌ Target message not found:', {
-            messageId,
-            parentNodeId,
-            mainMessagesCount: parentNodeId === 'main' ? mainMessages.length : 0,
-            deduplicatedMainCount: parentNodeId === 'main' ? deduplicatedMainMessages.length : 0,
-            parentMessagesCount: parentNodeId !== 'main' ? parentMessages.length : 0,
-            deduplicatedParentCount: parentNodeId !== 'main' ? deduplicatedParentMessages.length : 0,
-            mainMessageIds: parentNodeId === 'main' ? deduplicatedMainMessages.map(m => m.id) : [],
-            parentMessageIds: parentNodeId !== 'main' ? deduplicatedParentMessages.map((m: any) => m.id) : []
-          })
-          // If message not found, clear the branch key and return
-          branchCreationLockRef.current.delete(branchKey)
-          return prev
-        }
-        
-        // CRITICAL: Ensure aiResponses is set for single branch clicks
-        if (!isCreateBranchesForAll && aiResponses.length === 0 && targetMessage && !targetMessage.isUser) {
-          console.log('🔧 Fixing: aiResponses is empty but targetMessage exists, setting it')
-          aiResponses = [targetMessage]
-        }
-        
-        console.log('🌿 Branch creation mode:', {
-          parentNodeId,
-          messageId,
-          isCreateBranchesForAll,
-          targetMessageType: targetMessage?.isUser ? 'user' : 'ai',
-          aiResponsesCount: aiResponses.length,
-          aiModels: aiResponses.map(r => r.aiModel)
-        })
-      }
-      
-      // Get all children of this parent node for initial positioning
-      const existingChildren = currentNodesInState.filter(n => 
-        currentEdges.some(e => e.source === parentNodeId && e.target === n.id)
+    // ✅ Find target message
+    const targetMessage = deduplicatedMessages.find(m => m.id === messageId)
+    if (!targetMessage) {
+      console.error('❌ Target message not found:', messageId)
+      branchCreationLockRef.current.delete(messageId)
+      return
+    }
+    
+    console.log('✅ Target message found:', {
+      id: targetMessage.id,
+      isUser: targetMessage.isUser,
+      aiModel: targetMessage.aiModel,
+      text: targetMessage.text?.substring(0, 50)
+    })
+    
+    // ✅ Determine AI responses to create branches for
+    let aiResponses: any[] = []
+    
+    if (targetMessage.isUser && isMultiBranch) {
+      // USER message + isMultiBranch → create one branch per AI model
+      const allAIResponses = deduplicatedMessages.filter(m => 
+        !m.isUser && m.parentId === messageId && m.aiModel
       )
-      const childrenCount = existingChildren.length
-      
-      // If this is "Create Branches for All Models", create branches for all AI responses
-      // If this is a single branch click, create only 1 branch
-      // CRITICAL: Check if we have responses to process
-      if (isMultiModelBranch && aiResponses.length > 0) {
-        console.log('✅ Proceeding with branch creation:', {
-          isMultiModelBranch,
-          aiResponsesCount: aiResponses.length,
-          isCreateBranchesForAll,
-          parentNodeId
-        })
-        // Get the parent node's selectedAIs (for branch nodes) or main selectedAIs (for main node)
-        const parentSelectedAIs = parentNodeId === 'main' 
-          ? selectedAIs 
-          : (parentNode.data.selectedAIs || [])
-        
-        // Create nodes for each AI response
-        const newNodes: Node[] = []
-        const newEdges: Edge[] = []
-        
-        // Calculate positions based on whether it's "Create Branches for All" or single branch
-        let positions: any[] = []
-        if (isCreateBranchesForAll) {
-          // "Create Branches for All Models" - create branches for all AI responses
-          console.log('🌿 Creating branches for all AI models:', aiResponses.map(r => r.aiModel))
-          if (aiResponses.length > 1) {
-            positions = calculateMultiModelPositions(parentNode.position, aiResponses.length)
-          } else {
-            // Only one AI responded, but user clicked "Create Branches for All Models"
-            const singlePosition = calculateSingleBranchPosition(parentNode.position)
-            singlePosition.x += 300
-            positions = [singlePosition]
-          }
-        } else {
-          // Single branch click - create only 1 branch
-          console.log('🌿 Creating single branch from AI response:', aiResponses[0]?.aiModel)
-          // Use single branch positioning
-          const singlePosition = calculateSingleBranchPosition(parentNode.position)
-          singlePosition.x += 300 // Offset to the right for side-by-side
-          positions = [singlePosition]
-          // CRITICAL: Ensure only 1 response is used (should already be set to [targetMessage])
-          if (aiResponses.length > 1) {
-            console.warn('⚠️ Multiple AI responses found for single branch click, using only the first one')
-            aiResponses = [aiResponses[0]]
-          }
-        }
-        
-        // CRITICAL: Only create branches for the AI responses we've determined
-        console.log('🌿 Final branch creation:', {
-          isCreateBranchesForAll,
-          aiResponsesCount: aiResponses.length,
-          aiResponses: aiResponses.map(r => ({ id: r.id, aiModel: r.aiModel, text: r.text?.substring(0, 30) }))
-        })
-        
-        // CRITICAL: Deduplicate aiResponses by both message ID and aiModel
-        // This ensures we only create one branch per AI model in multi-model mode
-        const seenResponseIds = new Set<string>()
-        const seenAiModels = new Set<string>()
-        const uniqueAiResponses = aiResponses.filter((msg) => {
-          // Remove duplicates by ID
-          if (seenResponseIds.has(msg.id)) {
-            console.warn('⚠️ Duplicate message ID in aiResponses, removing:', msg.id)
-            return false
-          }
-          // For multi-model mode, also ensure only one response per AI model
-          if (isCreateBranchesForAll && seenAiModels.has(msg.aiModel)) {
-            console.warn('⚠️ Duplicate AI model in aiResponses, keeping first and removing:', msg.aiModel, msg.id)
-            return false
-          }
-          seenResponseIds.add(msg.id)
-          if (msg.aiModel) {
-            seenAiModels.add(msg.aiModel)
-          }
-          return true
-        })
-        
-        if (uniqueAiResponses.length !== aiResponses.length) {
-          console.warn('⚠️ Duplicate messages/AI models found in aiResponses, deduplicating:', {
-            originalCount: aiResponses.length,
-            uniqueCount: uniqueAiResponses.length,
-            duplicatesRemoved: aiResponses.length - uniqueAiResponses.length,
-            isCreateBranchesForAll
-          })
-          aiResponses = uniqueAiResponses
-        }
-        
-        // FINAL CHECK: If this is a single branch click, ensure only 1 response
-        if (!isCreateBranchesForAll && aiResponses.length > 1) {
-          console.error('❌ CRITICAL ERROR: Single branch click but multiple responses found!', {
-            aiResponsesCount: aiResponses.length,
-            responses: aiResponses.map(r => ({ id: r.id, aiModel: r.aiModel, text: r.text?.substring(0, 30) }))
-          })
-          // Force only the first response
-          aiResponses = [aiResponses[0]]
-          console.log('🔧 Fixed: Using only first response:', aiResponses[0]?.id)
-        }
-        
-        // Ensure we don't create more branches than we should
-        const expectedBranchCount = isCreateBranchesForAll ? aiResponses.length : 1
-        console.log('🌿 Expected branch count:', expectedBranchCount, 'Actual responses:', aiResponses.length)
-        
-        // CRITICAL: Only process the expected number of branches
-        // For single branch click, ABSOLUTELY ensure only 1 response
-        let responsesToProcess = isCreateBranchesForAll 
-          ? aiResponses 
-          : (aiResponses.length > 0 ? [aiResponses[0]] : []) // Force EXACTLY 1 for single branch click
-        
-        // CRITICAL: Deduplicate responsesToProcess by ID to prevent duplicate branches
-        const seenResponseIdsInBatch = new Set<string>()
-        responsesToProcess = responsesToProcess.filter(response => {
-          if (seenResponseIdsInBatch.has(response.id)) {
-            console.warn('⚠️ Duplicate response ID in responsesToProcess, removing:', response.id)
-            return false
-          }
-          seenResponseIdsInBatch.add(response.id)
-          return true
-        })
-        
-        console.log('🌿 Processing responses:', {
-          expectedBranchCount,
-          responsesToProcessCount: responsesToProcess.length,
-          isCreateBranchesForAll,
-          originalAiResponsesCount: aiResponses.length,
-          responseIds: responsesToProcess.map(r => r.id),
-          willCreateBranches: responsesToProcess.length
-        })
-        
-        // ABSOLUTE FINAL CHECK: If single branch click, ensure only 1 response
-        if (!isCreateBranchesForAll && responsesToProcess.length !== 1) {
-          console.error('❌ FATAL ERROR: Single branch click but responsesToProcess.length !== 1:', responsesToProcess.length)
-          branchCreationLockRef.current.delete(branchKey)
-          return prev
-        }
-        
-        // Log before creating branches
-        console.log('🌿 About to create branches:', {
-          count: responsesToProcess.length,
-          isCreateBranchesForAll,
-          responses: responsesToProcess.map((r, i) => ({ index: i, id: r.id, aiModel: r.aiModel }))
-        })
-        
-        // FINAL CHECK: Verify no branches already exist for these responses
-        // This prevents creating duplicates even if React Strict Mode calls this twice
-        const existingBranchesForResponses = responsesToProcess.filter(response => {
-          const existingBranch = currentNodesInState.find(node => 
-            node.id !== parentNodeId && 
-            node.id !== 'main' &&
-            node.data.parentId === parentNodeId &&
-            node.data.messages?.some((m: any) => m.id === response.id)
-          )
-          return !!existingBranch
-        })
-        
-        if (existingBranchesForResponses.length > 0) {
-          console.log('⚠️ Branches already exist for some responses, skipping creation:', {
-            existingCount: existingBranchesForResponses.length,
-            responseIds: existingBranchesForResponses.map(r => r.id),
-            existingBranchIds: existingBranchesForResponses.map(response => {
-              const existingBranch = currentNodesInState.find(node => 
-                node.id !== parentNodeId && 
-                node.id !== 'main' &&
-                node.data.parentId === parentNodeId &&
-                node.data.messages?.some((m: any) => m.id === response.id)
-              )
-              return existingBranch?.id
-            })
-          })
-          branchCreationLockRef.current.delete(branchKey)
-          return prev
-        }
-        
-        // FINAL CHECK: Before creating branches, verify no duplicates exist
-        const finalCheckBranches = currentNodesInState.filter(node => {
-          if (node.id === parentNodeId || node.id === 'main') return false
-          return node.data?.parentId === parentNodeId &&
-                 responsesToProcess.some(r => node.data?.messages?.some((m: any) => m.id === r.id))
-        })
-        
-        if (finalCheckBranches.length > 0) {
-          console.log('⚠️ FINAL CHECK: Branches already exist before creation:', {
-            messageId,
-            parentNodeId,
-            existingCount: finalCheckBranches.length,
-            existingBranchIds: finalCheckBranches.map(b => b.id),
-            responsesToProcess: responsesToProcess.map(r => r.id)
-          })
-          branchCreationLockRef.current.delete(branchKey)
-          return prev
-        }
-        
-        responsesToProcess.forEach((response, idx) => {
-          // Check if we're already processing this response in this batch
-          if (processingResponseIds.has(response.id)) {
-            console.warn(`⚠️ Skipping duplicate response in batch: ${response.id}`)
-            return
-          }
-          
-          // Check if branch already exists for this specific response
-          if (branchExistsForMessage(parentNodeId, response.id)) {
-            console.log(`⚠️ Branch already exists for response ${response.id}, skipping`)
-            return
-          }
-          
-          processingResponseIds.add(response.id)
-          
-          console.log(`🌿 Creating branch ${idx + 1} of ${responsesToProcess.length} for message:`, response.id)
-          const ai = parentSelectedAIs.find(a => a.id === response.aiModel)
-          if (!ai) {
-            console.log('⚠️ AI not found for response:', response.aiModel, 'Available AIs:', parentSelectedAIs.map(a => a.id))
-            return
-          }
-          
-          console.log(`🌿 Creating branch for ${ai.name}:`, {
-            responseText: response.text?.substring(0, 50),
-            responseId: response.id,
-            aiModel: response.aiModel,
-            parentNodeId
-          })
-          
-          const newId = generateBranchId()
-          const newPosition = positions[idx] || { x: 0, y: 0 }
-          
-          // Get parent messages with context inheritance (root → current)
-          // Per spec: "Every branch inherits all messages above it (parent → root)"
-          const gatherInheritedMessages = (parentId: string): any[] => {
-            const messages: any[] = []
-            let currentId: string | undefined = parentId
-            
-            // Build parent chain
-            const chain: string[] = []
-            while (currentId) {
-              chain.push(currentId)
-              const node = currentNodesInState.find(n => n.id === currentId)
-              if (!node || !node.data?.parentId) break
-              currentId = node.data.parentId
-            }
-            
-            // Reverse to get order: root → current
-            chain.reverse()
-            
-            // Collect ALL messages from the chain (both user and AI) for context inheritance
-            // Per spec: "Every branch inherits all messages above it (parent → root)"
-            for (const nodeId of chain) {
-              const node = currentNodesInState.find(n => n.id === nodeId)
-              if (!node) continue
-              
-              const nodeMessages = nodeId === 'main' 
-                ? mainMessages 
-                : (node.data.messages || [])
-              
-              // Add ALL messages from this node (both user and AI) for full context
-              // Filter out branch init messages
-              const validMessages = nodeMessages.filter((m: any) => 
-                !m.text?.startsWith('[Branched from:')
-              )
-              messages.push(...validMessages)
-            }
-            
-            return messages
-          }
-          
-          // Get all inherited messages from parent chain (user + AI)
-          const inheritedMessages = gatherInheritedMessages(parentNodeId)
-          
-          // CRITICAL: When branching from an AI response, we need to ensure the user message
-          // that prompted it is included. The AI response has a parentId pointing to the user message.
-          // If the user message isn't in inheritedMessages, we need to find and add it.
-          let userMessageForResponse: any = null
-          if (response.parentId && !inheritedMessages.some(m => m.id === response.parentId)) {
-            // Find the user message in the parent node's messages
-            const parentMessages = parentNodeId === 'main' 
-              ? mainMessages 
-              : (parentNode.data.messages || [])
-            userMessageForResponse = parentMessages.find((m: any) => m.id === response.parentId && m.isUser)
-            
-            if (userMessageForResponse) {
-              console.log('🔧 Found user message for AI response:', {
-                userMessageId: userMessageForResponse.id,
-                userMessageText: userMessageForResponse.text?.substring(0, 50),
-                aiResponseId: response.id
-              })
-            }
-          }
-          
-          // Create branch messages with full context (all inherited messages + user message + AI response)
-          const branchMessages = [
-            // Include all inherited messages (parent → root) - both user and AI
-            ...inheritedMessages,
-            // Include the user message that prompted this AI response (if not already included)
-            ...(userMessageForResponse && !inheritedMessages.some(m => m.id === userMessageForResponse.id) 
-              ? [userMessageForResponse] 
-              : []),
-            // Include this AI's response
-            response
-          ]
-          
-          // Deduplicate by message ID to avoid duplicates
-          const seenMessageIds = new Set<string>()
-          const uniqueBranchMessages = branchMessages.filter((m: any) => {
-            if (seenMessageIds.has(m.id)) return false
-            seenMessageIds.add(m.id)
-            return true
-          })
-          
-          console.log(`📦 Branch ${newId} inheriting messages:`, {
-            inheritedCount: inheritedMessages.length,
-            userMessages: inheritedMessages.filter((m: any) => m.isUser).length,
-            aiMessages: inheritedMessages.filter((m: any) => !m.isUser).length,
-            parentNodeId,
-            inheritedMessages: inheritedMessages.map(m => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 30) })),
-            responseParentId: response.parentId,
-            userMessageFound: !!userMessageForResponse
-          })
-          
-          console.log(`📝 Branch messages for ${ai.name}:`, {
-            totalInherited: inheritedMessages.length,
-            userMessages: inheritedMessages.filter((m: any) => m.isUser).length,
-            aiMessages: inheritedMessages.filter((m: any) => !m.isUser).length,
-            aiResponse: response.text?.substring(0, 50),
-            totalMessages: uniqueBranchMessages.length,
-            uniqueMessages: uniqueBranchMessages.map(m => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 20) })),
-            parentNodeId,
-            firstMessageIsUser: uniqueBranchMessages[0]?.isUser,
-            lastMessageIsUser: uniqueBranchMessages[uniqueBranchMessages.length - 1]?.isUser
-          })
-          
-          const newNode: Node = {
-            id: newId,
-            type: 'chatNode',
-            position: newPosition,
-            data: {
-              label: ai.name,
-              messages: uniqueBranchMessages, // Use deduplicated messages
-              selectedAIs: [ai],
-              onBranch: (nodeId: string, msgId?: string) => handleBranchRef.current?.(nodeId, msgId),
-              onSendMessage: (nodeId: string, msg: string) => handleSendMessageRef.current?.(nodeId, msg),
-              isMain: false,
-              showAIPill: true,
-              parentId: parentNodeId,
-              // Add multi-model props immediately
-              onAddAI: (ai: AI) => handleBranchAddAI(newId, ai),
-              onRemoveAI: (aiId: string) => handleBranchRemoveAI(newId, aiId),
-              onSelectSingle: (aiId: string) => handleBranchSelectSingle(newId, aiId),
-              onToggleMultiModel: (nodeId: string) => handleBranchToggleMultiModel(nodeId),
-              getBestAvailableModel: getBestAvailableModel,
-              multiModelMode: false, // Start in single mode
-              nodeId: newId
-            }
-          }
-          
-          newNodes.push(newNode)
-          
-          // Create edge from parent to this node
-          const newEdge: Edge = {
-            id: `edge-${parentNodeId}-${newId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            source: parentNodeId,
-            target: newId,
-            animated: false,
-            style: { stroke: '#cbd5e1', strokeWidth: 2 }
-          }
-          
-          newEdges.push(newEdge)
-        })
-        
-        if (newNodes.length > 0) {
-          // Update nodes and edges
-          const updatedNodes = [...currentNodesInState, ...newNodes]
-          const updatedEdges = [...currentEdges, ...newEdges]
-          
-          // Apply Dagre layout to all nodes
-          const { nodes: layoutedNodes } = getLayoutedElements(updatedNodes, updatedEdges)
-          
-          // Update nodes and edges immediately
-          setNodes(layoutedNodes)
-          setEdges(updatedEdges)
-          
-          // Explicitly call onNodesUpdate to ensure branches are saved
-          if (onNodesUpdate) {
-            console.log('📤 Explicitly calling onNodesUpdate for multi-model branches:', {
-              totalNodes: layoutedNodes.length,
-              newBranchIds: newNodes.map(n => n.id),
-              parentNodeId
-            })
-            // Call after a short delay to ensure state updates are complete
-            setTimeout(() => {
-              onNodesUpdate(layoutedNodes)
-            }, 50)
-          }
-          
-          // Force immediate UI update
-          forceUpdate()
-          
-          // Auto-fit viewport to show all new branches with better timing
-          requestAnimationFrame(() => {
-            // Wait for nodes to be properly positioned
-            setTimeout(() => {
-            const nodeIds = [parentNodeId, ...newNodes.map(n => n.id)]
-              console.log('🎯 Multi-model branch centering - nodeIds:', nodeIds)
-            
-              // Try to center immediately
-              fitViewportToNodes(nodeIds, 0.15)
-              
-              // Retry after a longer delay if nodes weren't found
-            setTimeout(() => {
-                console.log('🎯 Retrying multi-model branch centering...')
-                fitViewportToNodes(nodeIds, 0.15)
-              forceUpdate()
-              }, 500)
-              
-              // Force another update after centering
-              setTimeout(() => {
-                forceUpdate()
-              }, 200)
-            }, 100)
-          })
-          
-          return prev + newNodes.length
-        }
+      aiResponses = deduplicateByModel(allAIResponses)
+      console.log('✅ Creating branches for all AI models:', aiResponses.map(r => r.aiModel))
+    } else if (!targetMessage.isUser) {
+      // AI message → single branch
+      aiResponses = [targetMessage]
+      console.log('✅ Creating single branch for AI response:', targetMessage.aiModel)
+    } else {
+      // USER message but NOT isMultiBranch → invalid (shouldn't happen)
+      console.warn('⚠️ User message clicked but isMultiBranch=false, skipping')
+      branchCreationLockRef.current.delete(messageId)
+      return
+    }
+    
+    if (aiResponses.length === 0) {
+      console.warn('⚠️ No AI responses found to create branches from')
+      branchCreationLockRef.current.delete(messageId)
+      return
+    }
+    
+    // ✅ Get inherited messages (all messages till the target message)
+    const inheritedMessages = getMessagesTill(messageId, deduplicatedMessages)
+    console.log('🌿 Inherited messages count:', inheritedMessages.length)
+    
+    // ✅ Create branch nodes
+    const newNodes: Node[] = []
+    const newEdges: Edge[] = []
+    
+    aiResponses.forEach((response, idx) => {
+      // Check if branch already exists for this specific response
+      if (branchExistsForMessage(parentNodeId, response.id)) {
+        console.warn('⚠️ Branch already exists for response:', response.id)
+        return
       }
       
-      // Single branch creation (existing logic)
-      const newId = String(prev)
-      
-      // Use intelligent positioning based on branch count
-      let newPosition
-      if (childrenCount === 0) {
-        // First branch - position to the right for side-by-side layout
-        newPosition = calculateSingleBranchPosition(parentNode.position)
-        newPosition.x += 300 // Offset to the right for side-by-side
-      } else {
-        // Additional branches - use child positioning
-        newPosition = calculateChildBranchPosition(
-          parentNode.position, 
-          childrenCount + 1, 
-          childrenCount
-        )
-      }
-      
-      // Get parent messages with context inheritance (root → current)
-      // Per spec: "Every branch inherits all messages above it (parent → root)"
-      const gatherInheritedMessages = (parentId: string): any[] => {
-        const messages: any[] = []
-        let currentId: string | undefined = parentId
-        
-        // Build parent chain
-        const chain: string[] = []
-        while (currentId) {
-          chain.push(currentId)
-          const node = nodes.find(n => n.id === currentId)
-          if (!node || !node.data.parentId) break
-          currentId = node.data.parentId
-        }
-        
-        // Reverse to get order: root → current
-        chain.reverse()
-        
-        // Collect ALL messages from the chain (both user and AI) for context inheritance
-        // Per spec: "Every branch inherits all messages above it (parent → root)"
-        for (const nodeId of chain) {
-          const node = nodes.find(n => n.id === nodeId)
-          if (!node) continue
-          
-          const nodeMessages = nodeId === 'main' 
-            ? mainMessages 
-            : (node.data.messages || [])
-          
-          // Add ALL messages from this node (both user and AI) for full context
-          // Filter out branch init messages
-          const validMessages = nodeMessages.filter((m: any) => 
-            !m.text?.startsWith('[Branched from:')
-          )
-          messages.push(...validMessages)
-        }
-        
-        return messages
-      }
-      
-      // Get all inherited messages from parent chain (user + AI)
-      const inheritedMessages = gatherInheritedMessages(parentNodeId)
-      
-      // Get context message for the branch init message
-      const parentMessages = parentNode.data.messages || []
-      let contextMessage = messageId 
-        ? parentMessages.find((m: any) => m.id === messageId)
-        : parentMessages[parentMessages.length - 1]
-      
-      if (!contextMessage) {
-        contextMessage = parentMessages[parentMessages.length - 1]
-      }
-      
-      // Deduplicate inherited messages by ID
-      const seenMessageIds = new Set<string>()
-      const uniqueInheritedMessages = inheritedMessages.filter((m: any) => {
-        if (seenMessageIds.has(m.id)) return false
-        seenMessageIds.add(m.id)
-        return true
-      })
-      
-      console.log('📝 Creating new branch from message:', contextMessage?.text)
-      console.log('📦 Branch inheriting messages:', {
-        inheritedCount: uniqueInheritedMessages.length,
-        userMessages: uniqueInheritedMessages.filter((m: any) => m.isUser).length,
-        aiMessages: uniqueInheritedMessages.filter((m: any) => !m.isUser).length,
+      const branchNode = createBranchNode(
         parentNodeId,
-        inheritedMessages: uniqueInheritedMessages.map(m => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 30) }))
-      })
+        inheritedMessages,
+        response,
+        idx,
+        aiResponses.length
+      )
       
-      // Create new node
-      const newNode: any = {
-        id: newId,
-        type: 'chatNode',
-        position: newPosition,
-        data: {
-          label: selectedAIs[0]?.name || 'Branch',
-          parentId: parentNodeId, // Set the parent ID for proper hierarchy
-          messages: [
-            // Include all inherited messages (parent → root) - both user and AI
-            ...uniqueInheritedMessages,
-            {
-              id: `branch-${newId}-init`,
-              text: `[Branched from: "${contextMessage?.text.substring(0, 40)}..."]`,
-              isUser: false,
-              children: [],
-              timestamp: Date.now()
-            }
-          ],
-          selectedAIs: selectedAIs,
-          onBranch: (nodeId: string, msgId?: string) => handleBranchRef.current?.(nodeId, msgId),
-          onSendMessage: (nodeId: string, msg: string) => handleSendMessageRef.current?.(nodeId, msg),
-          onToggleMinimize: toggleNodeMinimize,
-          isMain: false,
-          showAIPill: false,
-          isMinimized: minimizedNodes.has(newId),
-          isActive: activeNodeId === newId,
-          // Add multi-model props immediately
-          onAddAI: (ai: AI) => handleBranchAddAI(newId, ai),
-          onRemoveAI: (aiId: string) => handleBranchRemoveAI(newId, aiId),
-          onSelectSingle: (aiId: string) => handleBranchSelectSingle(newId, aiId),
-          onToggleMultiModel: (nodeId: string) => handleBranchToggleMultiModel(nodeId),
-          getBestAvailableModel: getBestAvailableModel,
-          multiModelMode: false, // Start in single mode
-          nodeId: newId
-        }
-      }
+      newNodes.push(branchNode)
       
       // Create edge
       const newEdge: Edge = {
-        id: `edge-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: `edge-${parentNodeId}-${branchNode.id}-${Date.now()}`,
         source: parentNodeId,
-        target: newId,
+        target: branchNode.id,
         animated: false,
-        style: { stroke: '#cbd5e1', strokeWidth: 2, strokeDasharray: '4 2' }
+        style: { stroke: '#cbd5e1', strokeWidth: 2 }
       }
+      newEdges.push(newEdge)
+    })
+    
+    if (newNodes.length === 0) {
+      console.warn('⚠️ No new branches created (all may already exist)')
+      branchCreationLockRef.current.delete(messageId)
+      return
+    }
+    
+    console.log('✅ Creating branches:', {
+      count: newNodes.length,
+      branchIds: newNodes.map(n => n.id),
+      aiModels: aiResponses.map(r => r.aiModel)
+    })
+    
+    // ✅ Update state
+    setNodeId(prev => {
+      const currentNodesInState = nodesRef.current
+      const currentEdges = edgesRef.current
       
-      console.log('➕ Adding new node and edge')
+      // Merge new nodes with existing
+      const updatedNodes = [...currentNodesInState, ...newNodes]
+      const updatedEdges = [...currentEdges, ...newEdges]
       
-      // Add new node and edge
-      const updatedNodes = [...currentNodesInState, newNode]
-      const updatedEdges = [...currentEdges, newEdge]
-      
-      // Apply Dagre layout to all nodes
+      // Apply layout
       const { nodes: layoutedNodes } = getLayoutedElements(updatedNodes, updatedEdges)
       
-      // Update nodes and edges immediately
-      setNodes(layoutedNodes)
+      // Preserve main node messages
+      const finalLayoutedNodes = layoutedNodes.map(node => {
+        if (node.id === 'main') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              messages: mainMessages
+            }
+          }
+        }
+        return node
+      })
+      
+      // Update React Flow
+      setNodes(finalLayoutedNodes)
       setEdges(updatedEdges)
       
-      // Force immediate UI update
-      forceUpdate()
-      
-      // Set active node ID to the new branch to highlight it
-      setActiveNodeId(newId)
-      
-      // Immediately fit view to show all nodes with better centering
-      // Use requestAnimationFrame to ensure the DOM has updated
-      requestAnimationFrame(() => {
-        // Focus directly on the new branch node for better UX
-        const newBranchNode = layoutedNodes.find(n => n.id === newId)
-        
-        if (newBranchNode) {
-            // Add highlight effect to the new branch
-            setNodes(nds => 
-              nds.map(n => 
-                n.id === newId 
-                  ? { ...n, data: { ...n.data, isHighlighted: true } }
-                  : n
-              )
-            )
-            
-            // Remove highlight after animation
-            setTimeout(() => {
-              setNodes(nds => 
-                nds.map(n => 
-                  n.id === newId 
-                    ? { ...n, data: { ...n.data, isHighlighted: false } }
-                    : n
-                )
-              )
-            }, 1500)
-            
-          // Fit view to show both parent and new branch
-          const parentNode = layoutedNodes.find(n => n.id === parentNodeId)
-          if (parentNode) {
-            fitViewportToNodes([parentNodeId, newId], 0.05)
-          } else {
-              centerOnNode(newId, 0.6)
-          }
-        } else {
-          // Fallback to fit view
-        fitView({ 
-            padding: 0.3, 
-            duration: 800,
-            minZoom: 0.5,
-            maxZoom: 1.0
-          })
-        }
-        
-        // Force another update after animation
+      // ✅ Call onNodesUpdate to trigger save
+      if (onNodesUpdate) {
         setTimeout(() => {
-          forceUpdate()
+          onNodesUpdate(finalLayoutedNodes)
+        }, 50)
+      }
+      
+      // ✅ Clear lock after delay
+      setTimeout(() => {
+        branchCreationLockRef.current.delete(messageId)
+      }, 1000)
+      
+      // Fit view to show new branches
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const nodeIds = [parentNodeId, ...newNodes.map(n => n.id)]
+          fitViewportToNodes(nodeIds, 0.15)
         }, 100)
       })
       
-      return prev + 1
+      return prev + newNodes.length
     })
   }
   
-  const handleBranch = useCallback((parentNodeId: string, messageId?: string) => {
+  // ✅ Wrapper for handleBranch
+  const handleBranch = useCallback((parentNodeId: string, messageId?: string, isMultiBranch?: boolean) => {
     if (handleBranchRef.current) {
-      handleBranchRef.current(parentNodeId, messageId)
+      handleBranchRef.current(parentNodeId, messageId, isMultiBranch)
     }
   }, [])
+  
+  // ✅ Connect onBranchFromMain to handleBranch
+  useEffect(() => {
+    if (onBranchFromMain) {
+      // Store a wrapper function that calls handleBranch
+      const wrapper = (messageId: string, isMultiBranch?: boolean) => {
+        handleBranch('main', messageId, isMultiBranch)
+      }
+      // If there's a ref in page.tsx, we'd set it here
+      // For now, we'll use the prop directly
+    }
+  }, [onBranchFromMain, handleBranch])
 
   const handleSendMessageRef = useRef<(parentId: string, message: string) => Promise<void> | undefined>(undefined)
   
@@ -2063,11 +1429,11 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     if (selectedAIs.length === 0) return
     
     // Add user message immediately
-            const userMsg = {
-              id: `msg-${Date.now()}`,
-              text: message,
-              isUser: true,
-              children: [],
+    const userMsg = {
+      id: `msg-${Date.now()}`,
+      text: message,
+      isUser: true,
+      children: [],
       timestamp: Date.now(),
       aiModel: undefined,
       groupId: undefined
@@ -2260,8 +1626,17 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         })
         
         // Generate responses from all AIs
+        // CRITICAL: Create abort controller for this generation
+        const abortController = new AbortController()
+        abortControllersRef.current.set(parentId, abortController)
+        
         const responses = await Promise.all(
           selectedAIs.map(async (ai) => {
+            // Check if aborted before starting
+            if (abortController.signal.aborted) {
+              throw new Error('Generation aborted')
+            }
+            
             const modelName = ai.id === 'gemini-2.5-pro' ? 'gemini' : 
                              ai.id === 'mistral-large' ? 'mistral' : 
                              'gpt-4'
@@ -2273,6 +1648,11 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         message,
         context,
         (chunk: string) => {
+                  // Check if aborted during streaming
+                  if (abortController.signal.aborted) {
+                    return
+                  }
+                  
                   // Handle streaming for this specific AI
                   console.log(`Streaming from ${ai.name} in branch:`, chunk)
                   setNodes((nds) => {
@@ -2295,7 +1675,8 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
                     })
                     return updatedNodes
                   })
-                }
+                },
+                abortController.signal
               )
             }
           })
@@ -2373,11 +1754,20 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         return updatedNodes
       })
         
+        // CRITICAL: Create abort controller for this generation
+        const abortController = new AbortController()
+        abortControllersRef.current.set(parentId, abortController)
+        
         const response = await aiService.generateResponse(
           modelName,
           message,
           context,
           (chunk: string) => {
+            // Check if aborted during streaming
+            if (abortController.signal.aborted) {
+              return
+            }
+            
             // Handle streaming response - update the streaming message in branch
             console.log(`Streaming from ${selectedAI.name} in branch:`, chunk)
             setNodes((nds) => {
@@ -2400,7 +1790,8 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
               })
               return updatedNodes
             })
-          }
+          },
+          abortController.signal
         )
         
         // Finalize the streaming message
@@ -2434,6 +1825,8 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
       
       // Clear generating state and force UI update after AI response
       setGeneratingBranchId(null)
+      // Clean up abort controller
+      abortControllersRef.current.delete(parentId)
       setTimeout(() => {
         forceUpdate()
       }, 0)
@@ -2441,35 +1834,81 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     } catch (error) {
       console.error('Error generating AI response in branch:', error)
       
-      // Add error response
-      const errorMsg = {
-        id: `msg-${Date.now() + 1}`,
-        text: `AI error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        isUser: false,
-        children: [],
-        timestamp: Date.now() + 1,
-        aiModel: selectedAIs[0]?.id || 'unknown',
-        groupId: undefined
-      }
+      // Check if it was aborted
+      const wasAborted = error instanceof Error && (error.message.includes('aborted') || error.message.includes('AbortError'))
       
-      setNodes((nds) => {
-        const updatedNodes = nds.map((node) => {
-          if (node.id === parentId) {
-            const currentMessages = node.data.messages || []
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                messages: [...currentMessages, errorMsg]
+      // Clean up abort controller
+      abortControllersRef.current.delete(parentId)
+      
+      // If aborted, finalize with current streaming text
+      if (wasAborted) {
+        console.log('🛑 Generation aborted by user')
+        setNodes((nds) => {
+          const updatedNodes = nds.map((node) => {
+            if (node.id === parentId) {
+              const currentMessages = node.data.messages || []
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  messages: currentMessages.map((msg: any) => {
+                    if (msg.isStreaming && msg.streamingText) {
+                      // Finalize streaming message with current text
+                      return {
+                        ...msg,
+                        text: msg.streamingText || '[Generation stopped]',
+                        isStreaming: false,
+                        streamingText: undefined
+                      }
+                    }
+                    return msg
+                  }).filter((msg: any) => {
+                    // Remove streaming messages that have no text
+                    if (msg.isStreaming && !msg.streamingText) {
+                      return false
+                    }
+                    return true
+                  })
+                }
               }
             }
-          }
-          return node
+            return node
+          })
+          return updatedNodes
         })
-        return updatedNodes
-      })
+      } else {
+        // Add error response for non-abort errors
+        const errorMsg = {
+          id: `msg-${Date.now() + 1}`,
+          text: `AI error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          isUser: false,
+          children: [],
+          timestamp: Date.now() + 1,
+          aiModel: selectedAIs[0]?.id || 'unknown',
+          groupId: undefined
+        }
+        
+        setNodes((nds) => {
+          const updatedNodes = nds.map((node) => {
+            if (node.id === parentId) {
+              const currentMessages = node.data.messages || []
+              // Remove streaming messages and add error
+              const filteredMessages = currentMessages.filter((msg: any) => !msg.isStreaming)
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  messages: [...filteredMessages, errorMsg]
+                }
+              }
+            }
+            return node
+          })
+          return updatedNodes
+        })
+      }
       
-      // Clear generating state and force UI update after error
+      // Clear generating state
       setGeneratingBranchId(null)
       setTimeout(() => {
         forceUpdate()
@@ -2479,6 +1918,32 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
   
   const handleSendMessage = useCallback(async (parentId: string, message: string) => {
     await handleSendMessageRef.current?.(parentId, message)
+  }, [])
+  
+  // Stop generation handler - aborts all ongoing AI generations
+  const handleStopGeneration = useCallback((nodeId?: string) => {
+    console.log('🛑 Stop generation requested for node:', nodeId || 'all')
+    
+    if (nodeId) {
+      // Stop specific node
+      const abortController = abortControllersRef.current.get(nodeId)
+      if (abortController) {
+        abortController.abort()
+        abortControllersRef.current.delete(nodeId)
+        console.log('🛑 Aborted generation for node:', nodeId)
+      }
+      setGeneratingBranchId(null)
+    } else {
+      // Stop all nodes
+      abortControllersRef.current.forEach((controller, id) => {
+        controller.abort()
+        console.log('🛑 Aborted generation for node:', id)
+      })
+      abortControllersRef.current.clear()
+      setGeneratingBranchId(null)
+    }
+    
+    forceUpdate()
   }, [])
 
   // Initialize main node on mount
@@ -2544,7 +2009,8 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
               onExportImport: onExportImport,
               isMain: true, // Ensure isMain is always true for main node
               existingBranchesCount: nodes.length - 1, // Exclude main node
-              nodeId: 'main'
+              nodeId: 'main',
+              onStopGeneration: handleStopGeneration
             }
           }
         } else if (node.data.showAIPill) {
@@ -2589,14 +2055,15 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
               multiModelMode: branchMultiModelMode,
               nodeId: node.id,
               isMain: false,
-              existingBranchesCount: nodes.length - 1
+              existingBranchesCount: nodes.length - 1,
+              onStopGeneration: handleStopGeneration
             }
           }
         }
         return node
       }))
     )
-  }, [mainMessages, selectedAIs, getBranchSelectedAIs, getBranchMultiModelMode, handleBranchAddAI, handleBranchRemoveAI, handleBranchSelectSingle, handleBranchToggleMultiModel, getBestAvailableModel])
+  }, [mainMessages, selectedAIs, getBranchSelectedAIs, getBranchMultiModelMode, handleBranchAddAI, handleBranchRemoveAI, handleBranchSelectSingle, handleBranchToggleMultiModel, getBestAvailableModel, handleStopGeneration])
 
   // Update generating state for all nodes
   useEffect(() => {
@@ -2847,8 +2314,12 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
       )
       
       if (!existingBranch) {
-      console.log('🎯 Branching from main node for message:', pendingBranchMessageId)
-      handleBranch('main', pendingBranchMessageId)
+        // Determine if this is multi-branch by checking if the message is a user message
+        const targetMessage = mainMessages.find(m => m.id === pendingBranchMessageId)
+        const isMultiBranch = targetMessage?.isUser === true
+        
+        console.log('🎯 Branching from main node for message:', pendingBranchMessageId, 'isMultiBranch:', isMultiBranch)
+        handleBranch('main', pendingBranchMessageId, isMultiBranch)
       } else {
         console.log('🎯 Branch already exists for message:', pendingBranchMessageId)
       }
@@ -2858,7 +2329,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         onPendingBranchProcessed()
       }
     }
-  }, [pendingBranchMessageId])
+  }, [pendingBranchMessageId, mainMessages, handleBranch, onPendingBranchProcessed])
 
   // Track which AI responses we've already created nodes for
   const createdResponseNodesRef = useRef<Set<string>>(new Set())
@@ -2876,13 +2347,14 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
 
   // Handle node click for focus mode and activation
   const handleNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
-    // Prevent event propagation to avoid triggering pane click
-    event.stopPropagation()
+    // Don't stop propagation here - let the node handle it
+    // This allows panning to work when clicking on node background
     
-    // Set this node as active and focused
+    // Set this node as active and focused (for visual feedback)
     setActiveNodeId(node.id)
     setFocusedNodeId(node.id)
-    setInteractionMode('focus')
+    // Keep pan mode active - don't switch to focus mode
+    // setInteractionMode('pan') // Keep panning enabled
     
     // Use intelligent centering
     centerOnNode(node.id, 0.6)
@@ -2897,7 +2369,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     )
     
     // Remove highlight after animation
-          setTimeout(() => {
+    setTimeout(() => {
       setNodes(nds => 
         nds.map(n => 
           n.id === node.id 
@@ -2907,7 +2379,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
       )
     }, 1000)
     
-    console.log('🎯 Node focused:', node.id, 'Mode:', 'focus')
+    console.log('🎯 Node focused:', node.id, 'Mode:', 'pan (panning still enabled)')
     
     // Force update to ensure UI reflects the change
     forceUpdate()
@@ -2924,12 +2396,12 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     
     // Create context menu
     const contextMenu = document.createElement('div')
-    contextMenu.className = 'fixed bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50'
+    contextMenu.className = 'fixed bg-card border border-border rounded-lg shadow-lg p-2 z-50'
     contextMenu.style.left = `${event.clientX}px`
     contextMenu.style.top = `${event.clientY}px`
     
     const button = document.createElement('button')
-    button.className = 'px-3 py-2 text-sm hover:bg-gray-100 rounded flex items-center gap-2'
+    button.className = 'px-3 py-2 text-sm hover:bg-muted rounded flex items-center gap-2 text-foreground'
     button.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
         <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2958,20 +2430,20 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
   }, [collapsedNodes, toggleNodeCollapse])
 
   return (
-    <div className="w-full h-screen relative bg-gray-50 touch-pan-x touch-pan-y">
+    <div className="w-full h-screen relative bg-background touch-pan-x touch-pan-y">
       
       {/* Search Bar - Centered at top */}
       <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm max-w-md relative">
+        <div className="bg-card border border-border rounded-lg shadow-sm max-w-md relative">
           <div className="flex items-center p-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-gray-400 mr-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-muted-foreground mr-2">
               <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             <input
               type="text"
               placeholder="Search conversations..."
               value={searchQuery}
-              className="flex-1 text-sm border-none outline-none"
+              className="flex-1 text-sm border-none outline-none bg-transparent text-foreground placeholder-muted-foreground"
               onChange={handleMagnifyingGlassChange}
             />
             {searchQuery && (
@@ -2980,7 +2452,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
                   setMagnifyingGlassQuery('')
                   setMagnifyingGlassResults([])
                 }}
-                className="text-gray-400 hover:text-gray-600 p-1"
+                className="text-muted-foreground hover:text-foreground p-1"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2991,7 +2463,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
           
           {/* MagnifyingGlass Results Dropdown */}
           {searchResults.length > 0 && (
-            <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-b-lg shadow-lg max-h-60 overflow-y-auto">
+            <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-b-lg shadow-lg max-h-60 overflow-y-auto">
               {searchResults.map((nodeId) => {
                 const node = nodesRef.current.find(n => n.id === nodeId)
                 if (!node) return null
@@ -3004,17 +2476,17 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
                   <button
                     key={nodeId}
                     onClick={() => navigateToResult(nodeId)}
-                    className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                    className="w-full px-4 py-3 text-left hover:bg-muted border-b border-border last:border-b-0 text-foreground"
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-medium text-gray-500">
+                      <span className="text-xs font-medium text-muted-foreground">
                         {node.data.label}
                       </span>
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-muted-foreground/70">
                         ({node.data.messages.length} messages)
                       </span>
                     </div>
-                    <div className="text-sm text-gray-700 truncate">
+                    <div className="text-sm text-foreground truncate">
                       {matchingMessage?.text.substring(0, 80)}...
                     </div>
                   </button>
@@ -3044,10 +2516,11 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         onEdgeMouseLeave={handleEdgeMouseLeave}
         onEdgeClick={handleEdgeClick}
         onPaneClick={(event) => {
-          // Switch to pan mode when clicking on empty canvas
+          // Clear focus when clicking on empty canvas
           setFocusedNodeId(null)
-          setInteractionMode('pan')
-          console.log('🖱️ Canvas clicked - switching to pan mode')
+          setActiveNodeId(null)
+          // Keep pan mode active (it's always active now)
+          console.log('🖱️ Canvas clicked - clearing focus')
         }}
         onMove={(event, viewport) => {
           setViewport(viewport)
@@ -3062,7 +2535,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         minZoom={0.1}
         maxZoom={3.0}
         fitView={false}
-        panOnDrag={interactionMode === 'pan'} // Only allow panning in pan mode
+        panOnDrag={true} // Always allow panning - nodes will prevent it when needed
         panOnScroll={false} // Disable scroll to pan - use drag only
         panOnScrollMode={PanOnScrollMode.Free}
         selectNodesOnDrag={false}
@@ -3071,7 +2544,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         elementsSelectable={false}
         zoomOnScroll={false} // Disable scroll to zoom - use pinch/buttons only
         zoomOnPinch={true} // Keep pinch to zoom for mobile
-        preventScrolling={true} // Prevent page scrolling
+        preventScrolling={false} // Allow page scrolling when not over canvas
         deleteKeyCode={null}
         multiSelectionKeyCode={null}
         fitViewOptions={{
@@ -3083,8 +2556,8 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
       >
         <MiniMap 
           style={{ 
-            backgroundColor: '#f9fafb',
-            border: '1px solid #e5e7eb',
+            backgroundColor: 'hsl(var(--card))',
+            border: '1px solid hsl(var(--border))',
             borderRadius: '8px'
           }}
           nodeColor={(node) => {
@@ -3099,7 +2572,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         />
         <Controls 
           style={{ 
-            border: '1px solid #e5e7eb',
+            border: '1px solid hsl(var(--border))',
             borderRadius: '8px'
           }}
           showZoom={true}
@@ -3107,9 +2580,9 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
           showInteractive={true}
         />
         <Background 
-          color="#e5e7eb" 
+          color="hsl(var(--border))" 
           gap={20}
-          style={{ backgroundColor: '#f9fafb' }}
+          style={{ backgroundColor: 'hsl(var(--background))' }}
           variant={BackgroundVariant.Dots}
         />
         
@@ -3122,14 +2595,14 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-2 min-w-[200px]"
+          className="fixed z-50 bg-card border border-border rounded-lg shadow-lg py-2 min-w-[200px]"
           style={{
             left: showContextMenu.x,
             top: showContextMenu.y
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="px-3 py-2 text-sm font-medium text-gray-700 border-b border-gray-100">
+          <div className="px-3 py-2 text-sm font-medium text-foreground border-b border-border">
             Branch Actions
     </div>
           <button
@@ -3149,14 +2622,14 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
               
               setShowContextMenu(null)
             }}
-            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+            className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-muted flex items-center gap-2"
           >
             <Link size={16} className="text-orange-500" />
             Create Context Link
           </button>
           <button
             onClick={() => setShowContextMenu(null)}
-            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+            className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-muted flex items-center gap-2"
           >
             <X size={16} />
             Cancel

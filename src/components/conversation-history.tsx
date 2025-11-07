@@ -64,10 +64,10 @@ export default function ConversationHistory({
   return (
     <div className="flex flex-col h-full">
       {/* New Conversation Button */}
-      <div className="p-4 border-b border-gray-100">
+      <div className="p-4 border-b border-border/80">
         <button 
           onClick={onCreateNewConversation}
-          className="w-full py-2.5 px-4 bg-gradient-to-r from-purple-50 to-purple-50/50 hover:from-purple-100 hover:to-purple-100/50 text-purple-700 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 text-sm font-medium border border-purple-200/60 shadow-sm hover:shadow-md active:scale-[0.98]"
+          className="w-full py-2.5 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 text-sm font-medium border border-purple-200/60 shadow-sm hover:shadow-md active:scale-[0.98]"
         >
           <PlusCircle size={16} weight="bold" />
           New Conversation
@@ -77,10 +77,10 @@ export default function ConversationHistory({
       {/* Conversation List */}
       <div className="flex-1 overflow-y-auto p-4">
         {conversations.length === 0 ? (
-          <div className="text-center text-gray-500 py-8">
-            <Clock size={32} className="mx-auto mb-2 text-gray-300" />
-            <p className="text-sm">No conversation history</p>
-            <p className="text-xs text-gray-400 mt-1">
+          <div className="text-center text-muted-foreground py-12">
+            <Clock size={36} className="mx-auto mb-3 text-muted-foreground/50" weight="light" />
+            <p className="text-sm font-medium text-foreground">No conversation history</p>
+            <p className="text-xs text-muted-foreground mt-1.5">
               Start a new conversation to begin
             </p>
           </div>
@@ -88,24 +88,24 @@ export default function ConversationHistory({
           <div className="space-y-4">
             {Object.entries(groupedConversations).map(([date, dateConversations]) => (
               <div key={date}>
-                <h3 className="text-xs font-medium text-gray-500 px-2 py-2">{date}</h3>
-                <div className="space-y-2.5 mt-2">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 py-2.5">{date}</h3>
+                <div className="space-y-2 mt-1">
                   {dateConversations.map(conversation => (
                     <div key={conversation._id} className="flex items-center gap-2 group relative">
                       <button
                         onClick={() => onSelectConversation(conversation._id)}
-                        className={`flex-1 text-left p-3 rounded-xl text-sm transition-all duration-200 ease-in-out min-w-0 overflow-hidden ${
+                        className={`flex-1 text-left p-3 rounded-lg text-sm transition-all duration-200 ease-in-out min-w-0 overflow-hidden ${
                           currentConversationId === conversation._id
-                            ? 'bg-gradient-to-r from-purple-50 to-purple-50/50 text-purple-700 border border-purple-200/60 shadow-sm pr-10'
-                            : 'hover:bg-gray-50/80 text-gray-700 border border-transparent group-hover:pr-10 pr-3 hover:shadow-sm'
+                            ? 'bg-purple-50 text-purple-700 border border-purple-200/60 shadow-sm pr-10'
+                            : 'hover:bg-muted text-foreground border border-transparent hover:border-border/60 group-hover:pr-10 pr-3'
                         }`}
                       >
-                        <div className="font-medium truncate block whitespace-nowrap overflow-hidden text-ellipsis">
+                        <div className="font-medium truncate block whitespace-nowrap overflow-hidden text-ellipsis leading-snug">
                           {getConversationTitle(conversation)}
                         </div>
-                        <div className="text-xs text-gray-500 mt-1.5 flex items-center justify-between">
-                          <span>{conversation.mainMessages?.length || 0} messages</span>
-                          <span>{conversation.branches?.length || 0} branches</span>
+                        <div className="text-xs text-muted-foreground mt-1.5 flex items-center justify-between gap-2">
+                          <span>{conversation.mainMessages?.length || 0} {conversation.mainMessages?.length === 1 ? 'message' : 'messages'}</span>
+                          <span>{conversation.branches?.length || 0} {conversation.branches?.length === 1 ? 'branch' : 'branches'}</span>
                         </div>
                       </button>
                       <button
@@ -115,10 +115,10 @@ export default function ConversationHistory({
                             onDeleteConversation(conversation._id)
                           }
                         }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-2 hover:bg-gray-100 rounded-full transition-all duration-200 ease-in-out transform scale-90 group-hover:scale-100 z-10 hover:bg-red-50 hover:text-red-600"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-50 rounded-lg transition-all duration-200 ease-in-out z-10 hover:text-red-600"
                         title="Delete conversation"
                       >
-                        <Trash className="w-3.5 h-3.5 text-gray-500" />
+                        <Trash className="w-3.5 h-3.5 text-muted-foreground" />
                       </button>
                     </div>
                   ))}
