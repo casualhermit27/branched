@@ -195,7 +195,7 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => setShowDropdown(!showDropdown)}
-          className="px-4 py-2 bg-white border border-gray-300 rounded-2xl text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+          className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50/80 transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow-md"
           style={{ borderRadius: '16px' }}
         >
           <span className="w-4 h-4 flex items-center justify-center">
@@ -214,7 +214,7 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="absolute top-full left-0 mt-2 bg-white border border-gray-200 shadow-lg z-10 min-w-[200px] max-h-[400px] overflow-y-auto"
+              className="absolute top-full left-0 mt-2 bg-white border border-gray-200 shadow-xl z-10 min-w-[200px] max-h-[400px] overflow-y-auto rounded-xl backdrop-blur-sm"
               style={{ borderRadius: '16px' }}
             >
               {allAIOptions.map((ai) => (
@@ -222,12 +222,12 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
                   key={ai.id}
                   onClick={() => selectAI(ai)}
                   disabled={!ai.functional}
-                  className={`w-full px-4 py-3 text-left transition-colors flex items-center gap-3 ${
+                  className={`w-full px-4 py-3 text-left transition-all duration-150 flex items-center gap-3 rounded-lg ${
                     !ai.functional 
                       ? 'opacity-50 cursor-not-allowed' 
-                      : 'hover:bg-gray-50 cursor-pointer'
+                      : 'hover:bg-gray-50/80 cursor-pointer active:scale-[0.98]'
                   } ${
-                    currentAI?.id === ai.id ? 'bg-gray-100' : ''
+                    currentAI?.id === ai.id ? 'bg-purple-50/50 border border-purple-200/50' : ''
                   }`}
                 >
                   <span className="w-4 h-4 flex items-center justify-center">
@@ -263,14 +263,14 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
-              className={`px-3 py-2 rounded-2xl text-xs font-medium flex items-center gap-2 border ${ai.color}`}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-2 border transition-all duration-200 shadow-sm hover:shadow-md ${ai.color}`}
               style={{ borderRadius: '16px' }}
             >
               {ai.logo}
               <span className="font-medium">{getAIDisplayName(ai)}</span>
               <button
                 onClick={() => onRemoveAI(ai.id)}
-                className="hover:bg-black/10 rounded-full p-0.5 transition-colors ml-1"
+                className="hover:bg-black/10 rounded-full p-1 transition-all duration-150 active:scale-90 ml-1"
               >
                 <X size={12} />
               </button>
@@ -286,10 +286,10 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
               whileTap={{ scale: selectedAIs.length < MAX_AIS ? 0.95 : 1 }}
               onClick={() => selectedAIs.length < MAX_AIS && setShowDropdown(!showDropdown)}
               disabled={selectedAIs.length >= MAX_AIS}
-              className={`px-3 py-2 bg-white border rounded-2xl flex items-center gap-2 transition-colors ${
+              className={`px-3 py-2 bg-white border rounded-xl flex items-center gap-2 transition-all duration-200 shadow-sm hover:shadow-md ${
                 selectedAIs.length >= MAX_AIS
                   ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                  : 'border-gray-300 text-gray-600 hover:bg-gray-50 active:scale-95'
               }`}
               style={{ borderRadius: '16px' }}
             >
@@ -310,7 +310,7 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute top-full left-0 mt-2 bg-white border border-gray-200 shadow-lg z-10 min-w-[200px]"
+            className="absolute top-full left-0 mt-2 bg-white border border-gray-200 shadow-xl z-10 min-w-[200px] rounded-xl backdrop-blur-sm"
             style={{ borderRadius: '16px' }}
           >
             <div className="p-2">
@@ -321,10 +321,10 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
                     key={ai.id}
                     onClick={() => addAI(ai)}
                     disabled={!ai.functional}
-                    className={`w-full text-left px-3 py-2 transition-colors flex items-center gap-3 rounded-xl ${
+                    className={`w-full text-left px-3 py-2.5 transition-all duration-150 flex items-center gap-3 rounded-lg ${
                       !ai.functional 
                         ? 'opacity-50 cursor-not-allowed' 
-                        : 'hover:bg-gray-50 cursor-pointer'
+                        : 'hover:bg-gray-50/80 cursor-pointer active:scale-[0.98]'
                     }`}
                     style={{ borderRadius: '12px' }}
                   >

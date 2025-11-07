@@ -1,0 +1,8 @@
+---
+alwaysApply: true
+---
+1. Make sure to always use clean code and always have it production ready
+2. make sure to always check build for build issues or anything
+3. Make sure there is best of UI and UX
+4. Never use gradients unless necessary
+5. never make changes to already existing stuff unless asked explicitly

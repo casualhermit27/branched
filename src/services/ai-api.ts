@@ -82,7 +82,8 @@ export class MistralAPI {
   async generateResponse(
     message: string, 
     context: ConversationContext,
-    onChunk?: (chunk: string) => void
+    onChunk?: (chunk: string) => void,
+    signal?: AbortSignal
   ): Promise<AIResponse> {
     if (!this.apiKey) {
       console.warn('⚠️ Mistral API key not configured, using fallback response')
@@ -130,7 +131,8 @@ export class MistralAPI {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: signal
       })
       
       console.log('📡 Mistral API Response Status:', response.status, response.statusText)
@@ -188,7 +190,7 @@ export class MistralAPI {
 
       if (onChunk) {
         // Handle streaming response
-        return await this.handleStreamingResponse(response, onChunk)
+        return await this.handleStreamingResponse(response, onChunk, signal)
       } else {
         // Handle regular response
         const data = await response.json()
@@ -238,7 +240,8 @@ export class MistralAPI {
 
   private async handleStreamingResponse(
     response: Response, 
-    onChunk: (chunk: string) => void
+    onChunk: (chunk: string) => void,
+    signal?: AbortSignal
   ): Promise<AIResponse> {
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
@@ -250,8 +253,20 @@ export class MistralAPI {
 
     try {
       while (true) {
+        // Check if aborted
+        if (signal?.aborted) {
+          reader.cancel()
+          throw new Error('Generation aborted by user')
+        }
+        
         const { done, value } = await reader.read()
         if (done) break
+
+        // Check again after reading
+        if (signal?.aborted) {
+          reader.cancel()
+          throw new Error('Generation aborted by user')
+        }
 
         const chunk = decoder.decode(value)
         const lines = chunk.split('\n')
@@ -266,7 +281,10 @@ export class MistralAPI {
               const content = parsed.choices?.[0]?.delta?.content
               if (content) {
                 fullResponse += content
-                onChunk(content)
+                // Check if aborted before calling onChunk
+                if (!signal?.aborted) {
+                  onChunk(content)
+                }
               }
             } catch (e) {
               // Ignore parsing errors for incomplete chunks
@@ -280,6 +298,16 @@ export class MistralAPI {
         model: 'mistral',
         timestamp: Date.now()
       }
+    } catch (error) {
+      if (signal?.aborted) {
+        // Return partial response if aborted
+        return {
+          text: fullResponse || '[Generation stopped]',
+          model: 'mistral',
+          timestamp: Date.now()
+        }
+      }
+      throw error
     } finally {
       reader.releaseLock()
     }
@@ -357,7 +385,8 @@ export class GeminiAPI {
   async generateResponse(
     message: string, 
     context: ConversationContext,
-    onChunk?: (chunk: string) => void
+    onChunk?: (chunk: string) => void,
+    signal?: AbortSignal
   ): Promise<AIResponse> {
     if (!this.apiKey) {
       throw new Error('Gemini API key not configured')
@@ -414,7 +443,8 @@ export class GeminiAPI {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: signal
       })
 
       if (!response.ok) {
@@ -477,8 +507,15 @@ export class GeminiAPI {
         if (onChunk) {
           const words = text.split(' ')
           for (let i = 0; i < words.length; i++) {
+            // Check if aborted
+            if (signal?.aborted) {
+              break
+            }
+            
             const chunk = words[i] + (i < words.length - 1 ? ' ' : '')
-            onChunk(chunk)
+            if (!signal?.aborted) {
+              onChunk(chunk)
+            }
             await new Promise(resolve => setTimeout(resolve, 50)) // Small delay for streaming effect
           }
         }
@@ -528,13 +565,14 @@ export class AIService {
     model: string,
     message: string,
     context: ConversationContext,
-    onChunk?: (chunk: string) => void
+    onChunk?: (chunk: string) => void,
+    signal?: AbortSignal
   ): Promise<AIResponse> {
     switch (model.toLowerCase()) {
       case 'mistral':
-        return await this.mistralAPI.generateResponse(message, context, onChunk)
+        return await this.mistralAPI.generateResponse(message, context, onChunk, signal)
       case 'gemini':
-        return await this.geminiAPI.generateResponse(message, context, onChunk)
+        return await this.geminiAPI.generateResponse(message, context, onChunk, signal)
       default:
         throw new Error(`Unsupported model: ${model}`)
     }

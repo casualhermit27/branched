@@ -195,154 +195,226 @@ export default function Sidebar({
     const isActive = currentBranchId === node.id
 
     return (
-      <div key={node.id} className="mb-2.5">
-        <div className="flex items-center min-w-0">
+      <div key={node.id} className="mb-2">
+        <div className="flex items-center min-w-0 gap-1.5">
           {/* Expand/Collapse Button */}
-          {hasChildren && (
+          {hasChildren ? (
             <button
               onClick={(e) => {
                 e.stopPropagation()
                 toggleNodeExpansion(node.id)
               }}
-              className="p-1 mr-1 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+              className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors flex-shrink-0"
+              aria-label={isExpanded ? "Collapse" : "Expand"}
             >
               {isExpanded ? '▼' : '▶'}
             </button>
+          ) : (
+            <div className="w-7 flex-shrink-0"></div>
           )}
           
-          {/* Spacer for nodes without children */}
-          {!hasChildren && <div className="w-6 flex-shrink-0"></div>}
-          
           {/* Node Content */}
-          <button
+          <motion.button
             onClick={() => onSelectBranch(node.id)}
-            className={`flex-1 text-left p-3 rounded-lg text-sm transition-colors min-w-0 ${
+            className={`flex-1 text-left p-3 rounded-lg text-sm transition-all duration-200 min-w-0 ${
               isActive
-                ? 'bg-purple-50 text-purple-700 border border-purple-200 shadow-sm'
-                : 'hover:bg-gray-50 text-gray-700'
+                ? 'bg-purple-50 text-purple-700 border border-purple-200/60 shadow-sm'
+                : 'hover:bg-muted text-foreground border border-transparent hover:border-border/60'
             }`}
+            whileHover={{ x: 2 }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
           >
-            <div className="flex items-center min-w-0">
-              <div className={`w-3 h-3 rounded-full mr-2.5 flex-shrink-0 ${
-                node.type === 'main' ? 'bg-blue-500' : 'bg-green-500'
-              }`}></div>
-              <span className="font-medium truncate min-w-0 flex-1" title={getNodeTitle(node)}>{getNodeTitle(node)}</span>
+            <div className="flex items-center min-w-0 gap-2.5">
+              <div 
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                  node.type === 'main' ? 'bg-blue-500' : 'bg-emerald-500'
+                }`}
+              />
+              <span className="font-medium truncate min-w-0 flex-1 text-sm leading-snug" title={getNodeTitle(node)}>
+                {getNodeTitle(node)}
+              </span>
               {isActive && (
-                <span className="ml-2 text-xs text-purple-600 flex-shrink-0">●</span>
+                <motion.div
+                  className="w-1.5 h-1.5 rounded-full bg-purple-600 flex-shrink-0"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 500 }}
+                />
               )}
             </div>
-            <div className="text-xs text-gray-500 mt-2 flex items-center justify-between min-w-0">
-              <span className="truncate min-w-0">{node.messages.length} messages</span>
+            <div className="text-xs text-muted-foreground mt-1.5 flex items-center justify-between min-w-0 gap-2">
+              <span className="truncate min-w-0">{node.messages.length} {node.messages.length === 1 ? 'message' : 'messages'}</span>
               {node.type === 'branch' && (
-                <span className="text-xs text-gray-400 flex-shrink-0 ml-2">Branch</span>
+                <span className="text-xs text-muted-foreground flex-shrink-0 px-1.5 py-0.5 bg-muted rounded">Branch</span>
               )}
             </div>
-          </button>
+          </motion.button>
         </div>
         
         {/* Children with proper indentation */}
-        {hasChildren && isExpanded && (
-          <div className="ml-6 border-l border-gray-200 pl-3 mt-2 space-y-2">
-            {node.children.map(child => renderTreeNode(child, depth + 1))}
-          </div>
-        )}
+        <AnimatePresence>
+          {hasChildren && isExpanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="ml-7 border-l border-border/50 pl-3 mt-2 space-y-2"
+            >
+              {node.children.map(child => renderTreeNode(child, depth + 1))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     )
   }
 
   return (
     <>
-      {/* Toggle Button - Positioned to not overlap with sidebar */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-4 left-4 z-40 p-2 bg-white border border-gray-200 rounded-full shadow-sm hover:shadow-md transition-shadow"
-        aria-label={isOpen ? "Close sidebar" : "Open sidebar"}
-        style={{ 
-          left: isOpen ? '320px' : '16px', // Move right when sidebar is open (fixed width)
-          transition: 'left 0.3s ease-in-out'
-        }}
-      >
-        {isOpen ? <X size={18} /> : <List size={18} />}
-      </button>
+      {/* Toggle Button - Only visible when sidebar is closed */}
+      <AnimatePresence>
+        {!isOpen && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            onClick={() => setIsOpen(!isOpen)}
+            className="fixed top-4 left-4 z-40 p-2.5 bg-card border border-border/80 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 hover:bg-muted"
+            aria-label="Open sidebar"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          >
+            <List size={18} className="text-foreground" />
+          </motion.button>
+        )}
+      </AnimatePresence>
       
       {/* Sidebar */}
       <AnimatePresence>
         {isOpen && (
-          <motion.div
-            initial={{ x: -300, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: -300, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="fixed top-0 left-0 z-40 h-full bg-white border-r border-gray-200 shadow-lg w-80 flex flex-col"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-gray-100">
-              <h2 className="text-lg font-medium">Conversations</h2>
-            </div>
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-black/5 backdrop-blur-sm z-30"
+              onClick={() => setIsOpen(false)}
+            />
             
-            {/* Tabs */}
-            <div className="flex border-b border-gray-100">
-              <button
-                onClick={() => setActiveTab('history')}
-                className={`flex-1 py-4 text-sm font-medium ${
-                  activeTab === 'history' 
-                    ? 'text-purple-600 border-b-2 border-purple-600' 
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <span className="flex items-center justify-center gap-2.5">
-                  <Clock size={17} />
-                  History
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab('branches')}
-                className={`flex-1 py-4 text-sm font-medium ${
-                  activeTab === 'branches' 
-                    ? 'text-purple-600 border-b-2 border-purple-600' 
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <span className="flex items-center justify-center gap-2.5">
-                  <GitBranch size={17} />
-                  Branches
-                </span>
-              </button>
-            </div>
-            
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {activeTab === 'history' ? (
-                <ConversationHistory
-                  conversations={conversations}
-                  currentConversationId={currentConversationId}
-                  onSelectConversation={onSelectConversation}
-                  onCreateNewConversation={onCreateNewConversation}
-                  onDeleteConversation={(id) => onDeleteConversation?.(id)}
-                />
-              ) : (
-                <div className="space-y-1">
-                  {conversationTree.length > 0 ? (
-                    conversationTree.map(node => renderTreeNode(node))
-                  ) : (
-                    <div className="text-center text-gray-500 py-8">
-                      <GitBranch size={32} className="mx-auto mb-2 text-gray-300" />
-                      <p className="text-sm">No conversation branches yet</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Create branches by clicking the branch button on messages
-                      </p>
-                    </div>
+            {/* Sidebar Panel */}
+            <motion.div
+              initial={{ x: -320, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -320, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              className="fixed top-0 left-0 z-40 h-full bg-card border-r border-border/60 shadow-2xl w-80 flex flex-col"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-5 border-b border-border/80 bg-card">
+                <h2 className="text-lg font-semibold text-foreground tracking-tight">Conversations</h2>
+                <motion.button
+                  onClick={() => setIsOpen(false)}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200 flex-shrink-0"
+                  aria-label="Close sidebar"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <X size={18} weight="bold" />
+                </motion.button>
+              </div>
+              
+              {/* Tabs */}
+              <div className="flex border-b border-border/80 bg-card">
+                <motion.button
+                  onClick={() => setActiveTab('history')}
+                  className={`flex-1 py-3.5 text-sm font-medium relative transition-colors duration-200 ${
+                    activeTab === 'history' 
+                      ? 'text-purple-600' 
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)' }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <span className="flex items-center justify-center gap-2 relative z-10">
+                    <Clock size={16} weight={activeTab === 'history' ? 'fill' : 'regular'} />
+                    History
+                  </span>
+                  {activeTab === 'history' && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"
+                      initial={false}
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    />
                   )}
-                </div>
-              )}
-            </div>
-            
-            {/* Footer */}
-            <div className="p-4 border-t border-gray-100 text-xs text-gray-500 flex items-center justify-between">
-              <span>{branches.length} conversations</span>
-              <span className="text-purple-500 font-medium">AI Canvas</span>
-            </div>
-          </motion.div>
+                </motion.button>
+                <motion.button
+                  onClick={() => setActiveTab('branches')}
+                  className={`flex-1 py-3.5 text-sm font-medium relative transition-colors duration-200 ${
+                    activeTab === 'branches' 
+                      ? 'text-purple-600' 
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)' }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <span className="flex items-center justify-center gap-2 relative z-10">
+                    <GitBranch size={16} weight={activeTab === 'branches' ? 'fill' : 'regular'} />
+                    Branches
+                  </span>
+                  {activeTab === 'branches' && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"
+                      initial={false}
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    />
+                  )}
+                </motion.button>
+              </div>
+              
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto">
+                {activeTab === 'history' ? (
+                  <ConversationHistory
+                    conversations={conversations}
+                    currentConversationId={currentConversationId}
+                    onSelectConversation={onSelectConversation}
+                    onCreateNewConversation={onCreateNewConversation}
+                    onDeleteConversation={(id) => onDeleteConversation?.(id)}
+                  />
+                ) : (
+                  <div className="p-4 space-y-2">
+                    {conversationTree.length > 0 ? (
+                      conversationTree.map(node => renderTreeNode(node))
+                    ) : (
+                      <div className="text-center text-muted-foreground py-12">
+                        <GitBranch size={36} className="mx-auto mb-3 text-muted-foreground/50" weight="light" />
+                        <p className="text-sm font-medium text-foreground">No conversation branches yet</p>
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                          Create branches by clicking the branch button on messages
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-border/80 bg-muted/30 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  {activeTab === 'history' 
+                    ? `${conversations.length} ${conversations.length === 1 ? 'conversation' : 'conversations'}`
+                    : `${conversationTree.length} ${conversationTree.length === 1 ? 'branch' : 'branches'}`
+                  }
+                </span>
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </>

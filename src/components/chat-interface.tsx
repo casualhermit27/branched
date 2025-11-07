@@ -32,7 +32,7 @@ interface ChatInterfaceProps {
   messages: Message[]
   onSendMessage: (message: string, parentId?: string) => void
   selectedAIs: AI[]
-  onBranchFromMessage: (messageId: string) => void
+  onBranchFromMessage: (messageId: string, isMultiBranch?: boolean) => void
   currentBranch: string | null
   multiModelMode: boolean
   isGenerating?: boolean
@@ -75,6 +75,7 @@ export default function ChatInterface({
   const [showBranchWarning, setShowBranchWarning] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const branchLockRef = useRef<Record<string, boolean>>({})
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -115,45 +116,26 @@ export default function ChatInterface({
     setShouldAutoScroll(true)
   }
 
-  // Handle branch creation with warning
+  // ✅ NEW SIMPLIFIED: Handle multi-branch creation
   const handleCreateBranches = () => {
-    const MAX_BRANCHES = 4 // Maximum recommended branches for good visual layout (lowered for testing)
-    const currentBranches = existingBranchesCount + selectedAIs.length
+    // Find the last user message that has AI responses
+    const lastUserMessage = [...messages].reverse().find(m => m.isUser)
     
-    console.log('🔍 Branch creation check:', {
-      existingBranchesCount,
-      selectedAIsLength: selectedAIs.length,
-      currentBranches,
-      MAX_BRANCHES,
-      willShowWarning: currentBranches > MAX_BRANCHES
-    })
-    
-    if (currentBranches > MAX_BRANCHES) {
-      console.log('⚠️ Showing branch warning - too many branches')
-      setShowBranchWarning(true)
-      // Auto-hide warning after 4 seconds
-      setTimeout(() => setShowBranchWarning(false), 4000)
+    if (!lastUserMessage) {
+      console.warn('⚠️ No user message found for branch creation')
       return
     }
     
-    console.log('✅ Proceeding with multi-model branch creation')
-    // Create branches for all selected AIs
-    const userMessage = messages.find(msg => 
-      msg.isUser && messages.some(m => m.parentId === msg.id)
-    )
-    if (userMessage) {
-      // Call onBranchFromMessage for each selected AI
-      selectedAIs.forEach((ai, index) => {
-        setTimeout(() => {
-          onBranchFromMessage(userMessage.id)
-        }, index * 200) // Stagger the branch creation
-      })
-    }
+    console.log('✅ Creating branches for all AI models from user message:', lastUserMessage.id)
+    
+    // Call onBranchFromMessage with isMultiBranch=true
+    // The flow-canvas will handle creating one branch per AI model
+    onBranchFromMessage(lastUserMessage.id, true)
   }
 
   const getAIColor = (aiId: string) => {
     const ai = selectedAIs.find(a => a.id === aiId)
-    return ai?.color || 'bg-gray-100 text-gray-800 border-gray-200'
+    return ai?.color || 'bg-muted text-foreground border-border'
   }
 
   const getAILogo = (aiId: string) => {
@@ -163,8 +145,31 @@ export default function ChatInterface({
 
   console.log('💬 ChatInterface rendering with messages:', messages.length, messages)
   
+  // CRITICAL: Validate and fix isUser flags before processing
+  const validatedMessages = messages.map((msg, index) => {
+    // Validate isUser flag based on message properties
+    if (msg.aiModel && msg.isUser === true) {
+      console.error('❌ CRITICAL: AI message has isUser=true! Fixing:', {
+        messageId: msg.id,
+        aiModel: msg.aiModel,
+        text: msg.text?.substring(0, 50),
+        index
+      })
+      return { ...msg, isUser: false }
+    }
+    if (!msg.aiModel && !msg.ai && msg.isUser === false && !msg.text?.startsWith('[Branched from:')) {
+      console.warn('⚠️ User message has isUser=false! Fixing:', {
+        messageId: msg.id,
+        text: msg.text?.substring(0, 50),
+        index
+      })
+      return { ...msg, isUser: true }
+    }
+    return msg
+  })
+  
   // Group messages by groupId for multi-model responses
-  const groupedMessages = messages.reduce((groups, msg) => {
+  const groupedMessages = validatedMessages.reduce((groups, msg) => {
     if (msg.groupId) {
       if (!groups[msg.groupId]) {
         groups[msg.groupId] = []
@@ -206,13 +211,24 @@ export default function ChatInterface({
   }
   
   return (
-    <div className="w-full h-full flex flex-col overflow-hidden">
+    <div 
+      className="w-full h-full flex flex-col overflow-hidden"
+      data-scrollable
+      onMouseDown={(e) => {
+        // Prevent canvas panning when clicking inside chat interface
+        e.stopPropagation()
+      }}
+      onWheel={(e) => {
+        // Allow scrolling within chat interface, prevent canvas zoom
+        e.stopPropagation()
+      }}
+    >
       {/* Multi-Model Controls - For both main and branch nodes */}
       {onAddAI && onRemoveAI && (
         <div className="mb-4" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-700">{isMain ? 'AIs:' : 'Branch AIs:'}</span>
+              <span className="text-sm font-medium text-foreground">{isMain ? 'AIs:' : 'Branch AIs:'}</span>
               <AIPills
                 selectedAIs={selectedAIs}
                 onAddAI={onAddAI}
@@ -227,8 +243,8 @@ export default function ChatInterface({
             {/* Mode Toggle and Export/Import */}
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Mode:</span>
-                <div className="flex bg-gray-100 rounded-lg p-1" onClick={(e) => e.stopPropagation()}>
+                <span className="text-sm text-muted-foreground">Mode:</span>
+                <div className="flex bg-muted rounded-lg p-1" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
@@ -239,8 +255,8 @@ export default function ChatInterface({
                     }}
                     className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
                       !multiModelMode
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-800'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     Single
@@ -255,8 +271,8 @@ export default function ChatInterface({
                     }}
                     className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
                       multiModelMode
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-800'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     Multi
@@ -268,7 +284,7 @@ export default function ChatInterface({
               {isMain && onExportImport && (
                 <button
                   onClick={onExportImport}
-                  className="px-3 py-1 bg-white/80 backdrop-blur-sm hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
+                  className="px-3 py-1 bg-card/80 backdrop-blur-sm hover:bg-accent text-foreground rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
@@ -284,14 +300,25 @@ export default function ChatInterface({
       {/* Messages Area - Fixed height with scroll */}
       {messages.length > 0 && (
         <div 
-          className="flex-1 overflow-y-auto space-y-4 mb-4 touch-pan-y" 
+          className="flex-1 overflow-y-auto overflow-x-auto space-y-4 mb-4 touch-pan-y pr-2" 
           ref={messagesContainerRef}
           onScroll={handleScroll}
+          data-scrollable
+          onMouseDown={(e) => {
+            // Prevent canvas panning when clicking in scrollable area
+            e.stopPropagation()
+          }}
+          onWheel={(e) => {
+            // Allow scrolling, prevent canvas zoom
+            e.stopPropagation()
+          }}
           style={{ 
             height: '550px', 
             maxHeight: '550px',
             WebkitOverflowScrolling: 'touch',
-            overscrollBehavior: 'contain'
+            overscrollBehavior: 'contain',
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#cbd5e1 #f1f5f9'
           }}
         >
           {Object.entries(groupedMessages).map(([groupId, groupMessages]) => {
@@ -303,14 +330,14 @@ export default function ChatInterface({
                 {/* Multi-model group header */}
                 {isMultiModel && (
                   <div className="text-center py-2">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-600">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-muted/80 backdrop-blur-sm rounded-full text-xs text-muted-foreground font-medium border border-border/50">
                       <span>Responses from {groupMessages.length} AIs</span>
                     </div>
                   </div>
                 )}
                 
                 {/* Group container */}
-                <div className={`${isMultiModel ? 'bg-gray-50 rounded-lg p-3 space-y-3' : 'space-y-3'}`}>
+                <div className={`${isMultiModel ? 'bg-muted/60 rounded-xl p-4 space-y-3 border border-border break-words' : 'space-y-3'}`}>
                   {groupMessages.map((msg, index) => (
             <motion.div
               key={msg.id}
@@ -323,85 +350,87 @@ export default function ChatInterface({
               }}
               className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'} items-start gap-3`}
             >
-              {/* Branch Button - Left side for user messages, right side for AI messages */}
+              {/* Branch Button - Only show on user messages in multi-mode (to create all branches), always show on AI messages */}
               {msg.isUser ? (
-                // User message - branch button on left
+                // User message - branch button only in multi-mode (creates branches for all AI responses)
+                multiModelMode && (
                 <button
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    console.log('🌿 Branch clicked for message:', msg.id)
+                      console.log('🌿 Branch clicked for user message (multi-mode):', msg.id)
                     console.log('🌿 onBranchFromMessage function:', onBranchFromMessage)
                     // Blur any focused input to ensure proper event handling
                     if (document.activeElement && document.activeElement instanceof HTMLElement) {
                       document.activeElement.blur()
                     }
-                    onBranchFromMessage(msg.id)
+                    onBranchFromMessage(msg.id, true) // Multi-branch: create branches for all AI models
                   }}
                   onMouseDown={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
                   }}
-                  className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 hover:bg-blue-200 flex items-center justify-center text-blue-600 hover:text-blue-800 transition-colors duration-150 mt-1 z-10 relative"
-                  title="Branch from this message"
+                  className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600 hover:text-blue-700 transition-all duration-200 mt-1 z-10 relative shadow-sm hover:shadow"
+                    title="Create branches for all AI responses"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </button>
+                )
               ) : (
                 // AI message - branch button on right
                 <div className="flex items-start gap-3">
                   {/* Simple message bubble */}
-                  <div className="max-w-[90%] bg-white rounded-2xl border border-gray-200 shadow-sm px-6 py-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className={`w-2 h-2 rounded-full ${
-                        msg.isUser ? 'bg-blue-500' : 'bg-gray-400'
+                  <div className="max-w-[85%] bg-card rounded-2xl border border-border/80 shadow-sm hover:shadow-md transition-shadow duration-200 px-6 py-4 break-words overflow-wrap-anywhere">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        msg.isUser ? 'bg-blue-500' : 'bg-muted-foreground'
                       }`}></div>
-                      <span className="text-xs font-medium text-gray-600">
+                      <span className="text-xs font-medium text-muted-foreground flex-shrink-0">
                         {msg.isUser ? 'You' : 'AI'}
                       </span>
                       {/* Model pill for AI messages */}
                       {msg.aiModel && (
-                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${getAIColor(msg.aiModel)}`}>
+                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border flex-shrink-0 ${getAIColor(msg.aiModel)}`}>
                           {getAILogo(msg.aiModel)}
                           <span>{selectedAIs.find(ai => ai.id === msg.aiModel)?.name || msg.aiModel}</span>
                         </div>
                       )}
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-muted-foreground flex-shrink-0">
                         {new Date(msg.timestamp).toLocaleTimeString([], { 
                           hour: '2-digit', 
                           minute: '2-digit' 
                         })}
                       </span>
                     </div>
-                    <div className="text-base text-gray-900 leading-relaxed prose prose-sm max-w-none">
+                    <div className="text-base text-foreground leading-relaxed prose prose-sm max-w-none break-words overflow-wrap-anywhere">
                       {msg.isStreaming ? (
                         <div className="space-y-2">
                           <ReactMarkdown
                             components={{
                               p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                              strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
-                              em: ({ children }) => <em className="italic text-gray-800">{children}</em>,
+                              strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                              em: ({ children }) => <em className="italic text-foreground/90">{children}</em>,
                               ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
                               ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
-                              li: ({ children }) => <li className="text-gray-800">{children}</li>,
-                              h1: ({ children }) => <h1 className="text-xl font-bold text-gray-900 mb-3">{children}</h1>,
-                              h2: ({ children }) => <h2 className="text-lg font-semibold text-gray-900 mb-2">{children}</h2>,
-                              h3: ({ children }) => <h3 className="text-base font-semibold text-gray-900 mb-2">{children}</h3>,
-                              code: ({ children }) => <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800">{children}</code>,
-                              pre: ({ children }) => <pre className="bg-gray-100 p-3 rounded-lg overflow-x-auto text-sm font-mono text-gray-800 mb-3">{children}</pre>,
-                              blockquote: ({ children }) => <blockquote className="border-l-4 border-gray-300 pl-4 italic text-gray-700 mb-3">{children}</blockquote>,
+                              li: ({ children }) => <li className="text-foreground/90">{children}</li>,
+                              h1: ({ children }) => <h1 className="text-xl font-bold text-foreground mb-3">{children}</h1>,
+                              h2: ({ children }) => <h2 className="text-lg font-semibold text-foreground mb-2">{children}</h2>,
+                              h3: ({ children }) => <h3 className="text-base font-semibold text-foreground mb-2">{children}</h3>,
+                              code: ({ children }) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-foreground break-words">{children}</code>,
+                              pre: ({ children }) => <pre className="bg-muted p-3 rounded-lg overflow-x-auto text-sm font-mono text-foreground mb-3 break-words whitespace-pre-wrap">{children}</pre>,
+                              blockquote: ({ children }) => <blockquote className="border-l-4 border-border pl-4 italic text-muted-foreground mb-3">{children}</blockquote>,
                             }}
                           >
                             {msg.streamingText || msg.text}
                           </ReactMarkdown>
                           {/* Typing indicator */}
-                          <div className="flex items-center gap-1 text-gray-400">
+                          <div className="flex items-center gap-1 text-muted-foreground">
                             <div className="flex space-x-1">
-                              <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                              <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                              <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                              <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                              <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                              <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                             </div>
                             <span className="text-xs ml-2">
                               {msg.aiModel ? selectedAIs.find(ai => ai.id === msg.aiModel)?.name || msg.aiModel : 'AI'} is thinking...
@@ -412,17 +441,17 @@ export default function ChatInterface({
                         <ReactMarkdown
                           components={{
                             p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                            strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
-                            em: ({ children }) => <em className="italic text-gray-800">{children}</em>,
+                            strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                            em: ({ children }) => <em className="italic text-foreground/90">{children}</em>,
                             ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
                             ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
-                            li: ({ children }) => <li className="text-gray-800">{children}</li>,
-                            h1: ({ children }) => <h1 className="text-xl font-bold text-gray-900 mb-3">{children}</h1>,
-                            h2: ({ children }) => <h2 className="text-lg font-semibold text-gray-900 mb-2">{children}</h2>,
-                            h3: ({ children }) => <h3 className="text-base font-semibold text-gray-900 mb-2">{children}</h3>,
-                            code: ({ children }) => <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800">{children}</code>,
-                            pre: ({ children }) => <pre className="bg-gray-100 p-3 rounded-lg overflow-x-auto text-sm font-mono text-gray-800 mb-3">{children}</pre>,
-                            blockquote: ({ children }) => <blockquote className="border-l-4 border-gray-300 pl-4 italic text-gray-700 mb-3">{children}</blockquote>,
+                            li: ({ children }) => <li className="text-foreground/90">{children}</li>,
+                            h1: ({ children }) => <h1 className="text-xl font-bold text-foreground mb-3">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-lg font-semibold text-foreground mb-2">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-base font-semibold text-foreground mb-2">{children}</h3>,
+                            code: ({ children }) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-foreground">{children}</code>,
+                            pre: ({ children }) => <pre className="bg-muted p-3 rounded-lg overflow-x-auto text-sm font-mono text-foreground mb-3">{children}</pre>,
+                            blockquote: ({ children }) => <blockquote className="border-l-4 border-border pl-4 italic text-muted-foreground mb-3">{children}</blockquote>,
                           }}
                         >
                           {msg.text}
@@ -441,13 +470,13 @@ export default function ChatInterface({
                       if (document.activeElement && document.activeElement instanceof HTMLElement) {
                         document.activeElement.blur()
                       }
-                      onBranchFromMessage(msg.id)
+                      onBranchFromMessage(msg.id, false) // Single branch: create branch from this AI message
                     }}
                     onMouseDown={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
                     }}
-                    className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 hover:bg-blue-200 flex items-center justify-center text-blue-600 hover:text-blue-800 transition-colors duration-150 mt-1 z-10 relative"
+                    className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600 hover:text-blue-700 transition-all duration-200 mt-1 z-10 relative shadow-sm hover:shadow"
                     title="Branch from this message"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -459,36 +488,36 @@ export default function ChatInterface({
 
                {/* Simple message bubble for user messages */}
                {msg.isUser && (
-                 <div className="max-w-[90%] bg-white rounded-2xl border border-gray-200 shadow-sm px-6 py-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className={`w-2 h-2 rounded-full ${
-                      msg.isUser ? 'bg-blue-500' : 'bg-gray-400'
+                 <div className="max-w-[85%] bg-card rounded-2xl border border-border shadow-sm px-6 py-4 break-words overflow-wrap-anywhere">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      msg.isUser ? 'bg-blue-500' : 'bg-muted-foreground'
                     }`}></div>
-                    <span className="text-xs font-medium text-gray-600">
+                    <span className="text-xs font-medium text-muted-foreground flex-shrink-0">
                       {msg.isUser ? 'You' : 'AI'}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-muted-foreground flex-shrink-0">
                       {new Date(msg.timestamp).toLocaleTimeString([], { 
                         hour: '2-digit', 
                         minute: '2-digit' 
                       })}
                     </span>
                   </div>
-                  <div className="text-base text-gray-900 leading-relaxed prose prose-sm max-w-none">
+                  <div className="text-base text-foreground leading-relaxed prose prose-sm max-w-none break-words overflow-wrap-anywhere">
                     <ReactMarkdown
                       components={{
                         p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                        strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
-                        em: ({ children }) => <em className="italic text-gray-800">{children}</em>,
+                        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                        em: ({ children }) => <em className="italic text-foreground/90">{children}</em>,
                         ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
                         ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
-                        li: ({ children }) => <li className="text-gray-800">{children}</li>,
-                        h1: ({ children }) => <h1 className="text-xl font-bold text-gray-900 mb-3">{children}</h1>,
-                        h2: ({ children }) => <h2 className="text-lg font-semibold text-gray-900 mb-2">{children}</h2>,
-                        h3: ({ children }) => <h3 className="text-base font-semibold text-gray-900 mb-2">{children}</h3>,
-                        code: ({ children }) => <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800">{children}</code>,
-                        pre: ({ children }) => <pre className="bg-gray-100 p-3 rounded-lg overflow-x-auto text-sm font-mono text-gray-800 mb-3">{children}</pre>,
-                        blockquote: ({ children }) => <blockquote className="border-l-4 border-gray-300 pl-4 italic text-gray-700 mb-3">{children}</blockquote>,
+                        li: ({ children }) => <li className="text-foreground/90">{children}</li>,
+                        h1: ({ children }) => <h1 className="text-xl font-bold text-foreground mb-3">{children}</h1>,
+                        h2: ({ children }) => <h2 className="text-lg font-semibold text-foreground mb-2">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-base font-semibold text-foreground mb-2">{children}</h3>,
+                        code: ({ children }) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-foreground">{children}</code>,
+                        pre: ({ children }) => <pre className="bg-muted p-3 rounded-lg overflow-x-auto text-sm font-mono text-foreground mb-3">{children}</pre>,
+                        blockquote: ({ children }) => <blockquote className="border-l-4 border-border pl-4 italic text-muted-foreground mb-3">{children}</blockquote>,
                       }}
                     >
                       {msg.text}
@@ -503,8 +532,8 @@ export default function ChatInterface({
                   {isMultiModel && aiModels.length > 1 && (
                     <div className="space-y-3">
                       {/* Navigation pills */}
-                      <div className="flex gap-2 items-center justify-center py-3 px-4 bg-gray-100 rounded-lg">
-                        <span className="text-xs text-gray-500 font-medium">Jump to:</span>
+                      <div className="flex gap-2 items-center justify-center py-3 px-4 bg-muted rounded-lg">
+                        <span className="text-xs text-muted-foreground font-medium">Jump to:</span>
                         {aiModels.map(ai => (
                           <motion.button
                             key={ai.id}
@@ -525,7 +554,7 @@ export default function ChatInterface({
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                           onClick={handleCreateBranches}
-                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors duration-200"
+                          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95"
                         >
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -564,7 +593,15 @@ export default function ChatInterface({
                   Too Many Branches
                 </h3>
                 <p className="mt-1 text-sm text-amber-700">
-                  You already have {existingBranchesCount} branches. Creating {selectedAIs.length} more will clutter the visual space. Consider organizing your conversation first.
+                  {(() => {
+                    const userMessage = messages.find(msg => 
+                      msg.isUser && messages.some(m => m.parentId === msg.id)
+                    )
+                    const aiResponsesCount = userMessage 
+                      ? messages.filter(m => !m.isUser && m.parentId === userMessage.id && m.aiModel).length
+                      : 0
+                    return `You already have ${existingBranchesCount} branches. Creating ${aiResponsesCount} more will clutter the visual space. Consider organizing your conversation first.`
+                  })()}
                 </p>
                 <div className="mt-3 flex gap-2">
                   <button
@@ -603,11 +640,11 @@ export default function ChatInterface({
           exit={{ opacity: 0, y: -4 }}
           className="flex justify-start mb-4"
         >
-          <div className="relative flex items-center gap-2 px-4 py-2 rounded-full bg-gray-50 border border-gray-100">
+          <div className="relative flex items-center gap-2 px-4 py-3 rounded-xl bg-muted/80 border border-border/60 shadow-sm focus-within:shadow-md focus-within:border-primary transition-all duration-200">
             {/* Animated dots */}
             <div className="flex space-x-1">
               <motion.div
-                className="w-1.5 h-1.5 bg-gray-300 rounded-full"
+                className="w-1.5 h-1.5 bg-muted-foreground rounded-full"
                 animate={{
                   scale: [1, 1.2, 1],
                   opacity: [0.5, 1, 0.5]
@@ -619,7 +656,7 @@ export default function ChatInterface({
                 }}
               />
               <motion.div
-                className="w-1.5 h-1.5 bg-gray-300 rounded-full"
+                className="w-1.5 h-1.5 bg-muted-foreground rounded-full"
                 animate={{
                   scale: [1, 1.2, 1],
                   opacity: [0.5, 1, 0.5]
@@ -632,7 +669,7 @@ export default function ChatInterface({
                 }}
               />
               <motion.div
-                className="w-1.5 h-1.5 bg-gray-300 rounded-full"
+                className="w-1.5 h-1.5 bg-muted-foreground rounded-full"
                 animate={{
                   scale: [1, 1.2, 1],
                   opacity: [0.5, 1, 0.5]
@@ -648,7 +685,7 @@ export default function ChatInterface({
             
             {/* Thinking text with subtle shine */}
             <div className="relative overflow-hidden">
-              <span className="text-xs text-gray-400 font-medium">thinking</span>
+              <span className="text-xs text-muted-foreground font-medium">thinking</span>
               <motion.div
                 className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent"
                 animate={{
@@ -695,7 +732,7 @@ export default function ChatInterface({
       {/* Simple Input Area */}
       <div className="relative flex-shrink-0 w-full">
         <form onSubmit={handleSubmit} className="relative">
-          <div className="flex items-end bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md focus-within:shadow-md focus-within:border-blue-300 transition-all duration-200 p-2">
+          <div className="flex items-end bg-card border border-border rounded-2xl shadow-sm hover:shadow-md focus-within:shadow-md focus-within:border-primary transition-all duration-200 p-2">
             <textarea
               value={message}
               onChange={handleInputChange}
@@ -704,7 +741,7 @@ export default function ChatInterface({
                   ? `Ask ${selectedAIs.length} AIs...` 
                   : "Ask anything..."
               }
-               className="flex-1 px-6 py-6 rounded-2xl focus:outline-none text-lg placeholder-gray-500 resize-none min-h-[80px] max-h-[300px] bg-transparent w-full"
+               className="flex-1 px-6 py-6 rounded-2xl focus:outline-none text-lg placeholder-muted-foreground resize-none min-h-[80px] max-h-[300px] bg-transparent w-full"
               style={{ 
                 height: 'auto',
                 minHeight: '80px',
