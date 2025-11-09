@@ -1,7 +1,8 @@
 'use client'
 
 import { Handle, Position } from 'reactflow'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
+import { CaretDown, CaretUp } from '@phosphor-icons/react'
 import ChatInterface from './chat-interface'
 import AIPills from './ai-pills'
 
@@ -77,6 +78,7 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
 
   return (
     <motion.div
+      layout
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ 
         opacity: 1, 
@@ -84,8 +86,12 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
         y: 0
       }}
       transition={{ 
-        duration: 0.4,
-        ease: [0.4, 0, 0.2, 1]
+        layout: {
+          duration: 0.25,
+          ease: [0.4, 0, 0.2, 1]
+        },
+        opacity: { duration: 0.2 },
+        scale: { duration: 0.2 }
       }}
       // Handle mouse events to allow scrolling within node but prevent canvas panning
       onMouseDown={(e) => {
@@ -116,7 +122,7 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
           e.stopPropagation()
         }
       }}
-      className={`bg-card shadow-md rounded-2xl border border-border/80 transition-all duration-300 ${
+      className={`bg-card shadow-md rounded-2xl border border-border/80 transition-shadow duration-200 ${
         data.isActive ? 'ring-2 ring-blue-500/40 shadow-lg' : ''
       } ${data.isMinimized ? 'p-3' : 'p-6'} ${
         data.isHighlighted ? 'ring-2 ring-amber-400/60 border-amber-300 shadow-xl' : ''
@@ -136,37 +142,44 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
         style={{ background: '#cbd5e1', width: 8, height: 8 }} 
       />
       
-      {/* Minimize/Restore Button */}
+      {/* Minimize/Restore Button - Top Right Corner */}
       {data.onToggleMinimize && (
         <motion.button
           onClick={(e) => {
             e.stopPropagation()
+            e.preventDefault()
             data.onToggleMinimize?.(id)
           }}
-          className={`absolute top-3 right-3 p-2 rounded-lg transition-all duration-200 z-10 ${
+          className={`absolute top-4 right-4 z-20 p-1.5 rounded-lg transition-colors duration-150 ${
             data.isMinimized 
-              ? 'bg-purple-50 hover:bg-purple-100 text-purple-600 border border-purple-200/50' 
-              : 'bg-muted hover:bg-muted/80 text-muted-foreground border border-border/50'
-          } shadow-sm hover:shadow-md`}
+              ? 'bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 dark:bg-primary/20 dark:hover:bg-primary/30 dark:border-primary/30' 
+              : 'bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/40 dark:bg-muted/60 dark:hover:bg-muted/80 dark:border-border/30'
+          } shadow-sm hover:shadow-md backdrop-blur-sm`}
           title={data.isMinimized ? 'Restore' : 'Minimize'}
-          whileHover={{ scale: 1.05 }}
+          whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
+          transition={{ duration: 0.15 }}
         >
-          {data.isMinimized ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
-            </svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M8 3v3a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V3m-8 18v-3a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3"/>
-            </svg>
-          )}
+          <motion.div
+            animate={{ rotate: data.isMinimized ? 180 : 0 }}
+            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+          >
+            <CaretDown className="w-4 h-4" weight="bold" />
+          </motion.div>
         </motion.button>
       )}
       
       {/* Minimized State */}
-      {data.isMinimized ? (
-        <div className="flex flex-col gap-2.5 h-full">
+      <AnimatePresence mode="wait">
+        {data.isMinimized ? (
+          <motion.div
+            key="minimized"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+            className="flex flex-col gap-2.5 h-full overflow-hidden"
+          >
           {/* Header with title */}
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
@@ -212,9 +225,15 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
               Branch
             </div>
           )}
-        </div>
-      ) : (
-        <>
+        </motion.div>
+        ) : (
+          <motion.div
+            key="expanded"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+          >
           {/* Header with AI Pills - Only for main node */}
           {data.isMain && data.onAddAI && data.onRemoveAI && (
         <div className="flex items-center justify-between mb-6">
@@ -270,8 +289,9 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
             isMain={data.isMain}
             nodeId={data.nodeId || id}
           />
-        </>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       <Handle 
         type="source" 

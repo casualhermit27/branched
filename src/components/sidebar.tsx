@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { List, X, ArrowsOut, ArrowsIn, Clock, GitBranch, Trash } from '@phosphor-icons/react'
+import { List, X, ArrowsOut, ArrowsIn, Clock, GitBranch, Trash, Gear } from '@phosphor-icons/react'
 import ConversationHistory from './conversation-history'
 
 interface Message {
@@ -70,7 +70,7 @@ export default function Sidebar({
   onCreateNewConversation = () => {}
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<'history' | 'branches'>('branches')
+  const [activeTab, setActiveTab] = useState<'history' | 'branches' | 'settings'>('branches')
   // Always use fixed width, no expand/collapse functionality
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['main']))
 
@@ -204,7 +204,7 @@ export default function Sidebar({
                 e.stopPropagation()
                 toggleNodeExpansion(node.id)
               }}
-              className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors flex-shrink-0"
+              className="p-1 text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground hover:bg-muted dark:hover:bg-muted/80 rounded transition-colors flex-shrink-0"
               aria-label={isExpanded ? "Collapse" : "Expand"}
             >
               {isExpanded ? '▼' : '▶'}
@@ -218,8 +218,8 @@ export default function Sidebar({
             onClick={() => onSelectBranch(node.id)}
             className={`flex-1 text-left p-3 rounded-lg text-sm transition-all duration-200 min-w-0 ${
               isActive
-                ? 'bg-purple-50 text-purple-700 border border-purple-200/60 shadow-sm'
-                : 'hover:bg-muted text-foreground border border-transparent hover:border-border/60'
+                ? 'bg-purple-50 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-200/60 dark:border-purple-500/50 shadow-sm dark:shadow-purple-500/10'
+                : 'hover:bg-muted dark:hover:bg-muted/80 text-foreground border border-transparent hover:border-border/60 dark:hover:border-border/40'
             }`}
             whileHover={{ x: 2 }}
             whileTap={{ scale: 0.98 }}
@@ -228,7 +228,7 @@ export default function Sidebar({
             <div className="flex items-center min-w-0 gap-2.5">
               <div 
                 className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                  node.type === 'main' ? 'bg-blue-500' : 'bg-emerald-500'
+                  node.type === 'main' ? 'bg-blue-500 dark:bg-blue-400' : 'bg-emerald-500 dark:bg-emerald-400'
                 }`}
               />
               <span className="font-medium truncate min-w-0 flex-1 text-sm leading-snug" title={getNodeTitle(node)}>
@@ -236,17 +236,17 @@ export default function Sidebar({
               </span>
               {isActive && (
                 <motion.div
-                  className="w-1.5 h-1.5 rounded-full bg-purple-600 flex-shrink-0"
+                  className="w-1.5 h-1.5 rounded-full bg-purple-600 dark:bg-purple-400 flex-shrink-0"
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ type: "spring", stiffness: 500 }}
                 />
               )}
             </div>
-            <div className="text-xs text-muted-foreground mt-1.5 flex items-center justify-between min-w-0 gap-2">
+            <div className="text-xs text-muted-foreground dark:text-muted-foreground/80 mt-1.5 flex items-center justify-between min-w-0 gap-2">
               <span className="truncate min-w-0">{node.messages.length} {node.messages.length === 1 ? 'message' : 'messages'}</span>
               {node.type === 'branch' && (
-                <span className="text-xs text-muted-foreground flex-shrink-0 px-1.5 py-0.5 bg-muted rounded">Branch</span>
+                <span className="text-xs text-muted-foreground dark:text-muted-foreground/70 flex-shrink-0 px-1.5 py-0.5 bg-muted dark:bg-muted/60 rounded">Branch</span>
               )}
             </div>
           </motion.button>
@@ -260,7 +260,7 @@ export default function Sidebar({
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="ml-7 border-l border-border/50 pl-3 mt-2 space-y-2"
+              className="ml-7 border-l border-border/50 dark:border-border/30 pl-3 mt-2 space-y-2"
             >
               {node.children.map(child => renderTreeNode(child, depth + 1))}
             </motion.div>
@@ -272,7 +272,7 @@ export default function Sidebar({
 
   return (
     <>
-      {/* Toggle Button - Only visible when sidebar is closed */}
+      {/* Toggle Button - Positioned in top bar area */}
       <AnimatePresence>
         {!isOpen && (
           <motion.button
@@ -280,13 +280,13 @@ export default function Sidebar({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             onClick={() => setIsOpen(!isOpen)}
-            className="fixed top-4 left-4 z-40 p-2.5 bg-card border border-border/80 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 hover:bg-muted"
+            className="fixed top-3 left-4 z-50 p-2.5 bg-card dark:bg-card border border-border/80 dark:border-border/60 rounded-xl shadow-sm dark:shadow-lg hover:shadow-md dark:hover:shadow-xl transition-all duration-200 hover:bg-muted dark:hover:bg-muted/80"
             aria-label="Open sidebar"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
           >
-            <List size={18} className="text-foreground" />
+            <List size={18} className="text-foreground dark:text-foreground" />
           </motion.button>
         )}
       </AnimatePresence>
@@ -301,7 +301,7 @@ export default function Sidebar({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/5 backdrop-blur-sm z-30"
+              className="fixed inset-0 bg-black/5 dark:bg-black/40 backdrop-blur-sm z-30"
               onClick={() => setIsOpen(false)}
             />
             
@@ -311,14 +311,14 @@ export default function Sidebar({
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -320, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              className="fixed top-0 left-0 z-40 h-full bg-card border-r border-border/60 shadow-2xl w-80 flex flex-col"
+              className="fixed top-0 left-0 z-40 h-full bg-card dark:bg-card border-r border-border/60 dark:border-border/40 shadow-2xl w-80 flex flex-col"
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-5 border-b border-border/80 bg-card">
-                <h2 className="text-lg font-semibold text-foreground tracking-tight">Conversations</h2>
+              <div className="flex items-center justify-between px-6 py-5 border-b border-border/80 dark:border-border/60 bg-card dark:bg-card">
+                <h2 className="text-lg font-semibold text-foreground dark:text-foreground tracking-tight">Conversations</h2>
                 <motion.button
                   onClick={() => setIsOpen(false)}
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200 flex-shrink-0"
+                  className="p-1.5 rounded-lg text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground hover:bg-muted dark:hover:bg-muted/80 transition-all duration-200 flex-shrink-0"
                   aria-label="Close sidebar"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
@@ -328,13 +328,13 @@ export default function Sidebar({
               </div>
               
               {/* Tabs */}
-              <div className="flex border-b border-border/80 bg-card">
+              <div className="flex border-b border-border/80 dark:border-border/60 bg-card">
                 <motion.button
                   onClick={() => setActiveTab('history')}
                   className={`flex-1 py-3.5 text-sm font-medium relative transition-colors duration-200 ${
                     activeTab === 'history' 
-                      ? 'text-purple-600' 
-                      : 'text-muted-foreground hover:text-foreground'
+                      ? 'text-purple-600 dark:text-purple-400' 
+                      : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground'
                   }`}
                   whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)' }}
                   whileTap={{ scale: 0.98 }}
@@ -346,7 +346,7 @@ export default function Sidebar({
                   {activeTab === 'history' && (
                     <motion.div
                       layoutId="activeTab"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600 dark:bg-purple-400"
                       initial={false}
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
                     />
@@ -356,8 +356,8 @@ export default function Sidebar({
                   onClick={() => setActiveTab('branches')}
                   className={`flex-1 py-3.5 text-sm font-medium relative transition-colors duration-200 ${
                     activeTab === 'branches' 
-                      ? 'text-purple-600' 
-                      : 'text-muted-foreground hover:text-foreground'
+                      ? 'text-purple-600 dark:text-purple-400' 
+                      : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground'
                   }`}
                   whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)' }}
                   whileTap={{ scale: 0.98 }}
@@ -369,7 +369,30 @@ export default function Sidebar({
                   {activeTab === 'branches' && (
                     <motion.div
                       layoutId="activeTab"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600 dark:bg-purple-400"
+                      initial={false}
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    />
+                  )}
+                </motion.button>
+                <motion.button
+                  onClick={() => setActiveTab('settings')}
+                  className={`flex-1 py-3.5 text-sm font-medium relative transition-colors duration-200 ${
+                    activeTab === 'settings' 
+                      ? 'text-purple-600 dark:text-purple-400' 
+                      : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground'
+                  }`}
+                  whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)' }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <span className="flex items-center justify-center gap-2 relative z-10">
+                    <Gear size={16} weight={activeTab === 'settings' ? 'fill' : 'regular'} />
+                    Settings
+                  </span>
+                  {activeTab === 'settings' && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600 dark:bg-purple-400"
                       initial={false}
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
                     />
@@ -387,15 +410,65 @@ export default function Sidebar({
                     onCreateNewConversation={onCreateNewConversation}
                     onDeleteConversation={(id) => onDeleteConversation?.(id)}
                   />
+                ) : activeTab === 'settings' ? (
+                  <div className="p-6 space-y-6">
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground dark:text-foreground mb-4">General</h3>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 dark:border-border/40 bg-card dark:bg-card">
+                          <div>
+                            <p className="text-sm font-medium text-foreground dark:text-foreground">Auto-save</p>
+                            <p className="text-xs text-muted-foreground dark:text-muted-foreground/70 mt-0.5">Automatically save conversations</p>
+                          </div>
+                          <div className="w-10 h-6 bg-purple-500 dark:bg-purple-500 rounded-full relative cursor-pointer">
+                            <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 dark:border-border/40 bg-card dark:bg-card">
+                          <div>
+                            <p className="text-sm font-medium text-foreground dark:text-foreground">Notifications</p>
+                            <p className="text-xs text-muted-foreground dark:text-muted-foreground/70 mt-0.5">Show notifications for new messages</p>
+                          </div>
+                          <div className="w-10 h-6 bg-muted dark:bg-muted rounded-full relative cursor-pointer">
+                            <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground dark:text-foreground mb-4">Appearance</h3>
+                      <div className="space-y-3">
+                        <div className="p-3 rounded-lg border border-border/60 dark:border-border/40 bg-card dark:bg-card">
+                          <p className="text-sm font-medium text-foreground dark:text-foreground mb-1">Theme</p>
+                          <p className="text-xs text-muted-foreground dark:text-muted-foreground/70">Use the theme toggle in the top bar</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground dark:text-foreground mb-4">Data</h3>
+                      <div className="space-y-3">
+                        <button className="w-full p-3 rounded-lg border border-border/60 dark:border-border/40 bg-card dark:bg-card hover:bg-muted dark:hover:bg-muted/80 transition-colors text-left">
+                          <p className="text-sm font-medium text-foreground dark:text-foreground">Export all conversations</p>
+                          <p className="text-xs text-muted-foreground dark:text-muted-foreground/70 mt-0.5">Download your data as JSON</p>
+                        </button>
+                        <button className="w-full p-3 rounded-lg border border-destructive/30 dark:border-destructive/30 bg-card dark:bg-card hover:bg-destructive/10 dark:hover:bg-destructive/20 transition-colors text-left">
+                          <p className="text-sm font-medium text-destructive">Clear all data</p>
+                          <p className="text-xs text-muted-foreground dark:text-muted-foreground/70 mt-0.5">Permanently delete all conversations</p>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 ) : (
                   <div className="p-4 space-y-2">
                     {conversationTree.length > 0 ? (
                       conversationTree.map(node => renderTreeNode(node))
                     ) : (
-                      <div className="text-center text-muted-foreground py-12">
-                        <GitBranch size={36} className="mx-auto mb-3 text-muted-foreground/50" weight="light" />
-                        <p className="text-sm font-medium text-foreground">No conversation branches yet</p>
-                        <p className="text-xs text-muted-foreground mt-1.5">
+                      <div className="text-center text-muted-foreground dark:text-muted-foreground/70 py-12">
+                        <GitBranch size={36} className="mx-auto mb-3 text-muted-foreground/50 dark:text-muted-foreground/30" weight="light" />
+                        <p className="text-sm font-medium text-foreground dark:text-foreground">No conversation branches yet</p>
+                        <p className="text-xs text-muted-foreground dark:text-muted-foreground/60 mt-1.5">
                           Create branches by clicking the branch button on messages
                         </p>
                       </div>
@@ -405,14 +478,16 @@ export default function Sidebar({
               </div>
               
               {/* Footer */}
-              <div className="px-6 py-4 border-t border-border/80 bg-muted/30 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">
-                  {activeTab === 'history' 
-                    ? `${conversations.length} ${conversations.length === 1 ? 'conversation' : 'conversations'}`
-                    : `${conversationTree.length} ${conversationTree.length === 1 ? 'branch' : 'branches'}`
-                  }
-                </span>
-              </div>
+              {activeTab !== 'settings' && (
+                <div className="px-6 py-4 border-t border-border/80 dark:border-border/60 bg-muted/30 dark:bg-muted/20 text-xs text-muted-foreground dark:text-muted-foreground/70">
+                  <span className="font-medium text-foreground dark:text-foreground">
+                    {activeTab === 'history' 
+                      ? `${conversations.length} ${conversations.length === 1 ? 'conversation' : 'conversations'}`
+                      : `${conversationTree.length} ${conversationTree.length === 1 ? 'branch' : 'branches'}`
+                    }
+                  </span>
+                </div>
+              )}
             </motion.div>
           </>
         )}

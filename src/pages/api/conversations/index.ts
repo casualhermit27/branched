@@ -95,15 +95,25 @@ async function updateConversation(req: NextApiRequest, res: NextApiResponse) {
     
     // Only include fields that are provided
     if (req.body.title !== undefined) updateData.title = req.body.title
-    if (req.body.mainMessages !== undefined) updateData.mainMessages = req.body.mainMessages
-    if (req.body.selectedAIs !== undefined) updateData.selectedAIs = req.body.selectedAIs
-    if (req.body.multiModelMode !== undefined) updateData.multiModelMode = req.body.multiModelMode
     if (req.body.branches !== undefined) updateData.branches = req.body.branches
     if (req.body.contextLinks !== undefined) updateData.contextLinks = req.body.contextLinks
     if (req.body.collapsedNodes !== undefined) updateData.collapsedNodes = req.body.collapsedNodes
     if (req.body.minimizedNodes !== undefined) updateData.minimizedNodes = req.body.minimizedNodes
     if (req.body.activeNodeId !== undefined) updateData.activeNodeId = req.body.activeNodeId
     if (req.body.viewport !== undefined) updateData.viewport = req.body.viewport
+    
+    // Handle main messages - support both formats
+    if (req.body.main?.messages !== undefined) {
+      updateData.main = {
+        messages: req.body.main.messages || [],
+        selectedAIs: req.body.main.selectedAIs || req.body.selectedAIs || []
+      }
+    } else {
+      // Legacy format
+      if (req.body.mainMessages !== undefined) updateData.mainMessages = req.body.mainMessages
+      if (req.body.selectedAIs !== undefined) updateData.selectedAIs = req.body.selectedAIs
+      if (req.body.multiModelMode !== undefined) updateData.multiModelMode = req.body.multiModelMode
+    }
     
     // Update conversation
     const conversation = await Conversation.findByIdAndUpdate(

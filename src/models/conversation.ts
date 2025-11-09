@@ -44,7 +44,14 @@ export interface IMessage {
 const MessageSchema = new Schema<IMessage>({
   id: { type: String, required: true },
   text: { type: String, required: true },
-  isUser: { type: Boolean, required: true },
+  isUser: { 
+    type: Boolean, 
+    required: true,
+    default: function () {
+      // Auto-compute isUser based on AI indicators
+      return !(this.aiModel || this.ai || this.role === 'assistant')
+    }
+  },
   ai: { type: String },
   parentId: { type: String },
   children: { type: [String], default: [] },
@@ -62,6 +69,11 @@ const MessageSchema = new Schema<IMessage>({
   tokensUsed: { type: Number },
   cost: { type: Number },
   contextUsed: { type: [String], default: [] }
+})
+
+// Virtual getter for isUser to ensure it's always computed correctly at read-time
+MessageSchema.virtual('isUserComputed').get(function () {
+  return !(this.aiModel || this.ai || this.role === 'assistant')
 })
 
 // Branch Schema - Refactored with clear separation
@@ -104,7 +116,7 @@ const BranchSchema = new Schema<IBranch>({
   id: { type: String, required: true },
   label: { type: String, required: true },
   parentId: { type: String }, // Parent node ID
-  parentMessageId: { type: String, required: true }, // Message that created this branch
+  parentMessageId: { type: String, required: false }, // Message that created this branch - optional to allow saving
   inheritedMessages: [MessageSchema], // Context messages from root
   branchMessages: [MessageSchema], // Messages within this branch only
   selectedAIs: [AIModelSchema],

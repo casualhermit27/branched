@@ -19,7 +19,7 @@ export interface UseMongoDBReturn {
   error: string | null
 
   // Actions
-  saveConversation: (data: ConversationData, id?: string) => Promise<boolean>
+  saveConversation: (data: ConversationData, id?: string) => Promise<{ success: boolean; conversationId?: string }>
   loadConversations: () => Promise<boolean>
   loadConversation: (id: string) => Promise<boolean>
   deleteConversation: (id: string) => Promise<boolean>
@@ -54,7 +54,7 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
   }, [])
 
   // Save conversation
-  const saveConversation = useCallback(async (data: ConversationData, id?: string): Promise<boolean> => {
+  const saveConversation = useCallback(async (data: ConversationData, id?: string): Promise<{ success: boolean; conversationId?: string }> => {
     setIsSaving(true)
     setError(null)
 
@@ -64,10 +64,19 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
       if (result.success && result.data) {
         setLastSaved(new Date())
         
+        const newConversationId = result.data._id
+        
         // Update conversations list if this is a new conversation
-        if (!id && result.data._id) {
+        // (either no ID was provided, or the original ID didn't exist and a new one was created)
+        if (!id && newConversationId) {
+          // New conversation created
           setConversations(prev => [result.data!, ...prev])
-          setCurrentConversationId(result.data._id)
+          setCurrentConversationId(newConversationId)
+        } else if (id && newConversationId && newConversationId !== id) {
+          // Conversation was not found, so a new one was created - update the ID
+          console.log('🔄 Conversation ID changed from', id, 'to', newConversationId, '- updating')
+          setConversations(prev => [result.data!, ...prev])
+          setCurrentConversationId(newConversationId)
         } else if (id) {
           // Update existing conversation in list
           setConversations(prev => 
@@ -76,17 +85,17 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
         }
 
         onSave?.(true)
-        return true
+        return { success: true, conversationId: newConversationId }
       } else {
         setError(result.error || 'Failed to save conversation')
         onSave?.(false, result.error)
-        return false
+        return { success: false }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save conversation'
       setError(errorMessage)
       onSave?.(false, errorMessage)
-      return false
+      return { success: false }
     } finally {
       setIsSaving(false)
     }
@@ -290,9 +299,9 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
     // Set new timeout
     autoSaveTimeoutRef.current = setTimeout(async () => {
       try {
-        const success = await saveConversation(sanitizedData, id)
-        if (success) {
-          console.log('✅ Auto-saved conversation to MongoDB')
+        const result = await saveConversation(sanitizedData, id)
+        if (result.success) {
+          console.log('✅ Auto-saved conversation to MongoDB', result.conversationId ? `(ID: ${result.conversationId})` : '')
         }
       } catch (error) {
         console.error('❌ Auto-save error:', error)

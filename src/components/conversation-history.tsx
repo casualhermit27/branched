@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PlusCircle, Clock, Trash } from '@phosphor-icons/react'
+import { DeleteConfirmModal } from './delete-confirm-modal'
 
 interface Conversation {
   _id: string
@@ -27,6 +28,10 @@ export default function ConversationHistory({
   onCreateNewConversation,
   onDeleteConversation
 }: ConversationHistoryProps) {
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; conversationId: string | null; conversationTitle?: string }>({
+    isOpen: false,
+    conversationId: null
+  })
   // Group conversations by date
   const groupedConversations = conversations.reduce((groups: Record<string, Conversation[]>, conversation) => {
     const date = new Date(conversation.updatedAt)
@@ -111,11 +116,13 @@ export default function ConversationHistory({
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          if (confirm('Delete this conversation?')) {
-                            onDeleteConversation(conversation._id)
-                          }
+                          setDeleteConfirm({
+                            isOpen: true,
+                            conversationId: conversation._id,
+                            conversationTitle: getConversationTitle(conversation)
+                          })
                         }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-50 rounded-lg transition-all duration-200 ease-in-out z-10 hover:text-red-600"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 ease-in-out z-10 hover:text-red-600 dark:hover:text-red-400"
                         title="Delete conversation"
                       >
                         <Trash className="w-3.5 h-3.5 text-muted-foreground" />
@@ -128,6 +135,23 @@ export default function ConversationHistory({
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => setDeleteConfirm({ isOpen: false, conversationId: null })}
+        onConfirm={() => {
+          if (deleteConfirm.conversationId) {
+            onDeleteConversation(deleteConfirm.conversationId)
+          }
+          setDeleteConfirm({ isOpen: false, conversationId: null })
+        }}
+        onCancel={() => setDeleteConfirm({ isOpen: false, conversationId: null })}
+        itemType="conversation"
+        itemName={deleteConfirm.conversationTitle}
+        title="Delete Conversation?"
+        message="Are you sure you want to delete this conversation? All messages and branches will be permanently deleted. This action cannot be undone."
+      />
     </div>
   )
 }

@@ -35,10 +35,43 @@ class MongoDBService {
   // Save conversation to MongoDB
   async saveConversation(conversationData: ConversationData, conversationId?: string): Promise<SaveConversationResponse> {
     try {
-      const url = conversationId ? `${this.baseUrl}/${conversationId}` : this.baseUrl
-      const method = conversationId ? 'PUT' : 'POST'
+      // If we have a conversation ID, try to update first
+      if (conversationId) {
+        const url = `${this.baseUrl}/${conversationId}`
+        const method = 'PUT'
 
-      console.log('🌐 Making request:', { url, method, bodySize: JSON.stringify(conversationData).length })
+        console.log('🌐 Making request to update conversation:', { url, method, conversationId, bodySize: JSON.stringify(conversationData).length })
+
+        const response = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(conversationData),
+        })
+
+        console.log('📡 Response status:', response.status, response.statusText)
+
+        const result = await response.json()
+
+        // If conversation not found, create a new one instead
+        if (!response.ok && result.error === 'Conversation not found') {
+          console.warn('⚠️ Conversation not found, creating new conversation instead')
+          // Fall through to create new conversation
+        } else if (!response.ok) {
+          console.error('❌ API error:', JSON.stringify(result, null, 2))
+          throw new Error(result.error || 'Failed to save conversation')
+        } else {
+          console.log('✅ Updated conversation successfully:', result.success)
+          return result
+        }
+      }
+
+      // Create new conversation (either no ID provided, or update failed with "not found")
+      const url = this.baseUrl
+      const method = 'POST'
+
+      console.log('🌐 Creating new conversation:', { url, method, bodySize: JSON.stringify(conversationData).length })
 
       const response = await fetch(url, {
         method,
@@ -57,7 +90,7 @@ class MongoDBService {
         throw new Error(result.error || 'Failed to save conversation')
       }
 
-      console.log('✅ Saved successfully:', result.success)
+      console.log('✅ Created conversation successfully:', result.success)
       return result
     } catch (error) {
       console.error('❌ Error saving conversation:', error)
