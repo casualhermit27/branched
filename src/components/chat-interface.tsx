@@ -120,14 +120,15 @@ export default function ChatInterface({
       lastBranchIdRef.current = currentBranch
       
       // Don't auto-focus textarea on branch change - let user decide
-      // But ensure scroll position is correct
+      // Use scrollTop instead of scrollIntoView to avoid layout shifts
       setTimeout(() => {
-        if (messagesEndRef.current && shouldAutoScroll) {
-          messagesEndRef.current.scrollIntoView({ behavior: 'instant' })
+        if (messagesContainerRef.current) {
+          const container = messagesContainerRef.current
+          container.scrollTop = container.scrollHeight
         }
       }, 100)
     }
-  }, [currentBranch, shouldAutoScroll])
+  }, [currentBranch])
 
   // Auto-scroll to bottom when new messages arrive (only if should auto-scroll)
   useEffect(() => {
@@ -135,13 +136,24 @@ export default function ChatInterface({
     // 1. Should auto-scroll is enabled
     // 2. We haven't already scrolled for this branch
     // 3. There are messages to scroll to
-    if (shouldAutoScroll && messagesEndRef.current && messages.length > 0) {
-      // Use instant scroll for branch changes, smooth for new messages
+    if (shouldAutoScroll && messagesContainerRef.current && messages.length > 0) {
+      // Use scrollTop instead of scrollIntoView to avoid layout shifts
+      const container = messagesContainerRef.current
       const isNewMessage = !hasScrolledRef.current
-      messagesEndRef.current.scrollIntoView({ 
-        behavior: isNewMessage ? 'smooth' : 'instant',
-        block: 'end'
-      })
+      
+      if (isNewMessage) {
+        // Smooth scroll for new messages
+        requestAnimationFrame(() => {
+          container.scrollTo({
+            top: container.scrollHeight,
+            behavior: 'smooth'
+          })
+        })
+      } else {
+        // Instant scroll for branch changes
+        container.scrollTop = container.scrollHeight
+      }
+      
       hasScrolledRef.current = true
     }
   }, [messages, shouldAutoScroll])
@@ -292,7 +304,7 @@ export default function ChatInterface({
   
   return (
     <div 
-      className="w-full h-full flex flex-col overflow-hidden"
+      className="w-full h-full flex flex-col overflow-hidden min-h-0"
       data-scrollable
       onMouseDown={(e) => {
         // Prevent canvas panning when clicking inside chat interface
@@ -379,30 +391,29 @@ export default function ChatInterface({
         </div>
       )}
       
-      {/* Messages Area - Fixed height with scroll */}
-      {messages.length > 0 && (
-        <div 
-          className="flex-1 overflow-y-auto overflow-x-auto space-y-4 mb-4 touch-pan-y pr-2" 
-          ref={messagesContainerRef}
-          onScroll={handleScroll}
-          data-scrollable
-          onMouseDown={(e) => {
-            // Prevent canvas panning when clicking in scrollable area
-            e.stopPropagation()
-          }}
-          onWheel={(e) => {
-            // Allow scrolling, prevent canvas zoom
-            e.stopPropagation()
-          }}
-          style={{ 
-            height: '550px', 
-            maxHeight: '550px',
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehavior: 'contain',
-            scrollbarWidth: 'thin',
-            scrollbarColor: '#cbd5e1 #f1f5f9'
-          }}
-        >
+      {/* Messages Area - Flexible height with scroll */}
+      <div 
+        className="flex-1 overflow-y-auto overflow-x-auto space-y-4 touch-pan-y pr-2 min-h-0" 
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        data-scrollable
+        onMouseDown={(e) => {
+          // Prevent canvas panning when clicking in scrollable area
+          e.stopPropagation()
+        }}
+        onWheel={(e) => {
+          // Allow scrolling, prevent canvas zoom
+          e.stopPropagation()
+        }}
+        style={{ 
+          minHeight: 0, // Critical for flex children to scroll properly
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'hsl(var(--muted-foreground) / 0.3) hsl(var(--muted))',
+          scrollBehavior: 'smooth'
+        }}
+      >
           {Object.entries(groupedMessages).map(([groupId, groupMessages]) => {
             const isMultiModel = groupMessages.length > 1
             const aiModels = getAIModelsFromGroup(groupMessages)
@@ -509,7 +520,7 @@ export default function ChatInterface({
                 // AI message - branch button on right
                 <div className="flex items-start gap-3">
                   {/* Simple message bubble */}
-                  <div className="max-w-[85%] bg-card rounded-2xl border border-border/80 shadow-sm hover:shadow-md transition-shadow duration-200 px-6 py-4 break-words overflow-wrap-anywhere">
+                  <div className="max-w-[70%] bg-card rounded-2xl border border-border/80 shadow-sm hover:shadow-md transition-shadow duration-200 px-6 py-4 break-words overflow-wrap-anywhere">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       {/* Model pill for AI messages */}
                       {msg.aiModel && (
@@ -732,8 +743,15 @@ export default function ChatInterface({
           })}
           {/* Scroll target for auto-scroll */}
           <div ref={messagesEndRef} />
+          {messages.length === 0 && (
+            <div className="flex items-center justify-center py-12 text-muted-foreground/50">
+              <div className="text-center">
+                <p className="text-sm font-medium">No messages yet</p>
+                <p className="text-xs mt-1">Start a conversation below</p>
+              </div>
+            </div>
+          )}
         </div>
-      )}
 
       {/* Branch Warning Message */}
       {showBranchWarning && (
@@ -891,10 +909,10 @@ export default function ChatInterface({
         </motion.div>
       )}
 
-      {/* Simple Input Area */}
-      <div className="relative flex-shrink-0 w-full pb-4">
-        <form onSubmit={handleSubmit} className="relative">
-          <div className="flex items-end bg-card border border-border rounded-2xl shadow-sm hover:shadow-md focus-within:shadow-md focus-within:border-primary transition-all duration-200 p-2">
+      {/* Adaptive Input Area - Minimal, Clean Design */}
+      <div className="flex-shrink-0 w-full pt-4 border-t border-border/30">
+        <form onSubmit={handleSubmit} className="w-full">
+          <div className="flex items-end gap-2 bg-card border border-border/40 rounded-lg shadow-sm hover:shadow focus-within:shadow focus-within:border-primary/40 transition-all duration-200 p-3">
             <textarea
               ref={textareaRef}
               value={message}
@@ -904,19 +922,18 @@ export default function ChatInterface({
                   ? `Ask ${selectedAIs.length} AIs...` 
                   : "Ask anything..."
               }
-              className="flex-1 px-6 py-6 rounded-2xl focus:outline-none text-lg placeholder-muted-foreground resize-none min-h-[80px] max-h-[300px] bg-transparent w-full"
+              className="flex-1 px-3 py-2.5 rounded-md focus:outline-none focus:ring-0 text-sm placeholder-muted-foreground/60 resize-none min-h-[44px] max-h-[160px] bg-transparent w-full transition-all duration-200"
               style={{ 
                 height: 'auto',
-                minHeight: '80px',
-                maxHeight: '300px',
-                fontSize: '18px',
-                lineHeight: '1.5',
-                letterSpacing: '-0.01em'
+                minHeight: '44px',
+                maxHeight: '160px',
+                fontSize: '14px',
+                lineHeight: '1.5'
               }}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement
                 target.style.height = 'auto'
-                target.style.height = Math.min(target.scrollHeight, 300) + 'px'
+                target.style.height = Math.min(target.scrollHeight, 160) + 'px'
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -925,14 +942,19 @@ export default function ChatInterface({
                 }
               }}
               onFocus={() => {
-                // When user focuses textarea, enable auto-scroll
                 setShouldAutoScroll(true)
-              }}
-              onBlur={() => {
-                // Don't change scroll state on blur - preserve user's scroll position
+                requestAnimationFrame(() => {
+                  if (messagesContainerRef.current && messages.length > 0) {
+                    const container = messagesContainerRef.current
+                    container.scrollTo({
+                      top: container.scrollHeight,
+                      behavior: 'smooth'
+                    })
+                  }
+                })
               }}
             />
-            <div className="self-end m-2">
+            <div className="flex-shrink-0">
               <TransformButton 
                 onSend={() => {
                   if (message.trim()) {

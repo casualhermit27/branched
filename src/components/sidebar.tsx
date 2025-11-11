@@ -70,7 +70,7 @@ export default function Sidebar({
   onCreateNewConversation = () => {}
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<'history' | 'branches' | 'settings'>('branches')
+  const [activeTab, setActiveTab] = useState<'history' | 'settings'>('history')
   // Always use fixed width, no expand/collapse functionality
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['main']))
 
@@ -353,29 +353,6 @@ export default function Sidebar({
                   )}
                 </motion.button>
                 <motion.button
-                  onClick={() => setActiveTab('branches')}
-                  className={`flex-1 py-3.5 text-sm font-medium relative transition-colors duration-200 ${
-                    activeTab === 'branches' 
-                      ? 'text-purple-600 dark:text-purple-400' 
-                      : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground'
-                  }`}
-                  whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)' }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <span className="flex items-center justify-center gap-2 relative z-10">
-                    <GitBranch size={16} weight={activeTab === 'branches' ? 'fill' : 'regular'} />
-                    Branches
-                  </span>
-                  {activeTab === 'branches' && (
-                    <motion.div
-                      layoutId="activeTab"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600 dark:bg-purple-400"
-                      initial={false}
-                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                    />
-                  )}
-                </motion.button>
-                <motion.button
                   onClick={() => setActiveTab('settings')}
                   className={`flex-1 py-3.5 text-sm font-medium relative transition-colors duration-200 ${
                     activeTab === 'settings' 
@@ -410,7 +387,7 @@ export default function Sidebar({
                     onCreateNewConversation={onCreateNewConversation}
                     onDeleteConversation={(id) => onDeleteConversation?.(id)}
                   />
-                ) : activeTab === 'settings' ? (
+                ) : (
                   <div className="p-6 space-y-6">
                     <div>
                       <h3 className="text-sm font-semibold text-foreground dark:text-foreground mb-4">General</h3>
@@ -460,20 +437,6 @@ export default function Sidebar({
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="p-4 space-y-2">
-                    {conversationTree.length > 0 ? (
-                      conversationTree.map(node => renderTreeNode(node))
-                    ) : (
-                      <div className="text-center text-muted-foreground dark:text-muted-foreground/70 py-12">
-                        <GitBranch size={36} className="mx-auto mb-3 text-muted-foreground/50 dark:text-muted-foreground/30" weight="light" />
-                        <p className="text-sm font-medium text-foreground dark:text-foreground">No conversation branches yet</p>
-                        <p className="text-xs text-muted-foreground dark:text-muted-foreground/60 mt-1.5">
-                          Create branches by clicking the branch button on messages
-                        </p>
-                      </div>
-                    )}
-                  </div>
                 )}
               </div>
               
@@ -481,10 +444,7 @@ export default function Sidebar({
               {activeTab !== 'settings' && (
                 <div className="px-6 py-4 border-t border-border/80 dark:border-border/60 bg-muted/30 dark:bg-muted/20 text-xs text-muted-foreground dark:text-muted-foreground/70">
                   <span className="font-medium text-foreground dark:text-foreground">
-                    {activeTab === 'history' 
-                      ? `${conversations.length} ${conversations.length === 1 ? 'conversation' : 'conversations'}`
-                      : `${conversationTree.length} ${conversationTree.length === 1 ? 'branch' : 'branches'}`
-                    }
+                    {conversations.length} {conversations.length === 1 ? 'conversation' : 'conversations'}
                   </span>
                 </div>
               )}

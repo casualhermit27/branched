@@ -215,12 +215,12 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
     return (
       <div className="relative">
         <motion.button
-          whileHover={{ scale: 1.02 }}
+          whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => setShowDropdown(!showDropdown)}
-          className="px-4 py-2 bg-card dark:bg-card border border-border dark:border-border/60 rounded-xl text-foreground hover:bg-muted dark:hover:bg-muted/80 transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow-md"
+          className="px-3.5 py-2 bg-card border border-border/40 rounded-lg text-foreground hover:bg-muted/50 hover:border-border/60 transition-all duration-200 flex items-center gap-2.5 shadow-sm hover:shadow"
         >
-          <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">
+          <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 opacity-90">
             {currentAI?.logo}
           </span>
           <span className="text-sm font-medium">{currentAI?.name || 'Select AI'}</span>
@@ -229,55 +229,90 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
             height="12" 
             viewBox="0 0 24 24" 
             fill="none" 
-            className="ml-1 flex-shrink-0"
+            className="ml-0.5 flex-shrink-0 text-muted-foreground"
             animate={{ rotate: showDropdown ? 180 : 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
           >
             <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </motion.svg>
         </motion.button>
         
         {/* Dropdown for single selection */}
-        <AnimatePresence mode="wait">
+        <AnimatePresence>
           {showDropdown && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: -8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -8 }}
-              transition={{ 
-                duration: 0.15,
-                ease: [0.4, 0, 0.2, 1]
-              }}
-              className="absolute top-full left-0 mt-2 bg-card dark:bg-card border border-border dark:border-border/60 shadow-lg z-50 min-w-[200px] max-h-[400px] overflow-y-auto rounded-xl backdrop-blur-sm"
-            >
-              {allAIOptions.map((ai) => (
-                <button
-                  key={ai.id}
-                  onClick={() => selectAI(ai)}
-                  disabled={!ai.functional}
-                  className={`w-full px-4 py-3 text-left transition-colors duration-150 flex items-center gap-3 rounded-lg first:rounded-t-xl last:rounded-b-xl ${
-                    !ai.functional 
-                      ? 'opacity-50 cursor-not-allowed' 
-                      : 'hover:bg-muted dark:hover:bg-muted/80 cursor-pointer active:scale-[0.98]'
-                  } ${
-                    currentAI?.id === ai.id ? 'bg-muted/50 dark:bg-muted/40 border-l-2 border-l-primary' : ''
-                  }`}
-                >
-                  <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">
-                    {ai.logo}
-                  </span>
-                  <span className={`text-sm font-medium flex-1 ${
-                    !ai.functional ? 'text-muted-foreground/50' : 'text-foreground'
-                  }`}>
-                    {getAIDisplayName(ai)}
-                    {!ai.functional && ' (Coming Soon)'}
-                  </span>
-                  {currentAI?.id === ai.id && (
-                    <span className="ml-auto text-primary flex-shrink-0">✓</span>
-                  )}
-                </button>
-              ))}
-            </motion.div>
+            <>
+              {/* Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="fixed inset-0 z-40"
+                onClick={() => setShowDropdown(false)}
+              />
+              {/* Dropdown Menu */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                transition={{ 
+                  duration: 0.2,
+                  ease: [0.4, 0, 0.2, 1]
+                }}
+                className="absolute top-full left-0 mt-1.5 bg-card border border-border/50 shadow-[0_4px_16px_rgba(0,0,0,0.08)] z-50 min-w-[220px] max-h-[360px] overflow-y-auto rounded-lg backdrop-blur-xl"
+                style={{ 
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'hsl(var(--muted-foreground) / 0.3) hsl(var(--muted))'
+                }}
+              >
+                <div className="p-1.5">
+                  {allAIOptions.map((ai, index) => (
+                    <motion.button
+                      key={ai.id}
+                      initial={{ opacity: 0, x: -4 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.02, duration: 0.15 }}
+                      onClick={() => selectAI(ai)}
+                      disabled={!ai.functional}
+                      className={`w-full px-3 py-2.5 text-left transition-all duration-150 flex items-center gap-3 rounded-md ${
+                        !ai.functional 
+                          ? 'opacity-40 cursor-not-allowed' 
+                          : 'hover:bg-muted/60 cursor-pointer active:scale-[0.98]'
+                      } ${
+                        currentAI?.id === ai.id 
+                          ? 'bg-primary/8 border border-primary/20' 
+                          : ''
+                      }`}
+                    >
+                      <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 opacity-90">
+                        {ai.logo}
+                      </span>
+                      <span className={`text-sm font-medium flex-1 ${
+                        !ai.functional 
+                          ? 'text-muted-foreground/50' 
+                          : currentAI?.id === ai.id
+                            ? 'text-foreground'
+                            : 'text-foreground/90'
+                      }`}>
+                        {getAIDisplayName(ai)}
+                        {!ai.functional && (
+                          <span className="ml-1.5 text-xs text-muted-foreground/60">(Coming Soon)</span>
+                        )}
+                      </span>
+                      {currentAI?.id === ai.id && ai.functional && (
+                        <motion.span 
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className="ml-auto text-primary flex-shrink-0 text-sm"
+                        >
+                          ✓
+                        </motion.span>
+                      )}
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
       </div>
@@ -315,26 +350,26 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
         {showAddButton && (
           <div className="flex items-center gap-2">
             <motion.button
-              whileHover={{ scale: selectedAIs.length < MAX_AIS ? 1.05 : 1 }}
-              whileTap={{ scale: selectedAIs.length < MAX_AIS ? 0.95 : 1 }}
+              whileHover={{ scale: selectedAIs.length < MAX_AIS ? 1.02 : 1 }}
+              whileTap={{ scale: selectedAIs.length < MAX_AIS ? 0.98 : 1 }}
               onClick={() => selectedAIs.length < MAX_AIS && setShowDropdown(!showDropdown)}
               disabled={selectedAIs.length >= MAX_AIS}
-              className={`px-3 py-2 bg-card dark:bg-card border rounded-xl flex items-center gap-2 transition-all duration-200 shadow-sm hover:shadow-md ${
+              className={`px-3 py-1.5 bg-card border rounded-lg flex items-center gap-2 transition-all duration-200 ${
                 selectedAIs.length >= MAX_AIS
-                  ? 'border-border/40 dark:border-border/30 text-muted-foreground/50 cursor-not-allowed'
-                  : 'border-border dark:border-border/60 text-foreground hover:bg-muted dark:hover:bg-muted/80 active:scale-95'
+                  ? 'border-border/30 text-muted-foreground/40 cursor-not-allowed'
+                  : 'border-border/40 text-foreground hover:bg-muted/50 hover:border-border/60 active:scale-95 shadow-sm hover:shadow'
               }`}
             >
-              <Plus size={14} />
+              <Plus size={13} />
               <span className="text-xs font-medium">Add AI</span>
               <motion.svg 
-                width="12" 
-                height="12" 
+                width="11" 
+                height="11" 
                 viewBox="0 0 24 24" 
                 fill="none" 
-                className="ml-1"
+                className="ml-0.5 text-muted-foreground"
                 animate={{ rotate: showDropdown ? 180 : 0 }}
-                transition={{ duration: 0.2 }}
+                transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
               >
                 <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </motion.svg>
@@ -347,43 +382,68 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
       </div>
 
       {/* Dropdown */}
-      <AnimatePresence mode="wait">
+      <AnimatePresence>
         {showDropdown && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -8 }}
-            transition={{ 
-              duration: 0.15,
-              ease: [0.4, 0, 0.2, 1]
-            }}
-            className="absolute top-full left-0 mt-2 bg-card dark:bg-card border border-border dark:border-border/60 shadow-lg z-50 min-w-[200px] rounded-xl backdrop-blur-sm"
-          >
-            <div className="p-2">
-              {availableAIs
-                .filter(ai => !selectedAIs.find(selected => selected.id === ai.id))
-                .map((ai) => (
-                  <button
-                    key={ai.id}
-                    onClick={() => addAI(ai)}
-                    disabled={!ai.functional}
-                    className={`w-full text-left px-3 py-2.5 transition-colors duration-150 flex items-center gap-3 rounded-lg ${
-                      !ai.functional 
-                        ? 'opacity-50 cursor-not-allowed' 
-                        : 'hover:bg-muted dark:hover:bg-muted/80 cursor-pointer active:scale-[0.98]'
-                    }`}
-                  >
-                    {ai.logo}
-                    <span className={`text-xs font-medium ${
-                      !ai.functional ? 'text-muted-foreground/50' : 'text-foreground'
-                    }`}>
-                      {getAIDisplayName(ai)}
-                      {!ai.functional && ' (Coming Soon)'}
-                    </span>
-                  </button>
-                ))}
-            </div>
-          </motion.div>
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-40"
+              onClick={() => setShowDropdown(false)}
+            />
+            {/* Dropdown Menu */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: -4 }}
+              transition={{ 
+                duration: 0.2,
+                ease: [0.4, 0, 0.2, 1]
+              }}
+              className="absolute top-full left-0 mt-1.5 bg-card border border-border/50 shadow-[0_4px_16px_rgba(0,0,0,0.08)] z-50 min-w-[220px] max-h-[360px] overflow-y-auto rounded-lg backdrop-blur-xl"
+              style={{ 
+                scrollbarWidth: 'thin',
+                scrollbarColor: 'hsl(var(--muted-foreground) / 0.3) hsl(var(--muted))'
+              }}
+            >
+              <div className="p-1.5">
+                {availableAIs
+                  .filter(ai => !selectedAIs.find(selected => selected.id === ai.id))
+                  .map((ai, index) => (
+                    <motion.button
+                      key={ai.id}
+                      initial={{ opacity: 0, x: -4 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.02, duration: 0.15 }}
+                      onClick={() => addAI(ai)}
+                      disabled={!ai.functional}
+                      className={`w-full text-left px-3 py-2.5 transition-all duration-150 flex items-center gap-3 rounded-md ${
+                        !ai.functional 
+                          ? 'opacity-40 cursor-not-allowed' 
+                          : 'hover:bg-muted/60 cursor-pointer active:scale-[0.98]'
+                      }`}
+                    >
+                      <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 opacity-90">
+                        {ai.logo}
+                      </span>
+                      <span className={`text-sm font-medium ${
+                        !ai.functional 
+                          ? 'text-muted-foreground/50' 
+                          : 'text-foreground/90'
+                      }`}>
+                        {getAIDisplayName(ai)}
+                        {!ai.functional && (
+                          <span className="ml-1.5 text-xs text-muted-foreground/60">(Coming Soon)</span>
+                        )}
+                      </span>
+                    </motion.button>
+                  ))}
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </div>

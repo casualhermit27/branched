@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useState, useEffect, useRef } from 'react'
+import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import ReactFlow, {
   Background,
   Controls,
@@ -84,6 +84,7 @@ interface FlowCanvasProps {
   onBranchWarning?: (data: { messageId: string; messageText?: string; existingBranchId: string; isMultiBranch: boolean }) => void // Warning handler for duplicate branches
   onMinimizeAllRef?: (fn: () => void) => void // Callback to expose minimize all function
   onAllNodesMinimizedChange?: (minimized: boolean) => void // Callback to notify when all nodes are minimized/maximized
+  onDeleteBranch?: (branchId: string) => void // Handler for deleting branches
 }
 
 // Memoize nodeTypes to prevent React Flow warning
@@ -106,7 +107,10 @@ const getLayoutedElements = (nodes: any[], edges: Edge[], direction = 'TB') => {
           ...node,
           targetPosition: 'top' as const,
           sourcePosition: 'bottom' as const,
-          position: node.position || { x: 400, y: 50 }
+          position: node.position || { x: 400, y: 50 },
+          // Add width and height for MiniMap rendering
+          width: node.data?.isMinimized ? 280 : 1200,
+          height: node.data?.isMinimized ? 200 : 850,
         })),
         edges
       }
@@ -127,8 +131,8 @@ const getLayoutedElements = (nodes: any[], edges: Edge[], direction = 'TB') => {
 
     nodes.forEach((node) => {
       dagreGraph.setNode(node.id, { 
-        width: node.data?.isMinimized ? 280 : 1000, 
-        height: node.data?.isMinimized ? 200 : 750 
+        width: node.data?.isMinimized ? 280 : 1200, 
+        height: node.data?.isMinimized ? 200 : 850 // Use max height for layout calculations
       })
     })
 
@@ -153,7 +157,10 @@ const getLayoutedElements = (nodes: any[], edges: Edge[], direction = 'TB') => {
             sourcePosition: 'bottom' as const,
             position: node.position && typeof node.position.x === 'number' && typeof node.position.y === 'number' && !isNaN(node.position.x) && !isNaN(node.position.y)
               ? node.position
-              : { x: 400, y: 50 }
+              : { x: 400, y: 50 },
+            // Add width and height for MiniMap rendering
+            width: node.data?.isMinimized ? 280 : 1200,
+            height: node.data?.isMinimized ? 200 : 850,
           }
         }
         
@@ -172,6 +179,9 @@ const getLayoutedElements = (nodes: any[], edges: Edge[], direction = 'TB') => {
             x: finalX,
             y: finalY,
           },
+          // Add width and height for MiniMap rendering
+          width: node.data?.isMinimized ? 280 : 1200,
+          height: node.data?.isMinimized ? 200 : 850,
         }
       } catch (nodeError) {
         console.warn('⚠️ Error processing node in dagre:', nodeError, node.id)
@@ -197,9 +207,9 @@ const getLayoutedElements = (nodes: any[], edges: Edge[], direction = 'TB') => {
         const y = typeof position.y === 'number' && !isNaN(position.y) && isFinite(position.y) ? position.y : 50
         
         return {
-          ...node,
-          targetPosition: 'top' as const,
-          sourcePosition: 'bottom' as const,
+        ...node,
+        targetPosition: 'top' as const,
+        sourcePosition: 'bottom' as const,
           position: { x, y }
         }
       }),
@@ -209,7 +219,7 @@ const getLayoutedElements = (nodes: any[], edges: Edge[], direction = 'TB') => {
 }
 
 // Inner component that uses useReactFlow
-function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSendMainMessage, onBranchFromMain, initialBranchMessageId, pendingBranchMessageId, onPendingBranchProcessed, onNodesUpdate, onNodeDoubleClick, onPillClick, getBestAvailableModel, onSelectSingle, multiModelMode, onExportImport, restoredConversationNodes, selectedBranchId, onBranchWarning, onMinimizeAllRef, onAllNodesMinimizedChange }: FlowCanvasProps) {
+function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSendMainMessage, onBranchFromMain, initialBranchMessageId, pendingBranchMessageId, onPendingBranchProcessed, onNodesUpdate, onNodeDoubleClick, onPillClick, getBestAvailableModel, onSelectSingle, multiModelMode, onExportImport, restoredConversationNodes, selectedBranchId, onBranchWarning, onMinimizeAllRef, onAllNodesMinimizedChange, onDeleteBranch }: FlowCanvasProps) {
   // Use a counter for triggering re-renders
   const [updateCounter, setUpdateCounter] = useState(0);
   const forceUpdate = useCallback(() => {
@@ -236,8 +246,11 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
   const [showContextMenu, setShowContextMenu] = useState<{x: number, y: number, nodeId: string} | null>(null)
   const [searchQuery, setMagnifyingGlassQuery] = useState<string>('')
   const [searchResults, setMagnifyingGlassResults] = useState<string[]>([])
-  const { fitView, getNode, getViewport, setCenter } = useReactFlow()
+  const { fitView, getNode, getViewport, setCenter, setViewport: setReactFlowViewport } = useReactFlow()
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 })
+  
+  // Prevent multiple simultaneous focus calls
+  const focusingRef = useRef<string | null>(null)
   
   // Branch-level multi-model state management
   const [branchMultiModelModes, setBranchMultiModelModes] = useState<Record<string, boolean>>({})
@@ -607,7 +620,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
       id: `context-${linkId}`,
       source: sourceId,
       target: targetId,
-      type: 'smoothstep',
+      type: 'default', // Use default curved edges from Dagre
       animated: true,
       style: {
         stroke: '#f59e0b',
@@ -654,7 +667,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     aiCount: number
   ): Array<{x: number, y: number}> => {
     // Dynamic spacing based on viewport and node count
-    const nodeWidth = 1000
+    const nodeWidth = 1200
     const viewportWidth = window.innerWidth
     const viewportHeight = window.innerHeight
     
@@ -717,41 +730,129 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     }
   }, [])
 
-  // Intelligent single node centering
-  const centerOnNode = useCallback((nodeId: string, zoomLevel?: number) => {
+  // Physics-based smooth focus utility - like Google Maps/Figma with inertia and deceleration
+  const focusOnNode = useCallback((nodeId: string, options: { smooth?: boolean; adjustZoom?: boolean; showOverview?: boolean } = {}) => {
+    const { smooth = true, adjustZoom = false, showOverview = false } = options
+    
+    // Prevent multiple simultaneous focus calls
+    if (focusingRef.current === nodeId) {
+      return
+    }
+    
+    // If already focusing on a different node, cancel it
+    if (focusingRef.current && focusingRef.current !== nodeId) {
+      focusingRef.current = null
+    }
+    
+    focusingRef.current = nodeId
+    
     const node = getNode(nodeId)
-    if (!node) return
-
-    const nodeWidth = 1000
-    const nodeHeight = 750
-    const centerX = node.position.x + nodeWidth / 2
-    const centerY = node.position.y + nodeHeight / 2
-
-    // Calculate optimal zoom if not provided
-    let optimalZoom = zoomLevel
-    if (!optimalZoom) {
-      const viewport = getViewport()
-      const viewportWidth = window.innerWidth
-      const viewportHeight = window.innerHeight
-      
-      // Calculate zoom to fit node nicely in viewport
-      const zoomX = (viewportWidth * 0.8) / nodeWidth
-      const zoomY = (viewportHeight * 0.8) / nodeHeight
-      optimalZoom = Math.min(zoomX, zoomY, 1.0)
+    if (!node) {
+      console.warn('⚠️ Node not found for focusing:', nodeId)
+      focusingRef.current = null
+      return
     }
 
-    console.log('🎯 Centering on node:', {
-      nodeId,
-      position: node.position,
-      center: { x: centerX, y: centerY },
-      zoom: optimalZoom
-    })
+    // Ensure viewport is ready - get current state
+    const viewport = getViewport()
+    if (!viewport || (viewport.x === undefined && viewport.y === undefined)) {
+      focusingRef.current = null
+      setTimeout(() => focusOnNode(nodeId, options), 100)
+      return
+    }
 
-    setCenter(centerX, centerY, { 
-      zoom: optimalZoom, 
-      duration: 600 
-    })
-  }, [getNode, setCenter, getViewport])
+    const currentZoom = viewport.zoom || 1.0
+    const currentX = viewport.x || 0
+    const currentY = viewport.y || 0
+
+    // Validate viewport values
+    if (isNaN(currentZoom) || isNaN(currentX) || isNaN(currentY) || !isFinite(currentZoom) || !isFinite(currentX) || !isFinite(currentY)) {
+      setReactFlowViewport({ x: 0, y: 0, zoom: 1 })
+      focusingRef.current = null
+      setTimeout(() => focusOnNode(nodeId, options), 100)
+      return
+    }
+
+    // Get node dimensions - use max height for focus calculations (for consistent centering)
+    const nodeWidth = node.data?.isMinimized ? 280 : (node.width || 1200)
+    const nodeHeight = node.data?.isMinimized ? 200 : 850 // Use max height for focus calculations
+    
+    // Validate node position
+    if (!node.position || isNaN(node.position.x) || isNaN(node.position.y) || !isFinite(node.position.x) || !isFinite(node.position.y)) {
+      focusingRef.current = null
+      return
+    }
+    
+    // Node center in world coordinates
+    const nodeCenterX = node.position.x + nodeWidth / 2
+    const nodeCenterY = node.position.y + nodeHeight / 2
+
+    // Get canvas/viewport dimensions
+    const canvas = document.querySelector('.react-flow__viewport') as HTMLElement
+    const canvasRect = canvas?.getBoundingClientRect()
+    
+    const viewportWidth = canvasRect?.width || window.innerWidth
+    const viewportHeight = canvasRect?.height || window.innerHeight
+    
+    if (!viewportWidth || !viewportHeight || viewportWidth <= 0 || viewportHeight <= 0) {
+      focusingRef.current = null
+      setTimeout(() => focusOnNode(nodeId, options), 100)
+      return
+    }
+    
+    const canvasCenterX = viewportWidth / 2
+    const canvasCenterY = viewportHeight / 2
+
+    // Calculate current visible center in world coordinates
+    const currentWorldCenterX = (-currentX + canvasCenterX) / currentZoom
+    const currentWorldCenterY = (-currentY + canvasCenterY) / currentZoom
+
+    // Calculate distance from current view center to node center
+    const distance = Math.hypot(
+      nodeCenterX - currentWorldCenterX,
+      nodeCenterY - currentWorldCenterY
+    )
+
+    // Smart zoom calculation - auto-scale to make node comfortably visible
+    let targetZoom = currentZoom
+    if (adjustZoom || showOverview) {
+      // Calculate optimal zoom to fit node with comfortable padding (10% on each side for tighter fit)
+      const padding = 0.1 // Reduced padding for more zoom
+      const zoomForWidth = (viewportWidth * (1 - padding * 2)) / nodeWidth
+      const zoomForHeight = (viewportHeight * (1 - padding * 2)) / nodeHeight
+      const optimalZoom = Math.min(zoomForWidth, zoomForHeight, 1.6) // Increased cap to 1.6x for more zoom
+      
+      if (showOverview) {
+        // For overview mode, zoom out to show more context
+        targetZoom = Math.max(0.4, optimalZoom * 0.6)
+      } else {
+        // For focused view, use optimal zoom with higher maximum for better visibility
+        targetZoom = Math.max(0.7, Math.min(optimalZoom, 1.5)) // Increased min to 0.7 and max to 1.5
+      }
+    } else if (distance > 2000) {
+      // If node is very far away, slightly zoom out for context
+      targetZoom = Math.max(0.5, currentZoom * 0.85)
+    }
+
+    // Smooth pan to center with physics-based easing (ease-in-out with deceleration)
+    if (smooth) {
+      // Use React Flow's setCenter with custom easing (cubic-bezier for Figma-like feel)
+      setCenter(nodeCenterX, nodeCenterY, {
+        zoom: targetZoom,
+        duration: 550 // Under 600ms as specified, with inertia feel
+      })
+      // Clear focusing ref after animation completes
+      setTimeout(() => {
+        focusingRef.current = null
+      }, 600)
+    } else {
+      // Instant focus (for programmatic calls that need immediate positioning)
+      const targetX = -(nodeCenterX * targetZoom) + canvasCenterX
+      const targetY = -(nodeCenterY * targetZoom) + canvasCenterY
+      setReactFlowViewport({ x: targetX, y: targetY, zoom: targetZoom })
+      focusingRef.current = null
+    }
+  }, [getNode, getViewport, setCenter, setReactFlowViewport])
 
   // Dynamic viewport centering with intelligent zoom
   const fitViewportToNodes = useCallback((nodeIds: string[], padding = 0.1) => {
@@ -774,8 +875,8 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     const viewportHeight = window.innerHeight
 
     // Current node dimensions
-    const nodeWidth = 1000
-    const nodeHeight = 750
+    const nodeWidth = 1200
+    const nodeHeight = 850 // Use max height for layout calculations
     
     // Calculate content bounds including node dimensions
     const minX = Math.min(...targetNodes.map(n => n.position.x))
@@ -824,7 +925,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
       const y = typeof position.y === 'number' && !isNaN(position.y) && isFinite(position.y) ? position.y : 50
       
       return {
-        ...node,
+      ...node,
         position: { x, y }
       }
     })
@@ -866,13 +967,16 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     }
   }, [nodes, onNodesUpdate]) // Depend on full nodes array, but use string comparison
 
-  // Auto-center on active node and ensure proper updates
+  // Auto-center on active node with unified focus
+  const lastActiveNodeIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (activeNodeId) {
+    if (activeNodeId && activeNodeId !== lastActiveNodeIdRef.current) {
       const node = getNode(activeNodeId)
       if (node) {
-        // Use intelligent centering for better overview
-        centerOnNode(activeNodeId, 0.6)
+        // Use unified focus utility (preserves zoom, centers node)
+        requestAnimationFrame(() => {
+          focusOnNode(activeNodeId)
+        })
         
         // Update node data to reflect active state
         setNodes(nds => 
@@ -886,13 +990,10 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
           })))
         )
         
-        // Force update to ensure UI reflects the change
-        setTimeout(() => {
-          forceUpdate()
-        }, 100)
+        lastActiveNodeIdRef.current = activeNodeId
       }
     }
-  }, [activeNodeId, getNode, setCenter, setNodes, validateNodePositions, minimizedNodes, forceUpdate])
+  }, [activeNodeId, getNode, focusOnNode, setNodes, validateNodePositions, minimizedNodes])
 
   // Toggle collapse/expand for a node
   const toggleNodeCollapse = useCallback((nodeId: string) => {
@@ -948,7 +1049,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
           style: {
             ...n.style,
             width: isMinimized ? 280 : 1000,
-            height: isMinimized ? 'auto' : 750,
+            height: isMinimized ? 'auto' : 850, // Increased from 750 to 850
             minHeight: isMinimized ? 'auto' : 750,
             transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), height 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
           },
@@ -972,7 +1073,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
               id: `e${parentId}-${n.id}`,
               source: parentId,
               target: n.id,
-              type: 'step',
+              type: 'default', // Use default curved edges from Dagre
               animated: false,
               style: { stroke: 'hsl(var(--border))', strokeWidth: 2 }
             })
@@ -981,7 +1082,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
               id: `e-main-${n.id}`,
               source: 'main',
               target: n.id,
-              type: 'step',
+              type: 'default', // Use default curved edges from Dagre
               animated: false,
               style: { stroke: 'hsl(var(--border))', strokeWidth: 2 }
             })
@@ -1085,14 +1186,17 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
       // Set as active node
       setActiveNodeId(branchId)
       
-      // Center on the branch node with multiple retry attempts
+      // Focus on the branch node with multiple retry attempts
       const attemptNavigation = (attempt = 0) => {
         const maxAttempts = 5
         const node = getNode(branchId)
         
         if (node) {
-          console.log('✅ Node found, centering:', branchId)
-          centerOnNode(branchId, 0.7)
+          console.log('✅ Node found, focusing:', branchId)
+          // Use unified focus utility (preserves zoom, centers node)
+          requestAnimationFrame(() => {
+            focusOnNode(branchId)
+          })
           
           // Add highlight effect
           setNodes(nds => 
@@ -1126,7 +1230,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         attemptNavigation(0)
       })
     }
-  }, [selectedBranchId, nodes, centerOnNode, setActiveNodeId, setNodes, activeNodeId, validateNodePositions, getNode])
+  }, [selectedBranchId, nodes, focusOnNode, setActiveNodeId, setNodes, activeNodeId, validateNodePositions, getNode, fitView])
 
   // Update nodes when minimize state changes - with smooth layout animation
   useEffect(() => {
@@ -1134,22 +1238,22 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     requestAnimationFrame(() => {
       setNodes(nds => {
         const updatedNodes = validateNodePositions(nds.map(n => {
-          const isMinimized = minimizedNodes.has(n.id)
-          return {
-            ...n,
-            style: {
-              ...n.style,
-              width: isMinimized ? 280 : 1000,
-              height: isMinimized ? 'auto' : 750,
+        const isMinimized = minimizedNodes.has(n.id)
+        return {
+        ...n,
+          style: {
+            ...n.style,
+            width: isMinimized ? 280 : 1000,
+            height: isMinimized ? 'auto' : 850, // Increased from 750 to 850
               minHeight: isMinimized ? 'auto' : 750,
               transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), height 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-            },
-            data: {
-              ...n.data,
-              isMinimized: isMinimized
-            }
-          }
-        }))
+          },
+        data: {
+          ...n.data,
+            isMinimized: isMinimized
+        }
+        }
+      }))
         
         // Re-layout with adjusted spacing to preserve branch alignment
         const edges = updatedNodes.flatMap(n => {
@@ -1165,7 +1269,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
               id: `e${parentId}-${n.id}`,
               source: parentId,
               target: n.id,
-              type: 'step',
+              type: 'default', // Use default curved edges from Dagre
               animated: false,
               style: { stroke: 'hsl(var(--border))', strokeWidth: 2 }
             })
@@ -1174,7 +1278,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
               id: `e-main-${n.id}`,
               source: 'main',
               target: n.id,
-              type: 'step',
+              type: 'default', // Use default curved edges from Dagre
               animated: false,
               style: { stroke: 'hsl(var(--border))', strokeWidth: 2 }
             })
@@ -1238,11 +1342,11 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
   const navigateToResult = useCallback((nodeId: string) => {
     const node = getNode(nodeId)
     if (node) {
-      // Use intelligent centering
-      centerOnNode(nodeId, 1.0)
+      // Use unified focus utility (preserves zoom, centers node)
+      focusOnNode(nodeId)
       setActiveNodeId(nodeId)
     }
-  }, [centerOnNode])
+  }, [focusOnNode, getNode])
 
   // Get all children of a node (recursive)
   const getNodeChildren = useCallback((nodeId: string): string[] => {
@@ -1290,22 +1394,32 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
       }
     })
     
-    // Filter visible nodes and validate their positions
-    const visibleNodes = nodesRef.current.filter(node => {
-      if (!visibleNodeIds.has(node.id)) return false
-      
-      // Validate node position to prevent NaN errors
-      const position = node.position || { x: 400, y: 50 }
-      const x = typeof position.x === 'number' && !isNaN(position.x) && isFinite(position.x) ? position.x : 400
-      const y = typeof position.y === 'number' && !isNaN(position.y) && isFinite(position.y) ? position.y : 50
-      
-      // Update node position if it was invalid
-      if (position.x !== x || position.y !== y) {
-        node.position = { x, y }
-      }
-      
-      return true
-    })
+    // Filter visible nodes and validate their positions and dimensions
+    const visibleNodes: Node[] = nodesRef.current
+      .filter(node => visibleNodeIds.has(node.id))
+      .map(node => {
+        // Validate node position to prevent NaN errors
+        const position = node.position || { x: 400, y: 50 }
+        const x = typeof position.x === 'number' && !isNaN(position.x) && isFinite(position.x) ? position.x : 400
+        const y = typeof position.y === 'number' && !isNaN(position.y) && isFinite(position.y) ? position.y : 50
+        
+        // Ensure node has width and height for MiniMap rendering
+        const isMinimized = node.data?.isMinimized || minimizedNodes.has(node.id)
+        const width: number = typeof node.width === 'number' && !isNaN(node.width) && isFinite(node.width) 
+          ? node.width 
+          : (isMinimized ? 280 : 1000)
+        const height: number = typeof node.height === 'number' && !isNaN(node.height) && isFinite(node.height)
+          ? node.height
+          : (isMinimized ? 200 : 850) // Increased default from 750 to 850
+        
+        // Return node with validated position and dimensions
+        return {
+          ...node,
+          position: { x, y },
+          width,
+          height
+        } as Node
+      })
     
     // Add visible edges - only include edges where both nodes exist and have valid positions
     edgesRef.current.forEach(edge => {
@@ -1586,7 +1700,8 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
           nodeId: newId,
           isMinimized: minimizedNodes.has(newId),
           isActive: activeNodeId === newId,
-          onToggleMinimize: toggleNodeMinimize
+          onToggleMinimize: toggleNodeMinimize,
+          onDeleteBranch: onDeleteBranch
         }
       }
     }
@@ -1790,10 +1905,11 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
           branchMessageIds: validatedBranch.map(m => m.id),
           timestamp: Date.now()
         },
-        onToggleMinimize: toggleNodeMinimize
+        onToggleMinimize: toggleNodeMinimize,
+        onDeleteBranch: onDeleteBranch
       }
     }
-  }, [selectedAIs, generateBranchId, getBranchPosition, handleBranchAddAI, handleBranchRemoveAI, handleBranchSelectSingle, handleBranchToggleMultiModel, getBestAvailableModel, minimizedNodes, activeNodeId, toggleNodeMinimize])
+  }, [selectedAIs, generateBranchId, getBranchPosition, handleBranchAddAI, handleBranchRemoveAI, handleBranchSelectSingle, handleBranchToggleMultiModel, getBestAvailableModel, minimizedNodes, activeNodeId, toggleNodeMinimize, onDeleteBranch])
   
   // ✅ NEW SIMPLIFIED handleBranch - Single entry point
   handleBranchRef.current = (parentNodeId: string, messageId?: string, isMultiBranch: boolean = false) => {
@@ -1855,11 +1971,35 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     }
     
     // Get messages from parent (main or branch)
-    // CRITICAL FIX: When branching from main, ensure we get ALL messages from main
-    // This includes all user and AI messages up to the branch point
-    const allMessages = parentNodeId === 'main' 
-      ? mainMessages 
-      : (parentNode.data.messages || [])
+    // CRITICAL FIX: When branching from a branch, we need to get ALL messages including inherited context
+    // This ensures new branches get full context without needing a reload
+    let allMessages: any[] = []
+    if (parentNodeId === 'main') {
+      // From main: use mainMessages directly
+      allMessages = mainMessages
+    } else {
+      // From branch: combine inheritedMessages + branchMessages to get full context
+      const parentInherited = parentNode.data.inheritedMessages || []
+      const parentBranch = parentNode.data.branchMessages || []
+      const parentCombined = parentNode.data.messages || []
+      
+      // Use combined messages if available, otherwise reconstruct from inherited + branch
+      if (parentCombined.length > 0) {
+        allMessages = parentCombined
+      } else {
+        // Reconstruct from inherited + branch messages
+        allMessages = [...parentInherited, ...parentBranch]
+      }
+      
+      console.log('🌳 Getting messages from parent branch:', {
+        parentNodeId,
+        inheritedCount: parentInherited.length,
+        branchCount: parentBranch.length,
+        combinedCount: parentCombined.length,
+        finalCount: allMessages.length,
+        messageIds: allMessages.map((m: any) => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 30) }))
+      })
+    }
     
     // 🔥 NEW: Check if main node is currently generating (has streaming messages)
     // This allows branching during generation
@@ -1904,6 +2044,20 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     // ✅ Determine AI responses to create branches for
     let aiResponses: any[] = []
     
+    // Get the branch node's selectedAIs if branching from a branch (not main)
+    const branchNodeSelectedAIs = parentNodeId !== 'main' 
+      ? (parentNode.data?.selectedAIs || [])
+      : []
+    const effectiveSelectedAIs = branchNodeSelectedAIs.length > 0 ? branchNodeSelectedAIs : selectedAIs
+    
+    console.log('🔍 Branch context:', {
+      parentNodeId,
+      isMain: parentNodeId === 'main',
+      branchNodeSelectedAIs: branchNodeSelectedAIs.map((a: AI) => a.id),
+      effectiveSelectedAIs: effectiveSelectedAIs.map((a: AI) => a.id),
+      mainSelectedAIs: selectedAIs.map((a: AI) => a.id)
+    })
+    
     if (targetMessage.isUser && isMultiBranch) {
       // USER message + isMultiBranch → create one branch per AI model
       // Find AI responses that come after this user message
@@ -1923,6 +2077,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
       // 1. Have parentId === messageId (direct child)
       // 2. Have the same groupId (multi-model responses)
       // 3. Be the next non-user messages after the user message
+      // 4. Match one of the branch's selectedAIs (if branching from a branch)
       const allAIResponses = deduplicatedMessages
         .slice(userMessageIndex + 1) // Get messages after the user message
         .filter(m => {
@@ -1937,7 +2092,13 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
           const isSameGroup = userGroupId && m.groupId === userGroupId
           const isNextResponse = deduplicatedMessages.indexOf(m) === userMessageIndex + 1
           
-          return isDirectChild || isSameGroup || isNextResponse
+          // CRITICAL FIX: When branching from a branch node, also check if the AI model matches the branch's selectedAIs
+          const aiModelId = m.aiModel || m.ai
+          const matchesBranchAIs = branchNodeSelectedAIs.length > 0
+            ? branchNodeSelectedAIs.some((ai: AI) => ai.id === aiModelId)
+            : true // If no branch selectedAIs, accept all
+          
+          return (isDirectChild || isSameGroup || isNextResponse) && matchesBranchAIs
         })
       
       console.log('🔍 Searching for AI responses:', {
@@ -1945,6 +2106,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         userMessageIndex,
         userGroupId,
         totalMessages: deduplicatedMessages.length,
+        branchNodeSelectedAIs: branchNodeSelectedAIs.map((a: AI) => a.id),
         messagesAfterUser: deduplicatedMessages.slice(userMessageIndex + 1, userMessageIndex + 5).map(m => ({
           id: m.id,
           isUser: m.isUser,
@@ -1987,10 +2149,10 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
           aiModel: aiResponse.aiModel || aiResponse.ai,
           text: aiResponse.text?.substring(0, 50)
         })
-      } else {
+    } else {
         console.warn('⚠️ No AI response found after user message for single branch')
-        branchCreationLockRef.current.delete(messageId)
-        return
+      branchCreationLockRef.current.delete(messageId)
+      return
       }
     } else if (!targetMessage.isUser) {
       // AI message → single branch
@@ -2002,8 +2164,8 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     // and we didn't create placeholders above, create them now
     if (aiResponses.length === 0 && targetMessage.isUser && isMultiBranch) {
       console.log('📝 No AI responses yet, creating placeholder branches for each selected AI model')
-      // Create placeholder branches for each selected AI model
-      aiResponses = selectedAIs.map((ai: any) => ({
+      // Create placeholder branches for each selected AI model (use branch's selectedAIs if available)
+      aiResponses = effectiveSelectedAIs.map((ai: any) => ({
         id: `placeholder-${messageId}-${ai.id}`,
         text: '',
         isUser: false,
@@ -2028,6 +2190,16 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
     // Each branch will get its own AI response separately
     const includePairedAI = targetMessage.isUser && !isMultiBranch // Only include paired AI for single-mode
     const inheritedMessages = getMessagesTill(messageId, deduplicatedMessages, includePairedAI)
+    
+    console.log('🌳 getMessagesTill result:', {
+      messageId,
+      targetMessageIsUser: targetMessage.isUser,
+      isMultiBranch,
+      includePairedAI,
+      allMessagesCount: deduplicatedMessages.length,
+      inheritedCount: inheritedMessages.length,
+      inheritedMessageIds: inheritedMessages.map(m => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 30) }))
+    })
     
     // 🔥 NEW: If branching during generation, include streaming messages that come after the branch point
     // These will be duplicated to the branch so generation continues there too
@@ -2158,12 +2330,12 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
       
       newNodes.push(branchNode)
       
-      // Create edge with step type for rectangular/straight lines
+      // Create edge with default curved type from Dagre
       const newEdge: Edge = {
         id: `edge-${parentNodeId}-${branchNode.id}-${Date.now()}`,
         source: parentNodeId,
         target: branchNode.id,
-        type: 'step', // Use step type for rectangular/straight lines instead of curved
+        type: 'default', // Use default curved edges from Dagre
         animated: false,
         style: { stroke: '#cbd5e1', strokeWidth: 2 }
       }
@@ -2670,34 +2842,34 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
             const chunkDelay = 50 // ms between chunks
             
             for (let i = 0; i < words.length; i++) {
-              if (abortController.signal.aborted) {
+                  if (abortController.signal.aborted) {
                 throw new Error('Generation aborted')
-              }
+                  }
               
               const chunk = (i === 0 ? '' : ' ') + words[i]
-              
-              // Handle streaming for this specific AI
+                  
+                  // Handle streaming for this specific AI
               console.log(`[MOCK] Streaming from ${ai.name} in branch:`, chunk)
-              setNodes((nds) => {
-                const updatedNodes = nds.map((node) => {
-                  if (node.id === parentId) {
-                    const currentMessages = node.data.messages || []
-                    return {
-                      ...node,
-                      data: {
-                        ...node.data,
-                        messages: currentMessages.map((msg: any) => 
+                  setNodes((nds) => {
+                    const updatedNodes = nds.map((node) => {
+                      if (node.id === parentId) {
+                        const currentMessages = node.data.messages || []
+                        return {
+                          ...node,
+                          data: {
+                            ...node.data,
+                            messages: currentMessages.map((msg: any) => 
                           msg.id === streamingMsgId
-                            ? { ...msg, streamingText: (msg.streamingText || '') + chunk }
-                            : msg
-                        )
+                                ? { ...msg, streamingText: (msg.streamingText || '') + chunk }
+                                : msg
+                            )
+                          }
+                        }
                       }
-                    }
-                  }
-                  return node
-                })
-                return updatedNodes
-              })
+                      return node
+                    })
+                    return updatedNodes
+                  })
               
               // Wait before next chunk
               await new Promise(resolve => setTimeout(resolve, chunkDelay))
@@ -2798,34 +2970,34 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         const chunkDelay = 50 // ms between chunks
         
         for (let i = 0; i < words.length; i++) {
-          if (abortController.signal.aborted) {
+            if (abortController.signal.aborted) {
             throw new Error('Generation aborted')
-          }
+            }
           
           const chunk = (i === 0 ? '' : ' ') + words[i]
-          
-          // Handle streaming response - update the streaming message in branch
+            
+            // Handle streaming response - update the streaming message in branch
           console.log(`[MOCK] Streaming from ${selectedAI.name} in branch:`, chunk)
-          setNodes((nds) => {
-            const updatedNodes = nds.map((node) => {
-              if (node.id === parentId) {
-                const currentMessages = node.data.messages || []
-                return {
-                  ...node,
-                  data: {
-                    ...node.data,
-                    messages: currentMessages.map((msg: any) => 
-                      msg.id === streamingMessageId 
-                        ? { ...msg, streamingText: (msg.streamingText || '') + chunk }
-                        : msg
-                    )
+            setNodes((nds) => {
+              const updatedNodes = nds.map((node) => {
+                if (node.id === parentId) {
+                  const currentMessages = node.data.messages || []
+                  return {
+                    ...node,
+                    data: {
+                      ...node.data,
+                      messages: currentMessages.map((msg: any) => 
+                        msg.id === streamingMessageId 
+                          ? { ...msg, streamingText: (msg.streamingText || '') + chunk }
+                          : msg
+                      )
+                    }
                   }
                 }
-              }
-              return node
+                return node
+              })
+              return updatedNodes
             })
-            return updatedNodes
-          })
           
           // Wait before next chunk
           await new Promise(resolve => setTimeout(resolve, chunkDelay))
@@ -2852,11 +3024,11 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
                     responseText: response.text?.substring(0, 50),
                     hadStreamingText: !!msg.streamingText
                   })
-                  return { 
-                    ...msg, 
+              return {
+                          ...msg, 
                     text: response.text || msg.streamingText || '[No response]', 
-                    isStreaming: false, 
-                    streamingText: undefined,
+                          isStreaming: false, 
+                          streamingText: undefined,
                     timestamp: response.timestamp || Date.now(),
                     aiModel: selectedAI.id
                   }
@@ -3189,35 +3361,79 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
           const currentMessagesMatchBranch = hasBranchMessages && currentMessages.length > 0 && 
             branchMessages.every((bm: any) => currentMessages.some((cm: any) => cm.id === bm.id))
           
-          // If branch was just created and has messages, skip reconstruction
-          // This ensures branches display their messages immediately without needing a refresh
+          // CRITICAL FIX: If branch was just created and has messages, ensure ALL context is preserved
+          // This ensures branches display their full context immediately without needing a refresh
           if (hasInheritedMessages && hasBranchMessages) {
-            console.log('✅ Branch already initialized - preserving messages:', {
+            console.log('✅ Branch already initialized - preserving ALL messages:', {
               branchId: node.id,
               inheritedCount: inheritedMessages.length,
               branchCount: branchMessages.length,
               currentCount: currentMessages.length,
-              currentMessagesMatchBranch
+              currentMessagesMatchBranch,
+              inheritedMessageIds: inheritedMessages.map((m: any) => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 20) })),
+              branchMessageIds: branchMessages.map((m: any) => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 20) }))
             })
-            // Ensure combinedMessages is correct - use currentMessages if it's more complete
+            
+            // CRITICAL: Always start with inheritedMessages + branchMessages to ensure full context
+            // This is the source of truth for branch context
             let combinedMessages = [...inheritedMessages, ...branchMessages]
-            if (currentMessages.length > combinedMessages.length) {
-              // currentMessages might have more recent messages (user input, AI responses)
-              // Use it as the source of truth
-              combinedMessages = currentMessages
-              console.log('📝 Using currentMessages as source of truth (more complete):', {
+            
+            // Add any new messages from currentMessages that aren't already included
+            const existingIds = new Set(combinedMessages.map((m: any) => m.id))
+            const newMessagesFromCurrent = currentMessages.filter((m: any) => !existingIds.has(m.id))
+            
+            if (newMessagesFromCurrent.length > 0) {
+              console.log('📝 Adding new messages from currentMessages:', {
                 branchId: node.id,
-                combinedCount: combinedMessages.length,
-                currentCount: currentMessages.length
+                newCount: newMessagesFromCurrent.length,
+                newMessageIds: newMessagesFromCurrent.map((m: any) => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 20) }))
               })
+              combinedMessages = [...combinedMessages, ...newMessagesFromCurrent]
             }
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                messages: combinedMessages, // Ensure messages are set
+            
+            // CRITICAL: Verify all inherited messages are present
+            const missingInherited = inheritedMessages.filter((m: any) => !combinedMessages.some((cm: any) => cm.id === m.id))
+            if (missingInherited.length > 0) {
+              console.warn('⚠️ CRITICAL: Missing inherited messages - adding them:', {
+                branchId: node.id,
+                missingCount: missingInherited.length,
+                missingIds: missingInherited.map((m: any) => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 20) }))
+              })
+              // Insert missing inherited messages at the beginning (they should be first)
+              combinedMessages = [...missingInherited, ...combinedMessages]
+            }
+            
+            // CRITICAL: Verify all branch messages are present
+            const missingBranch = branchMessages.filter((m: any) => !combinedMessages.some((cm: any) => cm.id === m.id))
+            if (missingBranch.length > 0) {
+              console.warn('⚠️ CRITICAL: Missing branch messages - adding them:', {
+                branchId: node.id,
+                missingCount: missingBranch.length,
+                missingIds: missingBranch.map((m: any) => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 20) }))
+              })
+              // Insert missing branch messages after inherited messages
+              const inheritedIds = new Set(inheritedMessages.map((m: any) => m.id))
+              const inheritedPart = combinedMessages.filter((m: any) => inheritedIds.has(m.id))
+              const restPart = combinedMessages.filter((m: any) => !inheritedIds.has(m.id))
+              combinedMessages = [...inheritedPart, ...missingBranch, ...restPart]
+            }
+            
+            console.log('✅ Final combinedMessages for branch:', {
+              branchId: node.id,
+              totalCount: combinedMessages.length,
+              inheritedCount: inheritedMessages.length,
+              branchCount: branchMessages.length,
+              allMessageIds: combinedMessages.map((m: any) => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 20) }))
+            })
+          
+          return {
+            ...node,
+            data: {
+              ...node.data,
+                messages: combinedMessages, // Ensure messages are set with ALL inherited and branch messages
                 inheritedMessages: inheritedMessages, // Preserve inherited
                 branchMessages: branchMessages, // Preserve branch messages
+                parentMessageId: node.data.parentMessageId || parentMessageId, // Preserve parentMessageId for context header
                 selectedAIs: branchSelectedAIs.length > 0 ? branchSelectedAIs : [selectedAIs[0] || { 
                   id: 'best', 
                   name: 'Best', 
@@ -3689,12 +3905,14 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
                 selectedAIs: nodeData.selectedAIs || nodeData.data?.selectedAIs || [],
                 multiModelMode: nodeData.multiModelMode || nodeData.data?.multiModelMode || false,
                 isMain: nodeData.isMain || nodeData.id === 'main',
-                isMinimized: nodeData.isMinimized || nodeData.data?.isMinimized || false,
+                // Always restore nodes as expanded - minimized state is a UI preference that shouldn't persist
+                isMinimized: false,
                 showAIPill: nodeData.showAIPill || nodeData.data?.showAIPill || false,
                 parentId: nodeData.parentId || nodeData.data?.parentId || (nodeData.id === 'main' ? undefined : 'main'),
                 onBranch: (nodeId: string, msgId?: string) => handleBranchRef.current?.(nodeId, msgId),
                 onSendMessage: (nodeId: string, msg: string) => handleSendMessageRef.current?.(nodeId, msg),
                 onToggleMinimize: toggleNodeMinimize,
+                onDeleteBranch: onDeleteBranch,
                 onAddAI: (ai: AI) => handleBranchAddAI(nodeData.id, ai),
                 onRemoveAI: (aiId: string) => handleBranchRemoveAI(nodeData.id, aiId),
                 onSelectSingle: (aiId: string) => handleBranchSelectSingle(nodeData.id, aiId),
@@ -3721,7 +3939,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
                 id: `edge-${parentId}-${nodeData.id}`,
                 source: parentId,
                 target: nodeData.id,
-                type: 'step', // Use step type for rectangular/straight lines
+                type: 'default', // Use default curved edges from Dagre
                 animated: false,
                 style: { stroke: '#cbd5e1', strokeWidth: 2, strokeDasharray: '4 2' }
               })
@@ -3761,12 +3979,138 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
             edges: layoutedEdges.length,
             nodeIds: validatedLayoutedNodes.map(n => n.id)
           })
+          
+          // Focus on target node after restoration with smooth animation
+          // Best practice: Wait for DOM to settle, then animate smoothly
+          const focusTargetNode = () => {
+            // Determine which node to focus on (priority order):
+            // 1. If selectedBranchId is set, use it (user explicitly selected)
+            // 2. Otherwise, find the latest branch by activity (most recent)
+            // 3. Fallback to main node if no branches exist
+            
+            let targetNodeId: string | null = null
+            
+            if (selectedBranchId && selectedBranchId !== 'main') {
+              targetNodeId = selectedBranchId
+              console.log('🎯 Using selectedBranchId for focus:', targetNodeId)
+            } else {
+              // Find latest branch by checking message timestamps
+              const nonMainNodes = nodesRef.current.filter(n => n.id !== 'main' && !n.data?.isMain)
+              if (nonMainNodes.length > 0) {
+                const latestBranch = nonMainNodes.reduce((latest, current) => {
+                  const latestMessages = latest.data?.messages || []
+                  const currentMessages = current.data?.messages || []
+                  
+                  const latestTimestamp = latestMessages.length > 0 
+                    ? latestMessages[latestMessages.length - 1]?.timestamp || 0
+                    : (latest.data?.timestamp as number) || 0
+                  
+                  const currentTimestamp = currentMessages.length > 0
+                    ? currentMessages[currentMessages.length - 1]?.timestamp || 0
+                    : (current.data?.timestamp as number) || 0
+                  
+                  return currentTimestamp > latestTimestamp ? current : latest
+                })
+                
+                targetNodeId = latestBranch.id
+                console.log('🎯 Focusing on latest branch:', targetNodeId)
+              } else {
+                // No branches: focus on main node
+                targetNodeId = 'main'
+                console.log('🎯 Focusing on main node (no branches)')
+              }
+            }
+            
+            // Focus with smooth animation
+            if (targetNodeId) {
+              const targetNode = nodesRef.current.find(n => n.id === targetNodeId)
+              if (targetNode) {
+                // Wait for React Flow to be fully ready
+                const checkAndFocus = (attempt = 0) => {
+                  const viewport = getViewport()
+                  const node = getNode(targetNodeId!)
+                  
+                  if (viewport && viewport.x !== undefined && viewport.y !== undefined && node) {
+                    // Viewport and node are ready - focus smoothly
+                    console.log('✅ Focusing on node with smooth animation:', targetNodeId)
+                    requestAnimationFrame(() => {
+                      // Check if we have multiple branches - show overview first
+                      const branchCount = nodesRef.current.filter(n => n.id !== 'main' && !n.data?.isMain).length
+                      if (branchCount > 1 && !selectedBranchId) {
+                        // Show overview mode first, then focus on latest branch
+                        focusOnNode(targetNodeId!, { smooth: true, adjustZoom: true, showOverview: true })
+                        setActiveNodeId(targetNodeId!)
+                        
+                        // Soft highlight for overview mode
+                        setNodes(nds => 
+                          nds.map(n => 
+                            n.id === targetNodeId 
+                              ? { ...n, data: { ...n.data, isHighlighted: true } }
+                              : n
+                          )
+                        )
+                        
+                        // After overview, focus in on the node
+                        setTimeout(() => {
+                          focusOnNode(targetNodeId!, { smooth: true, adjustZoom: true })
+                          setTimeout(() => {
+                            setNodes(nds => 
+                              nds.map(n => 
+                                n.id === targetNodeId 
+                                  ? { ...n, data: { ...n.data, isHighlighted: false } }
+                                  : n
+                              )
+                            )
+                          }, 1000)
+                        }, 800)
+                      } else {
+                        // Single branch or explicit selection - focus directly
+                        focusOnNode(targetNodeId!, { smooth: true, adjustZoom: true })
+                        setActiveNodeId(targetNodeId!)
+                        
+                        // Brief highlight animation for visual feedback
+                        setNodes(nds => 
+                          nds.map(n => 
+                            n.id === targetNodeId 
+                              ? { ...n, data: { ...n.data, isHighlighted: true } }
+                              : n
+                          )
+                        )
+                        setTimeout(() => {
+                          setNodes(nds => 
+                            nds.map(n => 
+                              n.id === targetNodeId 
+                                ? { ...n, data: { ...n.data, isHighlighted: false } }
+                                : n
+                            )
+                          )
+                        }, 1000) // Highlight for 1 second
+                      }
+                    })
+                  } else if (attempt < 5) {
+                    // Retry with exponential backoff
+                    setTimeout(() => checkAndFocus(attempt + 1), 100 * (attempt + 1))
+                  } else {
+                    console.warn('⚠️ Could not focus on node after retries:', targetNodeId)
+                  }
+                }
+                
+                // Start checking after a short delay to let DOM settle
+                setTimeout(() => checkAndFocus(), 150)
+              } else {
+                console.warn('⚠️ Target node not found:', targetNodeId)
+              }
+            }
+          }
+          
+          // Wait for nodes to be rendered before focusing
+          setTimeout(focusTargetNode, 200)
         }
       }, 100) // Small delay to ensure clearing effect completes
       
       return () => clearTimeout(timeoutId)
     }
-  }, [restoredConversationNodes, nodes.length, getBestAvailableModel, pendingBranchMessageId])
+  }, [restoredConversationNodes, nodes.length, getBestAvailableModel, pendingBranchMessageId, fitView, selectedBranchId, focusOnNode, nodesRef])
 
   // Automatically create initial branch when canvas first loads
   useEffect(() => {
@@ -3796,30 +4140,52 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
   useEffect(() => {
     if (pendingBranchMessageId && !processedPendingBranchesRef.current.has(pendingBranchMessageId)) {
       console.log('🎯 Creating pending branch for message:', pendingBranchMessageId)
-      console.log('🎯 Current nodes:', nodesRef.current.map(n => ({ id: n.id, messageIds: n.data.messages?.map((m: any) => m.id) || [] })))
+      console.log('🎯 Current nodes:', nodes.map(n => ({ id: n.id, messageIds: n.data.messages?.map((m: any) => m.id) || [] })))
       
       // Mark as processed immediately to prevent re-processing
       processedPendingBranchesRef.current.add(pendingBranchMessageId)
       
       // ✅ CRITICAL: Ensure main node exists before creating branches
-      const mainNode = nodesRef.current.find(n => n.id === 'main')
+      let mainNode = nodes.find(n => n.id === 'main')
+      
+      // If main node doesn't exist, create it immediately and wait for it to be set
       if (!mainNode) {
-        console.warn('⚠️ Main node not found yet, waiting for initialization...')
-        // Wait a bit for main node to be created
+        console.warn('⚠️ Main node not found, creating it now...')
+        const newMainNode: any = {
+          id: 'main',
+          type: 'chatNode',
+          position: { x: 400, y: 50 },
+          data: { 
+            label: 'Main Chat',
+            messages: mainMessages,
+            selectedAIs: selectedAIs,
+            onBranch: handleBranch,
+            onSendMessage: onSendMainMessage,
+            onAddAI: onAddAI,
+            onRemoveAI: onRemoveAI,
+            onToggleMinimize: toggleNodeMinimize,
+            isMain: true,
+            isMinimized: minimizedNodes.has('main'),
+            isActive: activeNodeId === 'main'
+          },
+        }
+        setNodes(validateNodePositions([newMainNode]))
+        console.log('✅ Main node created, waiting for state to sync...')
+        
+        // Wait for the main node to be set in state before creating branches
         setTimeout(() => {
           const retryMainNode = nodesRef.current.find(n => n.id === 'main')
           if (!retryMainNode) {
-            console.error('❌ Main node still not found after retry, aborting branch creation')
-            // Clear lock if it exists
+            console.error('❌ Main node still not found after creation, aborting branch creation')
             branchCreationLockRef.current.delete(pendingBranchMessageId)
-            processedPendingBranchesRef.current.delete(pendingBranchMessageId) // Allow retry
+            processedPendingBranchesRef.current.delete(pendingBranchMessageId)
             if (onPendingBranchProcessed) {
               onPendingBranchProcessed()
             }
             return
           }
-          // Retry branch creation - clear lock first
-          branchCreationLockRef.current.delete(pendingBranchMessageId)
+          
+          // Now create the branch
           const existingBranch = nodesRef.current.find(node => 
             node.id !== 'main' && 
             node.data.messages?.some((msg: any) => msg.id === pendingBranchMessageId)
@@ -3828,7 +4194,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
           if (!existingBranch) {
             const targetMessage = mainMessages.find(m => m.id === pendingBranchMessageId)
             const isMultiBranch = targetMessage?.isUser === true
-            console.log('🎯 Retrying branch creation for message:', pendingBranchMessageId, 'isMultiBranch:', isMultiBranch)
+            console.log('🎯 Creating branch after main node creation:', pendingBranchMessageId, 'isMultiBranch:', isMultiBranch)
             handleBranch('main', pendingBranchMessageId, isMultiBranch)
           } else {
             console.log('🎯 Branch already exists for message:', pendingBranchMessageId)
@@ -3841,8 +4207,9 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         return
       }
       
+      // Main node exists, proceed with branch creation
       // Check if we already have a branch for this message to prevent duplicates
-      const existingBranch = nodesRef.current.find(node => 
+      const existingBranch = nodes.find(node => 
         node.id !== 'main' && 
         node.data.messages?.some((msg: any) => msg.id === pendingBranchMessageId)
       )
@@ -3863,7 +4230,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         onPendingBranchProcessed()
       }
     }
-  }, [pendingBranchMessageId, mainMessages, handleBranch, onPendingBranchProcessed]) // Removed 'nodes' from dependencies to prevent re-running
+  }, [pendingBranchMessageId, mainMessages, handleBranch, onPendingBranchProcessed, nodes]) // Added 'nodes' to dependencies
 
   // Track which AI responses we've already created nodes for
   const createdResponseNodesRef = useRef<Set<string>>(new Set())
@@ -3878,46 +4245,138 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
 
   // Get visible nodes and edges
   const { nodes: visibleNodes, edges: visibleEdges } = getVisibleNodesAndEdges()
+  
+  // Additional validation: Ensure all nodes have valid positions and dimensions for MiniMap
+  // This prevents NaN errors in MiniMap's circle rendering
+  const validatedNodesForRender = useMemo(() => {
+    return visibleNodes.map(node => {
+      // Double-check position validity
+      const position = node.position || { x: 400, y: 50 }
+      const x = typeof position.x === 'number' && !isNaN(position.x) && isFinite(position.x) ? position.x : 400
+      const y = typeof position.y === 'number' && !isNaN(position.y) && isFinite(position.y) ? position.y : 50
+      
+      // Double-check dimensions validity
+      const isMinimized = node.data?.isMinimized || minimizedNodes.has(node.id)
+      const width = typeof node.width === 'number' && !isNaN(node.width) && isFinite(node.width) && node.width > 0
+        ? node.width 
+        : (isMinimized ? 280 : 1000)
+      const height = typeof node.height === 'number' && !isNaN(node.height) && isFinite(node.height) && node.height > 0
+        ? node.height
+        : (isMinimized ? 200 : 850)
+      
+      return {
+        ...node,
+        position: { x, y },
+        width,
+        height
+      }
+    }).filter(node => {
+      // Final safety check: filter out any nodes that still have invalid values
+      return node.position &&
+        typeof node.position.x === 'number' && !isNaN(node.position.x) && isFinite(node.position.x) &&
+        typeof node.position.y === 'number' && !isNaN(node.position.y) && isFinite(node.position.y) &&
+        typeof node.width === 'number' && !isNaN(node.width) && isFinite(node.width) && node.width > 0 &&
+        typeof node.height === 'number' && !isNaN(node.height) && isFinite(node.height) && node.height > 0
+    })
+  }, [visibleNodes, minimizedNodes])
+  
+  // Validated viewport to prevent NaN errors in Background component
+  const validatedViewport = useMemo(() => ({
+    x: typeof viewport.x === 'number' && !isNaN(viewport.x) && isFinite(viewport.x) ? viewport.x : 0,
+    y: typeof viewport.y === 'number' && !isNaN(viewport.y) && isFinite(viewport.y) ? viewport.y : 0,
+    zoom: typeof viewport.zoom === 'number' && !isNaN(viewport.zoom) && isFinite(viewport.zoom) && viewport.zoom > 0 ? viewport.zoom : 1
+  }), [viewport])
+  
+  // Safety check: Ensure ReactFlow's internal viewport is always valid
+  useEffect(() => {
+    const currentViewport = getViewport()
+    if (currentViewport && (
+      isNaN(currentViewport.x) || 
+      isNaN(currentViewport.y) || 
+      isNaN(currentViewport.zoom) ||
+      !isFinite(currentViewport.x) ||
+      !isFinite(currentViewport.y) ||
+      !isFinite(currentViewport.zoom) ||
+      currentViewport.zoom <= 0
+    )) {
+      setReactFlowViewport({ x: 0, y: 0, zoom: 1 })
+    }
+  }, [getViewport, setReactFlowViewport, viewport])
+  
+  // Ensure minimap is positioned correctly after ReactFlow initializes
+  useEffect(() => {
+    const ensureMinimapPosition = () => {
+      const minimap = document.querySelector('.react-flow__minimap') as HTMLElement
+      if (minimap) {
+        minimap.style.position = 'absolute'
+        minimap.style.bottom = '20px'
+        minimap.style.right = '20px'
+        minimap.style.zIndex = '5'
+      }
+    }
+    
+    // Run immediately and after a short delay to catch late renders
+    ensureMinimapPosition()
+    const timeout = setTimeout(ensureMinimapPosition, 100)
+    const timeout2 = setTimeout(ensureMinimapPosition, 500)
+    
+    return () => {
+      clearTimeout(timeout)
+      clearTimeout(timeout2)
+    }
+  }, [validatedNodesForRender.length]) // Re-run when nodes change
+  
+  // Debug: Log nodes for MiniMap
+  useEffect(() => {
+    if (visibleNodes.length > 0) {
+      console.log('🗺️ MiniMap nodes:', visibleNodes.map((n: Node) => ({ 
+        id: n.id, 
+        position: n.position,
+        width: n.width,
+        height: n.height,
+        hasValidPosition: n.position && 
+          typeof n.position.x === 'number' && !isNaN(n.position.x) && isFinite(n.position.x) &&
+          typeof n.position.y === 'number' && !isNaN(n.position.y) && isFinite(n.position.y),
+        hasValidDimensions: typeof n.width === 'number' && !isNaN(n.width) && isFinite(n.width) &&
+          typeof n.height === 'number' && !isNaN(n.height) && isFinite(n.height)
+      })))
+    } else {
+      console.warn('⚠️ MiniMap: No visible nodes found')
+    }
+  }, [visibleNodes])
 
   // Handle node click for focus mode and activation
   const handleNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
-    // Don't stop propagation here - let the node handle it
-    // This allows panning to work when clicking on node background
-    
-    // Set this node as active and focused (for visual feedback)
-    setActiveNodeId(node.id)
-    setFocusedNodeId(node.id)
-    // Keep pan mode active - don't switch to focus mode
-    // setInteractionMode('pan') // Keep panning enabled
-    
-    // Use intelligent centering
-    centerOnNode(node.id, 0.6)
-    
-    // Add highlight effect by temporarily updating the node
-    setNodes(nds => 
-      nds.map(n => 
-        n.id === node.id 
-          ? { ...n, data: { ...n.data, isHighlighted: true } }
-          : n
-      )
-    )
-    
-    // Remove highlight after animation
-    setTimeout(() => {
+    // Click-to-focus: smoothly center the clicked node with auto-scale
+    if (!event.shiftKey) {
+      // Single click - focus on this node with smooth animation and auto-scale
+      setActiveNodeId(node.id)
+      setFocusedNodeId(node.id)
+      focusOnNode(node.id, { smooth: true, adjustZoom: true })
+      
+      // Subtle highlight animation for visual feedback
       setNodes(nds => 
         nds.map(n => 
           n.id === node.id 
-            ? { ...n, data: { ...n.data, isHighlighted: false } }
+            ? { ...n, data: { ...n.data, isHighlighted: true } }
             : n
         )
       )
-    }, 1000)
-    
-    console.log('🎯 Node focused:', node.id, 'Mode:', 'pan (panning still enabled)')
-    
-    // Force update to ensure UI reflects the change
-    forceUpdate()
-  }, [centerOnNode])
+      setTimeout(() => {
+        setNodes(nds => 
+          nds.map(n => 
+            n.id === node.id 
+              ? { ...n, data: { ...n.data, isHighlighted: false } }
+              : n
+          )
+        )
+      }, 1000) // Longer highlight for better feedback
+    } else {
+      // Shift-click - multi-select (future enhancement)
+      setActiveNodeId(node.id)
+      setFocusedNodeId(node.id)
+    }
+  }, [focusOnNode, setNodes, setActiveNodeId, setFocusedNodeId])
 
   // Handle right-click context menu
   const handleNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
@@ -4032,12 +4491,13 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
       </div>
 
       <ReactFlow
-        nodes={visibleNodes}
+        nodes={validatedNodesForRender}
         edges={visibleEdges.map(edge => ({
           ...edge,
           style: getEdgeStyle(edge)
         }))}
         nodeTypes={nodeTypes}
+        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
@@ -4056,11 +4516,38 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
           // Keep pan mode active (it's always active now)
           console.log('🖱️ Canvas clicked - clearing focus')
         }}
+        onInit={(reactFlowInstance) => {
+          // Ensure viewport is valid on initialization
+          const currentViewport = reactFlowInstance.getViewport()
+          if (currentViewport && (
+            isNaN(currentViewport.x) || 
+            isNaN(currentViewport.y) || 
+            isNaN(currentViewport.zoom) ||
+            !isFinite(currentViewport.x) ||
+            !isFinite(currentViewport.y) ||
+            !isFinite(currentViewport.zoom) ||
+            currentViewport.zoom <= 0
+          )) {
+            reactFlowInstance.setViewport({ x: 0, y: 0, zoom: 1 })
+          }
+        }}
         onMove={(event, viewport) => {
-          setViewport(viewport)
+          // Validate viewport values to prevent NaN errors
+          const validatedViewport = {
+            x: typeof viewport.x === 'number' && !isNaN(viewport.x) && isFinite(viewport.x) ? viewport.x : 0,
+            y: typeof viewport.y === 'number' && !isNaN(viewport.y) && isFinite(viewport.y) ? viewport.y : 0,
+            zoom: typeof viewport.zoom === 'number' && !isNaN(viewport.zoom) && isFinite(viewport.zoom) && viewport.zoom > 0 ? viewport.zoom : 1
+          }
+          setViewport(validatedViewport)
+          // Also update ReactFlow's internal viewport if it's invalid
+          if (isNaN(viewport.x) || isNaN(viewport.y) || isNaN(viewport.zoom) ||
+              !isFinite(viewport.x) || !isFinite(viewport.y) || !isFinite(viewport.zoom) ||
+              viewport.zoom <= 0) {
+            setReactFlowViewport(validatedViewport)
+          }
         }}
         defaultEdgeOptions={{
-          type: 'step', // Use step type for rectangular/straight lines instead of curved
+          type: 'default', // Use default curved edges from Dagre
           style: { 
             stroke: '#d1d5db', 
             strokeWidth: 1.5,
@@ -4084,21 +4571,25 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
         multiSelectionKeyCode={null}
         fitViewOptions={{
           padding: 0.2,
-          minZoom: 0.1,
-          maxZoom: 3.0,
-          duration: 800
+          minZoom: 0.3,
+          maxZoom: 1.0,
+          duration: 600, // Smoother, faster animation
         }}
       >
         <MiniMap 
           style={{ 
             backgroundColor: 'hsl(var(--card))',
-            border: '1px solid hsl(var(--border)/0.5)',
-            borderRadius: '16px',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
-            opacity: 0.98,
-            backdropFilter: 'blur(12px)',
+            border: '1px solid hsl(var(--border)/0.4)',
+            borderRadius: '12px',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04)',
+            opacity: 0.95,
+            backdropFilter: 'blur(8px)',
             width: '180px',
-            height: '140px'
+            height: '140px',
+            position: 'absolute',
+            bottom: '20px',
+            right: '20px',
+            zIndex: 5
           }}
           nodeColor={(node) => {
             if (node.id === 'main') return '#8b5cf6' // Purple for main
@@ -4112,13 +4603,13 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
             if (node.id === 'main') return '#7c3aed' // Purple stroke for main
             return 'rgba(0, 0, 0, 0.08)'
           }}
-          nodeStrokeWidth={2.5}
-          nodeBorderRadius={8}
-          maskColor="rgba(0, 0, 0, 0.2)"
+          nodeStrokeWidth={2}
+          nodeBorderRadius={6}
+          maskColor="rgba(0, 0, 0, 0.15)"
           position="bottom-right"
           pannable={true}
           zoomable={true}
-          className="dark:border-border/30 cursor-pointer hover:shadow-xl transition-shadow duration-300"
+          className="dark:border-border/30 cursor-pointer hover:shadow-lg transition-all duration-200"
           ariaLabel="MiniMap - Click to navigate"
         />
         <Controls 
