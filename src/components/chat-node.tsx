@@ -103,9 +103,13 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
   }
 
   const handleDelete = () => {
+    console.log('🗑️ Delete button clicked:', { nodeId: id, hasHandler: !!data.onDeleteBranch })
     if (data.onDeleteBranch) {
+      console.log('🗑️ Calling onDeleteBranch for node:', id)
       data.onDeleteBranch(id)
       setShowDeleteConfirm(false)
+    } else {
+      console.warn('⚠️ onDeleteBranch handler not available for node:', id)
     }
   }
 

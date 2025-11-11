@@ -260,6 +260,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null)
   const [interactionMode, setInteractionMode] = useState<'pan' | 'focus'>('pan')
   
+  
   // Branch-level multi-model functions
   const handleBranchAddAI = useCallback((nodeId: string, ai: AI) => {
     let newAIs: AI[] = []
@@ -397,6 +398,30 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
   
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+  
+  // Wrapper for onDeleteBranch that also removes node from FlowCanvas
+  const handleDeleteBranch = useCallback((branchId: string) => {
+    console.log('🗑️ FlowCanvas handleDeleteBranch called for:', branchId)
+    
+    // Remove node from FlowCanvas internal state
+    setNodes((prevNodes: Node[]) => {
+      const filtered = prevNodes.filter(n => n.id !== branchId)
+      console.log('🗑️ Removed node from FlowCanvas. Remaining nodes:', filtered.map(n => n.id))
+      return filtered
+    })
+    
+    // Remove associated edges
+    setEdges((prevEdges: Edge[]) => {
+      const filtered = prevEdges.filter((e: Edge) => e.source !== branchId && e.target !== branchId)
+      console.log('🗑️ Removed edges from FlowCanvas. Remaining edges:', filtered.length)
+      return filtered
+    })
+    
+    // Call the parent handler to update conversationNodes
+    if (onDeleteBranch) {
+      onDeleteBranch(branchId)
+    }
+  }, [onDeleteBranch, setNodes, setEdges])
   
   const nodesRef = useRef(nodes)
   const edgesRef = useRef(edges)
@@ -1701,7 +1726,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
           isMinimized: minimizedNodes.has(newId),
           isActive: activeNodeId === newId,
           onToggleMinimize: toggleNodeMinimize,
-          onDeleteBranch: onDeleteBranch
+          onDeleteBranch: handleDeleteBranch
         }
       }
     }
@@ -3462,7 +3487,8 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
                 nodeId: node.id,
                 isMain: false,
                 existingBranchesCount: nodes.length - 1,
-                onStopGeneration: handleStopGeneration
+                onStopGeneration: handleStopGeneration,
+                onDeleteBranch: handleDeleteBranch
               }
             }
           }
@@ -3707,14 +3733,15 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
               nodeId: node.id,
               isMain: false,
               existingBranchesCount: nodes.length - 1,
-              onStopGeneration: handleStopGeneration
+              onStopGeneration: handleStopGeneration,
+              onDeleteBranch: handleDeleteBranch
             }
           }
         }
         return node
       }))
     )
-  }, [mainMessages, selectedAIs, getBranchSelectedAIs, getBranchMultiModelMode, handleBranchAddAI, handleBranchRemoveAI, handleBranchSelectSingle, handleBranchToggleMultiModel, getBestAvailableModel, handleStopGeneration])
+  }, [mainMessages, selectedAIs, getBranchSelectedAIs, getBranchMultiModelMode, handleBranchAddAI, handleBranchRemoveAI, handleBranchSelectSingle, handleBranchToggleMultiModel, getBestAvailableModel, handleStopGeneration, onDeleteBranch])
 
   // Update generating state for all nodes
   useEffect(() => {
@@ -3912,7 +3939,7 @@ function FlowCanvasInner({ selectedAIs, onAddAI, onRemoveAI, mainMessages, onSen
                 onBranch: (nodeId: string, msgId?: string) => handleBranchRef.current?.(nodeId, msgId),
                 onSendMessage: (nodeId: string, msg: string) => handleSendMessageRef.current?.(nodeId, msg),
                 onToggleMinimize: toggleNodeMinimize,
-                onDeleteBranch: onDeleteBranch,
+                onDeleteBranch: handleDeleteBranch,
                 onAddAI: (ai: AI) => handleBranchAddAI(nodeData.id, ai),
                 onRemoveAI: (aiId: string) => handleBranchRemoveAI(nodeData.id, aiId),
                 onSelectSingle: (aiId: string) => handleBranchSelectSingle(nodeData.id, aiId),
