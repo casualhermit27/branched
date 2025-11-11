@@ -66,16 +66,29 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #1a1a1a;
+  background: hsl(var(--muted));
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #404040;
+  background: hsl(var(--muted-foreground) / 0.3);
   border-radius: 4px;
   transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #525252;
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* ReactFlow MiniMap positioning fix */
+.react-flow__minimap {
+  position: absolute !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  z-index: 5 !important;
+}
+
+/* Ensure ReactFlow container has proper positioning context */
+.react-flow {
+  position: relative !important;
 }

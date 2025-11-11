@@ -21,6 +21,7 @@ export interface ConversationContext {
   messages: Message[]
   currentBranch: string
   parentMessages?: Message[]
+  memoryContext?: string // Aggregated memory context string
 }
 
 // Mistral API Integration
@@ -315,7 +316,15 @@ export class MistralAPI {
 
   private buildConversationHistory(context: ConversationContext): Array<{role: string, content: string}> {
     const history: Array<{role: string, content: string}> = []
-
+    
+    // Add memory context if available
+    if (context.memoryContext) {
+      history.push({
+        role: 'system',
+        content: `Context and memories:\n${context.memoryContext}\n\nUse this context to inform your responses.`
+      })
+    }
+    
     // Add recent conversation history (last 10 messages for context)
     const recentMessages = context.messages.slice(-10)
     
@@ -536,7 +545,15 @@ export class GeminiAPI {
 
   private buildConversationHistory(context: ConversationContext): Array<{role: string, parts: Array<{text: string}>}> {
     const history: Array<{role: string, parts: Array<{text: string}>}> = []
-
+    
+    // Add memory context if available
+    if (context.memoryContext) {
+      history.push({
+        role: 'user',
+        parts: [{ text: `Context and memories:\n${context.memoryContext}\n\nUse this context to inform your responses.` }]
+      })
+    }
+    
     // Add recent conversation history (last 10 messages for context)
     const recentMessages = context.messages.slice(-10)
     

@@ -6,3 +6,5 @@ alwaysApply: true
 3. Make sure there is best of UI and UX
 4. Never use gradients unless necessary
 5. never make changes to already existing stuff unless asked explicitly
+6. When i ask to change or update some piece of code only target change that part of the code dont change the whole thing.
+7. Everytime you make a change to anything make sure to go through complete code involving that part of the change and see the best practices, dont just blindly go and make that change or fix that.

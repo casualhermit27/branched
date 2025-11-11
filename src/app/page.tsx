@@ -4,10 +4,15 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import FlowCanvas from '@/components/flow-canvas'
 import AIPills from '@/components/ai-pills'
 import ChatInterface from '@/components/chat-interface'
+import ChatBranchesView from '@/components/chat-branches-view'
 import Sidebar from '@/components/sidebar'
 import ExportImportModal from '@/components/export-import-modal'
 import { CommandPalette } from '@/components/command-palette'
 import { useToast } from '@/components/toast'
+import { ThemeToggle } from '@/components/theme-toggle'
+import { BranchWarningModal } from '@/components/branch-warning-modal'
+import { BranchNavigation } from '@/components/branch-navigation'
+import { ArrowsIn, ArrowsOut, DotsThree } from '@phosphor-icons/react'
 import { aiService, type ConversationContext } from '@/services/ai-api'
 import { ConversationExport } from '@/services/conversation-export'
 import { useMongoDB } from '@/hooks/use-mongodb'
@@ -47,15 +52,29 @@ export default function Home() {
   const defaultAI: AI = {
     id: 'best',
     name: 'Best',
-    color: 'bg-gradient-to-r from-purple-100 to-blue-100 text-purple-800 border-purple-200',
+    color: 'bg-gradient-to-r from-purple-100 via-indigo-100 to-blue-100 text-purple-800 border-purple-300 dark:from-purple-900/30 dark:via-indigo-900/30 dark:to-blue-900/30 dark:text-purple-300 dark:border-purple-700',
     logo: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="12" cy="12" r="10" stroke="#8B5CF6" strokeWidth="1.5" fill="none"/>
-        <path d="M8 12L10.5 9.5L15.5 14.5" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <circle cx="6" cy="6" r="1" fill="#8B5CF6"/>
-        <circle cx="18" cy="6" r="1" fill="#8B5CF6"/>
-        <circle cx="6" cy="18" r="1" fill="#8B5CF6"/>
-        <circle cx="18" cy="18" r="1" fill="#8B5CF6"/>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-sm">
+        <defs>
+          <linearGradient id="bestGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#8B5CF6" />
+            <stop offset="50%" stopColor="#6366F1" />
+            <stop offset="100%" stopColor="#3B82F6" />
+          </linearGradient>
+        </defs>
+        {/* Star shape - represents "best" */}
+        <path 
+          d="M12 2L14.5 8.5L21 9.5L16 14L17.5 20.5L12 17L6.5 20.5L8 14L3 9.5L9.5 8.5L12 2Z" 
+          fill="url(#bestGradient)" 
+          opacity="0.9"
+          className="drop-shadow-sm"
+        />
+        {/* Inner highlight */}
+        <path 
+          d="M12 5L13.5 9L17 9.5L14 12L14.5 15.5L12 13.5L9.5 15.5L10 12L7 9.5L10.5 9L12 5Z" 
+          fill="white" 
+          opacity="0.3"
+        />
       </svg>
     )
   }
@@ -68,6 +87,28 @@ export default function Home() {
   const [conversationNodes, setConversationNodes] = useState<any[]>([])
   const [showExportImport, setShowExportImport] = useState(false)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
+  const [viewMode, setViewMode] = useState<'map' | 'chat'>('map') // 'map' for FlowCanvas, 'chat' for Chat view
+  const [allNodesMinimized, setAllNodesMinimized] = useState(false) // Track if all nodes are minimized
+  const minimizeAllRef = useRef<(() => void) | null>(null) // Ref to store minimize all function from FlowCanvas
+  const [showMenu, setShowMenu] = useState(false) // Track menu visibility
+  const menuRef = useRef<HTMLDivElement>(null) // Ref for menu container
+  
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false)
+      }
+    }
+
+    if (showMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showMenu])
   
   // Guard to avoid duplicate branch creation from StrictMode double effects
   const creatingBranchRef = useRef<Set<string>>(new Set())
@@ -85,7 +126,8 @@ export default function Home() {
     loadConversation,
     isSaving,
     lastSaved,
-    error: mongoError
+    error: mongoError,
+    currentConversationId
   } = useMongoDB({
     autoSave: true,
     autoSaveDelay: 2000,
@@ -106,6 +148,14 @@ export default function Home() {
   // Track current conversation ID
   const currentConversationIdRef = useRef<string | null>(null)
   const isInitialLoadRef = useRef(true)
+  
+  // Sync ref with hook's conversation ID (for when a new conversation is created)
+  useEffect(() => {
+    if (currentConversationId && currentConversationId !== currentConversationIdRef.current) {
+      console.log('🔄 Syncing conversation ID ref:', currentConversationIdRef.current, '->', currentConversationId)
+      currentConversationIdRef.current = currentConversationId
+    }
+  }, [currentConversationId])
   
 
   // Keyboard shortcuts
@@ -178,13 +228,26 @@ export default function Home() {
   // Function to restore a conversation
   const restoreConversation = (conversation: any) => {
     console.log('🔄 Restoring conversation:', conversation._id)
+    console.log('📊 Conversation data:', {
+      id: conversation._id,
+      title: conversation.title,
+      mainMessagesCount: conversation.mainMessages?.length || 0,
+      branchesCount: conversation.branches?.length || 0,
+      selectedAIsCount: conversation.selectedAIs?.length || 0
+    })
     
-    // Restore ALL state immediately
-    if (conversation.mainMessages) {
+    // Ensure conversation ID is set
+    if (conversation._id) {
+      currentConversationIdRef.current = conversation._id
+      console.log('✅ Set conversation ID:', conversation._id)
+    }
+    
+    // Restore ALL state immediately with complete isolation
+    if (conversation.mainMessages && Array.isArray(conversation.mainMessages)) {
       setMessages(conversation.mainMessages)
       console.log('✅ Restored messages:', conversation.mainMessages.length)
     } else {
-      console.log('⚠️ No mainMessages in conversation')
+      console.log('⚠️ No mainMessages in conversation, setting empty array')
       setMessages([])
     }
     
@@ -236,6 +299,9 @@ export default function Home() {
       setMultiModelMode(false)
     }
     
+    // Always ensure main node is included in restored nodes
+    const mainNodeInBranches = conversation.branches?.find((b: any) => b.id === 'main' || b.isMain)
+    
     if (conversation.branches && conversation.branches.length > 0) {
       console.log('📦 Restoring branches data:', conversation.branches.length)
       console.log('📦 Branch IDs from MongoDB:', conversation.branches.map((b: any) => ({ id: b.id, isMain: b.isMain || b.id === 'main' })))
@@ -254,7 +320,7 @@ export default function Home() {
       }
       
       // Restore full conversation nodes with ALL data
-      const restoredNodes = conversation.branches.map((b: any) => {
+      let restoredNodes = conversation.branches.map((b: any) => {
         const isMainNode = b.isMain || b.id === 'main'
         return {
           id: b.id,
@@ -277,13 +343,27 @@ export default function Home() {
           let logoElement: any
           if (ai.id === 'best') {
             logoElement = (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="12" cy="12" r="10" stroke="#8B5CF6" strokeWidth="1.5" fill="none"/>
-                <path d="M8 12L10.5 9.5L15.5 14.5" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <circle cx="6" cy="6" r="1" fill="#8B5CF6"/>
-                <circle cx="18" cy="6" r="1" fill="#8B5CF6"/>
-                <circle cx="6" cy="18" r="1" fill="#8B5CF6"/>
-                <circle cx="18" cy="18" r="1" fill="#8B5CF6"/>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-sm">
+                <defs>
+                  <linearGradient id="bestGradientRestore" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#8B5CF6" />
+                    <stop offset="50%" stopColor="#6366F1" />
+                    <stop offset="100%" stopColor="#3B82F6" />
+                  </linearGradient>
+                </defs>
+                {/* Star shape - represents "best" */}
+                <path 
+                  d="M12 2L14.5 8.5L21 9.5L16 14L17.5 20.5L12 17L6.5 20.5L8 14L3 9.5L9.5 8.5L12 2Z" 
+                  fill="url(#bestGradientRestore)" 
+                  opacity="0.9"
+                  className="drop-shadow-sm"
+                />
+                {/* Inner highlight */}
+                <path 
+                  d="M12 5L13.5 9L17 9.5L14 12L14.5 15.5L12 13.5L9.5 15.5L10 12L7 9.5L10.5 9L12 5Z" 
+                  fill="white" 
+                  opacity="0.3"
+                />
               </svg>
             )
           } else if (ai.id === 'gemini-2.5-pro') {
@@ -307,30 +387,88 @@ export default function Home() {
         isMinimized: b.isMinimized || false,
         showAIPill: b.showAIPill || false,
         position: b.position || { x: 0, y: 0 },
-        nodeData: b.nodeData || {}
+        nodeData: b.nodeData || {},
+        parentMessageId: b.parentMessageId,
+        inheritedMessages: b.inheritedMessages || [],
+        branchMessages: b.branchMessages || []
       }
     })
+    
+    // If main node is not in branches, create it from mainMessages
+    if (!mainNodeInBranches) {
+      console.log('📝 Main node not in branches, creating from mainMessages')
+      const mainNode = {
+        id: 'main',
+        type: 'main',
+        title: 'Main Conversation',
+        messages: conversation.mainMessages || messages,
+        timestamp: Date.now(),
+        parentId: undefined,
+        children: [],
+        isActive: false,
+        selectedAIs: conversation.selectedAIs || selectedAIs,
+        multiModelMode: conversation.multiModelMode || false,
+        isMain: true,
+        isMinimized: false,
+        showAIPill: false,
+        position: { x: 400, y: 50 },
+        nodeData: {},
+        parentMessageId: undefined,
+        inheritedMessages: [],
+        branchMessages: []
+      }
+      restoredNodes = [mainNode, ...restoredNodes]
+      console.log('✅ Added main node to restored nodes')
+    } else {
+      // Ensure main node messages are up to date
+      const mainNodeIndex = restoredNodes.findIndex((n: any) => n.id === 'main' || n.isMain)
+      if (mainNodeIndex !== -1) {
+        restoredNodes[mainNodeIndex].messages = conversation.mainMessages || messages
+        console.log('✅ Updated main node messages in restored nodes')
+      }
+    }
       
       setConversationNodes(restoredNodes)
       
       console.log('✅ Restored conversationNodes:', {
         totalNodes: restoredNodes.length,
-        branches: restoredNodes.filter(n => !n.isMain && n.id !== 'main').length,
-        branchDetails: restoredNodes.filter(n => !n.isMain && n.id !== 'main').map(n => ({
+        branches: restoredNodes.filter((n: any) => !n.isMain && n.id !== 'main').length,
+        branchDetails: restoredNodes.filter((n: any) => !n.isMain && n.id !== 'main').map((n: any) => ({
           id: n.id,
           type: n.type,
           parentId: n.parentId,
           messagesCount: n.messages?.length || 0,
           title: n.title
         })),
-        withMessages: restoredNodes.filter(n => n.messages?.length > 0).length,
-        withAIs: restoredNodes.filter(n => n.selectedAIs?.length > 0).length
+        withMessages: restoredNodes.filter((n: any) => n.messages?.length > 0).length,
+        withAIs: restoredNodes.filter((n: any) => n.selectedAIs?.length > 0).length
       })
     } else {
       console.log('⚠️ No branches in conversation')
-      // Initialize empty arrays if no branches
+      // Create main node even if no branches
+      const mainNode = {
+        id: 'main',
+        type: 'main',
+        title: 'Main Conversation',
+        messages: conversation.mainMessages || messages,
+        timestamp: Date.now(),
+        parentId: undefined,
+        children: [],
+        isActive: false,
+        selectedAIs: conversation.selectedAIs || selectedAIs,
+        multiModelMode: conversation.multiModelMode || false,
+        isMain: true,
+        isMinimized: false,
+        showAIPill: false,
+        position: { x: 400, y: 50 },
+        nodeData: {},
+        parentMessageId: undefined,
+        inheritedMessages: [],
+        branchMessages: []
+      }
       setBranches([])
-      setConversationNodes([])
+      setConversationNodes([mainNode])
+      console.log('✅ Created main node for conversation without branches')
     }
     
     // Reset current branch when switching conversations
@@ -507,12 +645,56 @@ export default function Home() {
       // Convert conversationNodes to proper branch format for MongoDB
       const branchesForSave = allNodes.map(node => {
         const isMainNode = node.id === 'main' || node.isMain
-        const nodeMessages = isMainNode ? messages : (node.messages || [])
+        // CRITICAL FIX: Nodes can have messages in different places:
+        // 1. node.data.messages (React Flow format)
+        // 2. node.messages (flattened format from updateConversationNodes)
+        // Check both locations
+        const nodeMessages = isMainNode 
+          ? messages 
+          : (node.data?.messages || node.messages || [])
+        
+        console.log('🔍 Processing node for save:', {
+          id: node.id,
+          isMain: isMainNode,
+          hasData: !!node.data,
+          hasDataMessages: !!(node.data?.messages),
+          hasNodeMessages: !!(node.messages),
+          messagesCount: nodeMessages.length,
+          hasInheritedMessages: !!(node.data?.inheritedMessages || node.inheritedMessages),
+          hasBranchMessages: !!(node.data?.branchMessages || node.branchMessages),
+          messageIds: nodeMessages.map((m: any) => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 20) }))
+        })
+        
+        // Try to find parentMessageId from various sources
+        let parentMessageId = node.data?.parentMessageId || node.parentMessageId || node.nodeData?.parentMessageId
+        
+        // If no parentMessageId, try to infer it from the node's first message
+        if (!parentMessageId && !isMainNode && nodeMessages.length > 0) {
+          // Find the first user message in the branch to get its parent
+          const firstUserMessage = nodeMessages.find((m: any) => m.isUser)
+          if (firstUserMessage?.parentId) {
+            parentMessageId = firstUserMessage.parentId
+          }
+        }
+        
+        // If still no parentMessageId, try to find it from inheritedMessages
+        if (!parentMessageId && !isMainNode) {
+          const inherited = node.data?.inheritedMessages || node.inheritedMessages || []
+          if (inherited.length > 0) {
+            // The last message in inheritedMessages is likely the parent
+            const lastInherited = inherited[inherited.length - 1]
+            parentMessageId = lastInherited.id
+            console.log('🔍 Inferred parentMessageId from inheritedMessages:', parentMessageId)
+          }
+        }
         
         return {
           id: node.id,
           label: node.title || node.data?.label || 'Untitled',
-          parentId: node.parentId || (isMainNode ? undefined : 'main'),
+          parentId: node.parentId || node.data?.parentId || (isMainNode ? undefined : 'main'),
+          parentMessageId: isMainNode ? undefined : (parentMessageId || 'unknown'), // Use 'unknown' as fallback instead of empty string
+          inheritedMessages: isMainNode ? undefined : (node.data?.inheritedMessages || node.inheritedMessages || []),
+          branchMessages: isMainNode ? undefined : (node.data?.branchMessages || node.branchMessages || []),
           messages: sanitizeMessages(nodeMessages), // Sanitize messages before saving
           selectedAIs: isMainNode ? selectedAIs : (node.selectedAIs || node.data?.selectedAIs || []),
           multiModelMode: isMainNode ? multiModelMode : (node.multiModelMode || false),
@@ -530,28 +712,57 @@ export default function Home() {
         isMain: b.isMain,
         type: b.isMain ? 'main' : 'branch',
         parentId: b.parentId,
+        parentMessageId: b.parentMessageId,
         messagesCount: b.messages?.length || 0,
-        label: b.label
+        label: b.label,
+        hasInheritedMessages: !!(b.inheritedMessages?.length),
+        hasBranchMessages: !!(b.branchMessages?.length)
       })))
       
-      // Log non-main branches specifically
-      const nonMainBranches = branchesForSave.filter(b => !b.isMain && b.id !== 'main')
+      // Filter out main node from branches - main should not be in branches array
+      const branchesOnly = branchesForSave.filter(b => {
+        const isNotMain = !b.isMain && b.id !== 'main'
+        if (!isNotMain) {
+          console.log('🔍 Filtering out main node:', { id: b.id, isMain: b.isMain })
+        }
+        return isNotMain
+      })
+      
+      console.log('🔍 After filtering main nodes:', {
+        beforeFilter: branchesForSave.length,
+        afterFilter: branchesOnly.length,
+        filteredOut: branchesForSave.length - branchesOnly.length
+      })
+      
+      // Log branches that might have issues, but don't filter them out - let MongoDB handle validation
+      const branchesWithIssues = branchesOnly.filter(b => !b.parentMessageId || b.parentMessageId === 'unknown')
+      if (branchesWithIssues.length > 0) {
+        console.warn('⚠️ Branches with missing or inferred parentMessageId:', branchesWithIssues.map(b => ({ 
+          id: b.id, 
+          label: b.label,
+          parentMessageId: b.parentMessageId,
+          hasInheritedMessages: !!(b.inheritedMessages?.length),
+          hasMessages: !!(b.messages?.length)
+        })))
+      }
+      
       console.log('📦 Non-main branches to save:', {
-        count: nonMainBranches.length,
-        branches: nonMainBranches.map(b => ({
+        count: branchesOnly.length,
+        branches: branchesOnly.map(b => ({
           id: b.id,
           type: 'branch',
           parentId: b.parentId,
+          parentMessageId: b.parentMessageId,
           messagesCount: b.messages?.length || 0,
           label: b.label
         }))
       })
       
       console.log('📦 Saving branches to MongoDB:', {
-        count: branchesForSave.length,
-        ids: branchesForSave.map(b => b.id),
+        count: branchesOnly.length,
+        ids: branchesOnly.map(b => b.id),
         hasMain: branchesForSave.some(b => b.id === 'main'),
-        nonMainCount: nonMainBranches.length
+        nonMainCount: branchesOnly.length
       })
       
       const conversationData = mongoDBService.convertAppStateToMongoDB({
@@ -559,7 +770,7 @@ export default function Home() {
         messages: sanitizeMessages(messages), // Sanitize main messages too
         selectedAIs,
         multiModelMode,
-        branches: branchesForSave,
+        branches: branchesOnly, // Only save non-main branches
         contextLinks: [],
         collapsedNodes: [],
         minimizedNodes: [],
@@ -621,7 +832,22 @@ export default function Home() {
       }
       
       // Save to MongoDB only
-      autoSaveConversation(conversationData, currentConversationIdRef.current || undefined)
+      // Save conversation - if ID doesn't exist, it will create a new one
+      // Note: autoSaveConversation doesn't return a promise, but saveConversation does
+      // We'll handle ID updates in the onSave callback
+      const conversationIdToSave = currentConversationIdRef.current
+      
+      console.log('💾 Calling autoSaveConversation with conversationData:', {
+        branchesCount: conversationData.branches?.length || 0,
+        messagesCount: conversationData.mainMessages?.length || 0,
+        conversationId: conversationIdToSave,
+        isNewConversation: !conversationIdToSave
+      })
+      
+      // Ensure each conversation saves to its own document
+      // If no conversation ID exists, it will create a new one
+      // If conversation ID exists, it will update that specific conversation
+      autoSaveConversation(conversationData, conversationIdToSave || undefined)
       }, 100) // Small delay to ensure React state updates are complete
       
       return () => clearTimeout(timeoutId)
@@ -750,49 +976,114 @@ export default function Home() {
   // Handle deleting a branch
   const handleDeleteBranch = async (branchId: string) => {
     try {
+      // Don't allow deleting main branch
+      if (branchId === 'main') {
+        addToast({
+          type: 'error',
+          title: 'Cannot Delete',
+          message: 'Cannot delete the main conversation.'
+        })
+        return
+      }
+
+      // Remove from conversationNodes
+      setConversationNodes(prev => {
+        const updated = prev.filter(n => n.id !== branchId)
+        
+        // Also delete from MongoDB if it's a saved conversation
+        if (currentConversationIdRef.current) {
+          // Use setTimeout to ensure state update happens first
+          setTimeout(async () => {
+            try {
+              const response = await fetch(`/api/conversations/${currentConversationIdRef.current}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  branches: updated
+                    .filter(n => n.id !== 'main' && !n.isMain)
+                    .map(n => ({
+                      id: n.id,
+                      label: n.title || 'Branch',
+                      messages: n.messages || [],
+                      inheritedMessages: n.inheritedMessages || [],
+                      branchMessages: n.branchMessages || [],
+                      parentId: n.parentId,
+                      parentMessageId: n.parentMessageId,
+                      selectedAIs: n.selectedAIs || [],
+                      multiModelMode: n.multiModelMode || false,
+                      isMain: n.isMain || false,
+                      position: n.position || { x: 0, y: 0 }
+                    }))
+                })
+              })
+              
+              if (!response.ok) {
+                console.error('Failed to update conversation in MongoDB')
+              }
+            } catch (error) {
+              console.error('Error updating MongoDB:', error)
+            }
+          }, 100)
+        }
+        
+        return updated
+      })
+      
       // Remove from local state
       setSavedBranches(prev => prev.filter(b => b.id !== branchId))
       
-      // Also delete from MongoDB if it's a saved conversation
-      if (currentConversationIdRef.current === branchId) {
-        currentConversationIdRef.current = null
+      // If this was the active branch, switch to main
+      if (activeBranchId === branchId) {
+        setActiveBranchId('main')
+        setCurrentBranch(null)
       }
       
       addToast({
         type: 'success',
         title: 'Deleted',
-        message: 'Conversation deleted successfully.'
+        message: 'Branch deleted successfully.'
       })
     } catch (error) {
       console.error('Error deleting branch:', error)
       addToast({
         type: 'error',
         title: 'Delete Failed',
-        message: 'Could not delete conversation.'
+        message: 'Could not delete branch.'
       })
     }
   }
   
   // Create new conversation
   const handleCreateNewConversation = async () => {
-    // Reset all state
+    console.log('🆕 Creating completely new conversation...')
+    
+    // COMPLETE STATE RESET - Ensure everything is cleared
     setMessages([])
     setSelectedAIs([defaultAI])
     setMultiModelMode(false)
     setBranches([])
     setConversationNodes([])
     setCurrentBranch(null)
+    setActiveBranchId(null)
+    setViewMode('map')
     
-    // Clear current conversation ID to trigger creation of a new one
+    // Clear all refs and caches
     currentConversationIdRef.current = null
+    branchCacheRef.current.clear()
+    creatingBranchRef.current.clear()
+    branchDataRef.current.clear()
     
-    // Create new conversation in MongoDB
+    console.log('🧹 Cleared all state and refs for new conversation')
+    
+    // Create new conversation in MongoDB with unique ID
     try {
+      const uniqueTitle = `New Conversation ${new Date().toLocaleString()}`
+      
       const response = await fetch('/api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: 'New Conversation',
+          title: uniqueTitle,
           mainMessages: [],
           selectedAIs: [{ 
             id: defaultAI.id, 
@@ -821,10 +1112,42 @@ export default function Home() {
       
       const data = await response.json()
       
-      if (data.success) {
-        // Set the new conversation ID
-        currentConversationIdRef.current = data.data._id
-        console.log('✅ Created new conversation:', currentConversationIdRef.current)
+      if (data.success && data.data?._id) {
+        // Set the new conversation ID immediately
+        const newConversationId = data.data._id
+        currentConversationIdRef.current = newConversationId
+        
+        console.log('✅ Created new conversation with unique ID:', newConversationId)
+        console.log('📊 Conversation details:', {
+          id: newConversationId,
+          title: data.data.title,
+          createdAt: data.data.createdAt,
+          branchesCount: data.data.branches?.length || 0
+        })
+        
+        // Initialize with main node only
+        const mainNode = {
+          id: 'main',
+          type: 'main',
+          title: 'Main Conversation',
+          messages: [],
+          timestamp: Date.now(),
+          parentId: undefined,
+          children: [],
+          isActive: false,
+          selectedAIs: [defaultAI],
+          multiModelMode: false,
+          isMain: true,
+          isMinimized: false,
+          showAIPill: false,
+          position: { x: 400, y: 50 },
+          nodeData: {},
+          parentMessageId: undefined,
+          inheritedMessages: [],
+          branchMessages: []
+        }
+        
+        setConversationNodes([mainNode])
         
         // Refresh conversation list
         const conversationsResponse = await fetch('/api/conversations')
@@ -838,7 +1161,7 @@ export default function Home() {
         addToast({
           type: 'success',
           title: 'New Conversation',
-          message: 'Created a new conversation'
+          message: `Created a new conversation (${newConversationId.slice(-8)})`
         })
       } else {
         console.error('❌ Error creating conversation:', data.error)
@@ -861,19 +1184,45 @@ export default function Home() {
   // Select conversation from history
   const handleSelectConversation = async (conversationId: string) => {
     try {
+      console.log('🔄 Switching to conversation:', conversationId)
+      
+      // Clear all state first to ensure isolation
+      setMessages([])
+      setBranches([])
+      setConversationNodes([])
+      setCurrentBranch(null)
+      setActiveBranchId(null)
+      
+      // Clear all refs and caches for complete isolation
+      branchCacheRef.current.clear()
+      creatingBranchRef.current.clear()
+      branchDataRef.current.clear()
+      
+      console.log('🧹 Cleared all state for conversation switch')
+      
       // Get conversation by ID
       const response = await fetch(`/api/conversations/${conversationId}`)
       const data = await response.json()
       
-      if (data.success) {
-        // Restore conversation
+      if (data.success && data.data) {
+        // Set conversation ID immediately
+        currentConversationIdRef.current = conversationId
+        
+        console.log('✅ Loaded conversation:', {
+          id: conversationId,
+          title: data.data.title,
+          messagesCount: data.data.mainMessages?.length || 0,
+          branchesCount: data.data.branches?.length || 0
+        })
+        
+        // Restore conversation with complete isolation
         restoreConversation(data.data)
         
         // Show success toast
         addToast({
           type: 'success',
           title: 'Conversation Loaded',
-          message: 'Loaded conversation from history'
+          message: `Loaded: ${data.data.title || 'Conversation'}`
         })
         
         // Canvas will automatically show if branches exist
@@ -970,10 +1319,46 @@ export default function Home() {
     }
   }
 
+  // Branch cache to prevent duplicates
+  const branchCacheRef = useRef<Map<string, string>>(new Map()) // messageId -> branchId
+  
   // Function to update conversation nodes from flow canvas (with memoization)
   const updateConversationNodes = useCallback((nodes: any[]) => {
     console.log('🔄 updateConversationNodes called with', nodes.length, 'nodes')
-    console.log('🔄 Node IDs from FlowCanvas:', nodes.map(n => n.id))
+    
+    if (!nodes || nodes.length === 0) {
+      console.warn('⚠️ updateConversationNodes called with empty or invalid nodes array!', nodes)
+      return
+    }
+    
+    console.log('🔄 Node IDs from FlowCanvas:', nodes.map(n => ({ 
+      id: n.id, 
+      type: n.type,
+      parentId: n.data?.parentId,
+      parentMessageId: n.data?.parentMessageId,
+      hasMessages: !!(n.data?.messages?.length),
+      messagesCount: n.data?.messages?.length || 0
+    })))
+    
+    // Update branch cache when nodes are updated
+    nodes.forEach(node => {
+      if (node.data?.parentMessageId && node.id !== 'main' && !node.data?.isMain) {
+        const oldBranchId = branchCacheRef.current.get(node.data.parentMessageId)
+        if (oldBranchId !== node.id) {
+          branchCacheRef.current.set(node.data.parentMessageId, node.id)
+          console.log('📦 Updated branch cache:', node.data.parentMessageId, '->', node.id)
+          
+          // Show toast notification for new branch
+          if (!oldBranchId) {
+            addToast({
+              type: 'success',
+              title: 'Branch Created',
+              message: `Branch created successfully`
+            })
+          }
+        }
+      }
+    })
     
     // Only update if nodes have actually changed
     const newConversationNodes = nodes.map(node => {
@@ -995,6 +1380,9 @@ export default function Home() {
         messages: node.data.messages || [],
         timestamp: node.data.messages?.[0]?.timestamp || Date.now(),
         parentId: isMainNode ? undefined : (parentId || 'main'), // Ensure branches have parentId='main'
+        parentMessageId: isMainNode ? undefined : (node.data?.parentMessageId || node.parentMessageId || node.nodeData?.parentMessageId || ''), // CRITICAL: Include parentMessageId for branches
+        inheritedMessages: isMainNode ? undefined : (node.data?.inheritedMessages || node.inheritedMessages || []),
+        branchMessages: isMainNode ? undefined : (node.data?.branchMessages || node.branchMessages || []),
         children: [],
         isActive: node.id === activeBranchId,
         // Store ALL node data for complete restoration
@@ -1078,22 +1466,51 @@ export default function Home() {
       // Check if node data changed (only check essential fields)
       const dataChanged = idsChanged || merged.some((newNode) => {
         const prevNode = prev.find(p => p.id === newNode.id)
-        if (!prevNode) return true
+        if (!prevNode) {
+          console.log('🆕 New node detected:', { 
+            id: newNode.id, 
+            type: newNode.type, 
+            isMain: newNode.isMain,
+            parentMessageId: newNode.parentMessageId,
+            hasMessages: !!(newNode.messages?.length)
+          })
+          return true
+        }
         
-        return prevNode.messages?.length !== newNode.messages?.length ||
+        const changed = prevNode.messages?.length !== newNode.messages?.length ||
                prevNode.isActive !== newNode.isActive ||
-               prevNode.isMain !== newNode.isMain
+               prevNode.isMain !== newNode.isMain ||
+               prevNode.parentMessageId !== newNode.parentMessageId
+        
+        if (changed) {
+          console.log('🔄 Node changed:', { 
+            id: newNode.id, 
+            messagesChanged: prevNode.messages?.length !== newNode.messages?.length,
+            isActiveChanged: prevNode.isActive !== newNode.isActive,
+            isMainChanged: prevNode.isMain !== newNode.isMain,
+            parentMessageIdChanged: prevNode.parentMessageId !== newNode.parentMessageId
+          })
+        }
+        
+        return changed
       })
       
       if (dataChanged) {
         console.log('🔄 Merged conversationNodes:', {
           prevCount: prev.length,
           newCount: merged.length,
-          ids: merged.map(n => n.id)
+          ids: merged.map(n => n.id),
+          branches: merged.filter(n => !n.isMain && n.id !== 'main').map(n => ({
+            id: n.id,
+            parentMessageId: n.parentMessageId,
+            hasMessages: !!(n.messages?.length),
+            messagesCount: n.messages?.length || 0
+          }))
         })
         return merged
       }
       
+      console.log('⏭️ No changes detected, skipping update')
       return prev
     })
   }, [activeBranchId])
@@ -1157,10 +1574,25 @@ export default function Home() {
     })
     
     // Create conversation context
+    // 🧠 Get memory context for this branch
+    let memoryContext = ''
+    try {
+      const memoryResponse = await fetch(`/api/memory/context?branchId=${activeBranchId || 'main'}&depth=3&maxMemories=50`)
+      if (memoryResponse.ok) {
+        const memoryData = await memoryResponse.json()
+        if (memoryData.success) {
+          memoryContext = memoryData.data.aggregatedContext
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error fetching memory context:', error)
+    }
+    
     const context: ConversationContext = {
       messages: [...messages, newMessage],
       currentBranch: activeBranchId || 'main',
-      parentMessages: messages
+      parentMessages: messages,
+      memoryContext
     }
     
     // Start generating response
@@ -1220,27 +1652,10 @@ export default function Home() {
                        'gpt-4' // fallback
           }
           
-          console.log(`🔍 Checking if ${modelName} is available...`)
-          if (!aiService.isModelAvailable(modelName)) {
-            console.warn(`❌ Model ${modelName} not available, using fallback`)
-            console.warn(`❌ Environment variables:`, {
-              MISTRAL_API_KEY: !!process.env.NEXT_PUBLIC_MISTRAL_API_KEY,
-              GEMINI_API_KEY: !!process.env.NEXT_PUBLIC_GEMINI_API_KEY
-            })
-            return {
-              id: `msg-${Date.now()}-${ai.id}-${index}`,
-              text: `${ai.name} response to: "${text}" (API not configured)`,
-              isUser: false,
-              timestamp: Date.now(),
-              parentId: newMessage.id,
-              children: [],
-              aiModel: ai.id,
-              groupId: groupId
-            }
-          }
-          console.log(`✅ Model ${modelName} is available`)
-
-          console.log(`🚀 Calling ${modelName} API for ${ai.name}`)
+          console.log(`🔍 [MOCK MODE] Generating mock response for ${ai.name}...`)
+          
+          // 🔥 MOCK MODE: Generate mock response instead of calling API
+          const mockResponse = `This is a mock response from ${ai.name} to: "${text}". In a real scenario, this would be generated by the ${modelName} API. This response simulates what the AI would say based on the conversation context.`
           
           // Create streaming message placeholder for multi-model
           const streamingMessageId = `msg-${Date.now()}-${ai.id}-${index}`
@@ -1265,46 +1680,133 @@ export default function Home() {
             throw new Error('Generation aborted')
           }
           
-          const response = await aiService.generateResponse(
-            modelName,
-            text,
-            context,
-            (chunk: string) => {
-              // Check if aborted during streaming
-              if (abortController.signal.aborted) {
-                return
-              }
-              
-              // Handle streaming response - update the streaming message
-              console.log(`Streaming from ${ai.name}:`, chunk)
-              setMessages(prev => prev.map(msg => 
-                msg.id === streamingMessageId 
-                  ? { ...msg, streamingText: (msg.streamingText || '') + chunk }
-                  : msg
-              ))
-            },
-            abortController.signal
-          )
-          console.log(`✅ Got response from ${ai.name}:`, response.text.substring(0, 50) + '...')
+          // 🔥 MOCK STREAMING: Simulate streaming by chunking the mock response
+          const words = mockResponse.split(' ')
+          const chunkDelay = 50 // ms between chunks
+          
+          for (let i = 0; i < words.length; i++) {
+            if (abortController.signal.aborted) {
+              throw new Error('Generation aborted')
+            }
+            
+            const chunk = (i === 0 ? '' : ' ') + words[i]
+            
+            // Handle streaming response - update the streaming message
+            console.log(`[MOCK] Streaming from ${ai.name}:`, chunk)
+            setMessages(prev => prev.map(msg => 
+              msg.id === streamingMessageId 
+                ? { ...msg, streamingText: (msg.streamingText || '') + chunk }
+                : msg
+            ))
+            
+            // 🔥 NEW: Also update branch nodes that have matching streaming messages
+            setConversationNodes((prevNodes: any[]) => {
+              return prevNodes.map(node => {
+                if (node.id === 'main') return node
+                
+                const branchMessages = node.data?.messages || []
+                const matchingStreamingMessage = branchMessages.find((msg: any) => 
+                  msg.isStreaming && 
+                  msg.aiModel === ai.id &&
+                  msg.id?.startsWith(`branch-${streamingMessageId}`)
+                )
+                
+                if (matchingStreamingMessage) {
+                  return {
+                    ...node,
+                    data: {
+                      ...node.data,
+                      messages: branchMessages.map((msg: any) =>
+                        msg.id === matchingStreamingMessage.id
+                          ? { ...msg, streamingText: (msg.streamingText || '') + chunk }
+                          : msg
+                      )
+                    }
+                  }
+                }
+                
+                return node
+              })
+            })
+            
+            // Wait before next chunk
+            await new Promise(resolve => setTimeout(resolve, chunkDelay))
+          }
+          
+          console.log(`✅ [MOCK] Got response from ${ai.name}:`, mockResponse.substring(0, 50) + '...')
 
           // Finalize the streaming message
           setMessages(prev => prev.map(msg => 
             msg.id === streamingMessageId 
               ? { 
                   ...msg, 
-                  text: response.text, 
+                  text: mockResponse, 
                   isStreaming: false, 
                   streamingText: undefined,
-                  timestamp: response.timestamp
+                  timestamp: Date.now()
                 }
               : msg
           ))
+          
+          // 🔥 NEW: Also finalize streaming messages in branches
+          setConversationNodes((prevNodes: any[]) => {
+            return prevNodes.map(node => {
+              if (node.id === 'main') return node
+              
+              const branchMessages = node.data?.messages || []
+              const matchingStreamingMessage = branchMessages.find((msg: any) => 
+                msg.isStreaming && 
+                msg.aiModel === ai.id &&
+                msg.id?.startsWith(`branch-${streamingMessageId}`)
+              )
+              
+              if (matchingStreamingMessage) {
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    messages: branchMessages.map((msg: any) =>
+                      msg.id === matchingStreamingMessage.id
+                        ? { 
+                            ...msg, 
+                            text: mockResponse, 
+                            isStreaming: false, 
+                            streamingText: undefined,
+                            timestamp: Date.now()
+                          }
+                        : msg
+                    )
+                  }
+                }
+              }
+              
+              return node
+            })
+          })
+          
+          // 🧠 Extract memories from AI response (mock)
+          try {
+            await fetch('/api/memory/extract', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                responseText: mockResponse,
+                branchId: activeBranchId || 'main',
+                messageId: streamingMessageId,
+                userId: undefined,
+                topic: ai.name
+              })
+            })
+            console.log('🧠 Memories extracted from AI response')
+          } catch (error) {
+            console.error('❌ Error extracting memories:', error)
+          }
 
           return {
             id: streamingMessageId,
-            text: response.text,
+            text: mockResponse,
             isUser: false,
-            timestamp: response.timestamp,
+            timestamp: Date.now(),
             parentId: newMessage.id,
             children: [],
             aiModel: ai.id,
@@ -1404,10 +1906,10 @@ export default function Home() {
         
         let aiResponse: Message
         
-        console.log(`🔍 Single mode: Checking if ${modelName} is available...`)
-        if (aiService.isModelAvailable(modelName)) {
-          console.log(`✅ Single mode: Model ${modelName} is available`)
-          console.log(`🚀 Single mode: Calling ${modelName} API for ${selectedAI?.name}`)
+        console.log(`🔍 [MOCK MODE] Single mode: Generating mock response for ${selectedAI?.name}`)
+        // 🔥 MOCK MODE: Always use mock responses (no API calls)
+        if (selectedAI) {
+          console.log(`🚀 [MOCK MODE] Generating mock response for ${selectedAI.name}`)
           
           // Create streaming message placeholder
           const streamingMessageId = `msg-${Date.now()}`
@@ -1418,7 +1920,7 @@ export default function Home() {
             timestamp: Date.now(),
             parentId: newMessage.id,
             children: [],
-            aiModel: selectedAI?.id,
+            aiModel: selectedAI.id,
             isStreaming: true,
             streamingText: ''
           }
@@ -1431,46 +1933,52 @@ export default function Home() {
             throw new Error('Generation aborted')
           }
           
-          const response = await aiService.generateResponse(
-            modelName,
-            text,
-            context,
-            (chunk: string) => {
-              // Check if aborted during streaming
-              if (abortController.signal.aborted) {
-                return
-              }
-              
-              // Handle streaming response - update the streaming message
-              console.log(`Streaming from ${selectedAI?.name}:`, chunk)
-              setMessages(prev => prev.map(msg => 
-                msg.id === streamingMessageId 
-                  ? { ...msg, streamingText: (msg.streamingText || '') + chunk }
-                  : msg
-              ))
-            },
-            abortController.signal
-          )
-          console.log(`✅ Single mode: Got response from ${selectedAI?.name}:`, response.text.substring(0, 50) + '...')
+          // 🔥 MOCK MODE: Generate mock response instead of calling API
+          const mockResponse = `This is a mock response from ${selectedAI.name} to: "${text}". In a real scenario, this would be generated by the ${modelName} API. This response simulates what the AI would say based on the conversation context.`
+          
+          // 🔥 MOCK STREAMING: Simulate streaming by chunking the mock response
+          const words = mockResponse.split(' ')
+          const chunkDelay = 50 // ms between chunks
+          
+          for (let i = 0; i < words.length; i++) {
+            if (abortController.signal.aborted) {
+              throw new Error('Generation aborted')
+            }
+            
+            const chunk = (i === 0 ? '' : ' ') + words[i]
+            
+            // Handle streaming response - update the streaming message
+            console.log(`[MOCK] Streaming from ${selectedAI?.name}:`, chunk)
+            setMessages(prev => prev.map(msg => 
+              msg.id === streamingMessageId 
+                ? { ...msg, streamingText: (msg.streamingText || '') + chunk }
+                : msg
+            ))
+            
+            // Wait before next chunk
+            await new Promise(resolve => setTimeout(resolve, chunkDelay))
+          }
+          
+          console.log(`✅ [MOCK] Single mode: Got response from ${selectedAI?.name}:`, mockResponse.substring(0, 50) + '...')
           
           // Finalize the streaming message
           setMessages(prev => prev.map(msg => 
             msg.id === streamingMessageId 
               ? { 
                   ...msg, 
-                  text: response.text, 
+                  text: mockResponse, 
                   isStreaming: false, 
                   streamingText: undefined,
-                  timestamp: response.timestamp
+                  timestamp: Date.now()
                 }
               : msg
           ))
           
           aiResponse = {
             id: streamingMessageId,
-            text: response.text,
+            text: mockResponse,
             isUser: false,
-            timestamp: response.timestamp,
+            timestamp: Date.now(),
             parentId: newMessage.id,
             children: [],
             aiModel: selectedAI?.id
@@ -1586,10 +2094,58 @@ export default function Home() {
   const mainAbortControllerRef = useRef<AbortController | null>(null) // Track abort controller for main node
   const [savedBranches, setSavedBranches] = useState<Branch[]>([])
   const [lastBranchTime, setLastBranchTime] = useState<number>(0)
+  
+  // Branch warning modal state
+  const [showBranchWarning, setShowBranchWarning] = useState(false)
+  const [pendingBranchData, setPendingBranchData] = useState<{
+    messageId: string
+    isMultiBranch: boolean
+    messageText?: string
+  } | null>(null)
+
+  // Check if branch exists for a message
+  const checkBranchExists = (messageId: string): boolean => {
+    // Check in conversationNodes if any branch has this messageId as parentMessageId
+    return conversationNodes.some(node => 
+      node.parentMessageId === messageId && node.id !== 'main' && !node.isMain
+    )
+  }
 
   const branchFromMessage = (messageId: string, isMultiBranch: boolean = false) => {
     console.log('📍 branchFromMessage called with:', { messageId, isMultiBranch })
     if (!messageId) return
+    
+    // Check cache first
+    const cachedBranchId = branchCacheRef.current.get(messageId)
+    if (cachedBranchId) {
+      console.log('📦 Branch exists in cache:', cachedBranchId)
+      // Navigate to existing branch instead of creating new one
+      setActiveBranchId(cachedBranchId)
+      addToast({
+        type: 'info',
+        title: 'Branch Exists',
+        message: 'Navigating to existing branch'
+      })
+      return
+    }
+    
+    // Find the message to get its text
+    const targetMessage = messages.find(m => m.id === messageId) || 
+                         conversationNodes.flatMap(n => n.messages || []).find(m => m.id === messageId)
+    
+    // Check if branch already exists
+    const branchExists = checkBranchExists(messageId)
+    
+    if (branchExists && !isMultiBranch) {
+      // Show warning modal for single branch
+      setPendingBranchData({
+        messageId,
+        isMultiBranch: false,
+        messageText: targetMessage?.text?.substring(0, 100)
+      })
+      setShowBranchWarning(true)
+      return
+    }
     
     // When in chat mode, switch to canvas mode first
     if (branches.length === 0) {
@@ -1603,6 +2159,41 @@ export default function Home() {
       setPendingBranchMessageId(messageId)
     }
   }
+
+  // Handle branch warning confirmation
+  const handleBranchWarningConfirm = () => {
+    if (pendingBranchData) {
+      setShowBranchWarning(false)
+      const { messageId } = pendingBranchData
+      
+      // When in chat mode, switch to canvas mode first
+      if (branches.length === 0) {
+        setTimeout(() => {
+          setPendingBranchMessageId(messageId)
+        }, 50)
+      } else {
+        setPendingBranchMessageId(messageId)
+      }
+      
+      setPendingBranchData(null)
+    }
+  }
+
+  // Handle branch warning cancel
+  const handleBranchWarningCancel = () => {
+    setShowBranchWarning(false)
+    setPendingBranchData(null)
+  }
+
+  // Handle branch warning from FlowCanvas
+  const handleBranchWarning = useCallback((data: { messageId: string; messageText?: string; existingBranchId: string; isMultiBranch: boolean }) => {
+    setPendingBranchData({
+      messageId: data.messageId,
+      isMultiBranch: data.isMultiBranch,
+      messageText: data.messageText
+    })
+    setShowBranchWarning(true)
+  }, [])
 
   const toggleMultiModel = () => {
     setMultiModelMode(!multiModelMode)
@@ -1660,26 +2251,109 @@ export default function Home() {
   
   return (
     <div className="h-screen bg-background overflow-hidden">
-      {/* MongoDB Save Status Indicator */}
-      {(isSaving || lastSaved) && (
-        <div className="fixed bottom-4 right-4 z-50">
-          <div className="bg-card border border-border rounded-lg px-4 py-2 shadow-lg flex items-center gap-2 text-sm">
-            {isSaving ? (
-              <>
-                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <span className="text-muted-foreground">Saving...</span>
-              </>
-            ) : lastSaved ? (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-green-500">
-                  <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                <span className="text-muted-foreground">Saved {lastSaved.toLocaleTimeString()}</span>
-              </>
-            ) : null}
+      {/* Top Bar - Fixed with proper spacing */}
+      <div className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-card/95 backdrop-blur-sm">
+        <div className="flex items-center justify-between px-4 py-3">
+          {/* Left side - Space for sidebar toggle (handled by Sidebar component) */}
+          <div className="w-10"></div>
+          
+          {/* Center - Title (only in chat mode) */}
+          {viewMode === 'chat' && conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length > 0 && (
+            <h1 className="text-lg font-semibold text-foreground">Conversation Branches</h1>
+          )}
+          
+          {/* Right side - Controls */}
+          <div className="flex items-center gap-2">
+            {/* 3 Dots Menu - Only in map view */}
+            {viewMode === 'map' && conversationNodes.length > 0 && (
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={() => setShowMenu(!showMenu)}
+                  className="p-2 rounded-lg transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-muted/80"
+                  title="More options"
+                >
+                  <DotsThree className="w-5 h-5" weight="bold" />
+                </button>
+                
+                {/* Dropdown Menu */}
+                {showMenu && (
+                  <div className="absolute top-full right-0 mt-2 bg-card dark:bg-card border border-border dark:border-border/60 shadow-lg z-50 min-w-[180px] rounded-xl backdrop-blur-sm overflow-hidden">
+                    <button
+                      onClick={() => {
+                        if (minimizeAllRef.current) {
+                          minimizeAllRef.current()
+                        }
+                        setShowMenu(false)
+                      }}
+                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
+                        allNodesMinimized
+                          ? 'bg-primary/10 hover:bg-primary/20 text-primary dark:bg-primary/20 dark:hover:bg-primary/30'
+                          : 'hover:bg-muted dark:hover:bg-muted/80 text-foreground'
+                      }`}
+                    >
+                      {allNodesMinimized ? (
+                        <>
+                          <ArrowsOut className="w-4 h-4" weight="bold" />
+                          <span>Maximize All</span>
+                        </>
+                      ) : (
+                        <>
+                          <ArrowsIn className="w-4 h-4" weight="bold" />
+                          <span>Minimize All</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Map/Chat View Toggle - Icon only */}
+            {conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length > 0 && (
+              <div className="bg-card border border-border/60 dark:border-border/40 rounded-xl shadow-lg p-1 flex items-center gap-1">
+                <button
+                  onClick={() => setViewMode('map')}
+                  className={`p-2 rounded-lg transition-all duration-200 ${
+                    viewMode === 'map'
+                      ? 'bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 shadow-sm'
+                      : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground hover:bg-muted dark:hover:bg-muted/80'
+                  }`}
+                  title="Map View - Visual graph of all branches"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 3h18v18H3zM3 9h18M9 3v18"/>
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setViewMode('chat')}
+                  className={`p-2 rounded-lg transition-all duration-200 ${
+                    viewMode === 'chat'
+                      ? 'bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 shadow-sm'
+                      : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground hover:bg-muted dark:hover:bg-muted/80'
+                  }`}
+                  title="Chat View - Focused conversation threads"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                </button>
+              </div>
+            )}
+            <ThemeToggle />
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Branch Warning Modal */}
+      <BranchWarningModal
+        isOpen={showBranchWarning}
+        onClose={handleBranchWarningCancel}
+        onConfirm={handleBranchWarningConfirm}
+        onCancel={handleBranchWarningCancel}
+        messageText={pendingBranchData?.messageText}
+        existingBranchesCount={conversationNodes.filter(n => n.parentMessageId === pendingBranchData?.messageId).length}
+        isMultiBranch={pendingBranchData?.isMultiBranch || false}
+      />
       
       {/* Sidebar */}
       <Sidebar 
@@ -1696,9 +2370,27 @@ export default function Home() {
       />
       
       {/* Simple Layout - No Canvas Initially */}
-      {branches.length === 0 && conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length === 0 ? (
+      {branches.length === 0 && conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length === 0 && !pendingBranchMessageId ? (
         <div className="flex items-center justify-center h-screen p-4">
           <div className="w-full max-w-4xl border border-border rounded-2xl bg-card shadow-lg p-6">
+            {/* Branch Navigation - if we have branches */}
+            {conversationNodes.length > 0 && (
+              <BranchNavigation
+                branches={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).map(n => ({
+                  id: n.id,
+                  label: n.title || 'Branch',
+                  parentId: n.parentId,
+                  parentMessageId: n.parentMessageId
+                }))}
+                currentBranchId={activeBranchId}
+                onNavigateToBranch={handleSelectBranch}
+                onNavigateToMain={() => {
+                  setActiveBranchId('main')
+                  setCurrentBranch(null)
+                }}
+              />
+            )}
+
             {/* Header with AI Pills and Mode Toggle */}
             <div className="flex items-center justify-between mb-6">
               {/* AI Selector */}
@@ -1761,38 +2453,63 @@ export default function Home() {
               multiModelMode={multiModelMode}
               isGenerating={isGenerating}
               onStopGeneration={stopGeneration}
-              existingBranchesCount={branches.length}
+              existingBranchesCount={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length}
+              isMain={true}
+              onExportImport={() => setShowExportImport(true)}
             />
           </div>
         </div>
       ) : (
-        /* Flow Canvas Layout - Only when branches exist */
-        <FlowCanvas
-          selectedAIs={selectedAIs}
-          onAddAI={addAI}
-          onRemoveAI={removeAI}
-          mainMessages={messages}
-          onSendMainMessage={sendMessage}
-          onBranchFromMain={branchFromMessage}
-          initialBranchMessageId={currentBranch}
-          pendingBranchMessageId={pendingBranchMessageId}
-          onPendingBranchProcessed={() => setPendingBranchMessageId(null)}
-          onNodesUpdate={updateConversationNodes}
-          onNodeDoubleClick={(nodeId) => {
-            console.log('Node double-clicked:', nodeId)
-            // TODO: Implement focus mode in Phase 4
-          }}
-          onPillClick={(aiId) => {
-            console.log('Pill clicked:', aiId)
-            // TODO: Implement pill navigation in Phase 1
-          }}
-          getBestAvailableModel={getBestAvailableModel}
-          onSelectSingle={selectSingleAI}
-          multiModelMode={multiModelMode}
-          onExportImport={() => setShowExportImport(true)}
-          restoredConversationNodes={conversationNodes}
-          selectedBranchId={activeBranchId}
-        />
+        /* Flow Canvas or Chat View Layout - Based on viewMode */
+        conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length > 0 && viewMode === 'chat' ? (
+          <ChatBranchesView
+            mainMessages={messages}
+            branches={conversationNodes}
+            selectedAIs={selectedAIs}
+            onAddAI={addAI}
+            onRemoveAI={removeAI}
+            onSelectSingle={selectSingleAI}
+            getBestAvailableModel={getBestAvailableModel}
+            multiModelMode={multiModelMode}
+            onSendMessage={sendMessage}
+            onBranchFromMessage={branchFromMessage}
+            isGenerating={isGenerating}
+            onStopGeneration={stopGeneration}
+            activeBranchId={activeBranchId}
+            onSelectBranch={handleSelectBranch}
+            onDeleteBranch={handleDeleteBranch}
+          />
+        ) : (
+          <FlowCanvas
+            selectedAIs={selectedAIs}
+            onAddAI={addAI}
+            onRemoveAI={removeAI}
+            mainMessages={messages}
+            onSendMainMessage={sendMessage}
+            onBranchFromMain={branchFromMessage}
+            initialBranchMessageId={currentBranch}
+            pendingBranchMessageId={pendingBranchMessageId}
+            onPendingBranchProcessed={() => setPendingBranchMessageId(null)}
+            onNodesUpdate={updateConversationNodes}
+            onNodeDoubleClick={(nodeId) => {
+              console.log('Node double-clicked:', nodeId)
+              // TODO: Implement focus mode in Phase 4
+            }}
+            onPillClick={(aiId) => {
+              console.log('Pill clicked:', aiId)
+              // TODO: Implement pill navigation in Phase 1
+            }}
+            getBestAvailableModel={getBestAvailableModel}
+            onSelectSingle={selectSingleAI}
+            multiModelMode={multiModelMode}
+            onExportImport={() => setShowExportImport(true)}
+            restoredConversationNodes={conversationNodes}
+            selectedBranchId={activeBranchId}
+            onBranchWarning={handleBranchWarning}
+            onMinimizeAllRef={(fn) => { minimizeAllRef.current = fn }}
+            onAllNodesMinimizedChange={(minimized) => setAllNodesMinimized(minimized)}
+          />
+        )
       )}
 
       {/* Export/Import Modal */}

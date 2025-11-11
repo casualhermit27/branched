@@ -3,8 +3,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
+import { ArrowsOut, ArrowsIn } from '@phosphor-icons/react'
 import TransformButton from './transform-button'
 import AIPills from './ai-pills'
+import { SideBySideComparison } from './side-by-side-comparison'
 
 interface Message {
   id: string
@@ -73,9 +75,15 @@ export default function ChatInterface({
   const [isUserScrolling, setIsUserScrolling] = useState(false)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const [showBranchWarning, setShowBranchWarning] = useState(false)
+  const [comparisonViewGroupId, setComparisonViewGroupId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const branchLockRef = useRef<Record<string, boolean>>({})
+  const branchingInProgress = useRef<Record<string, boolean>>({})
+  const branchCache = useRef<Record<string, string>>({}) // Cache of messageId -> branchId
+  const lastBranchIdRef = useRef<string | null | undefined>(currentBranch)
+  const hasScrolledRef = useRef<boolean>(false)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -103,10 +111,50 @@ export default function ChatInterface({
     }
   }, [])
 
+  // Handle branch change - reset scroll state and focus
+  useEffect(() => {
+    if (currentBranch !== lastBranchIdRef.current) {
+      // Branch changed - reset scroll state
+      setShouldAutoScroll(true)
+      hasScrolledRef.current = false
+      lastBranchIdRef.current = currentBranch
+      
+      // Don't auto-focus textarea on branch change - let user decide
+      // Use scrollTop instead of scrollIntoView to avoid layout shifts
+      setTimeout(() => {
+        if (messagesContainerRef.current) {
+          const container = messagesContainerRef.current
+          container.scrollTop = container.scrollHeight
+        }
+      }, 100)
+    }
+  }, [currentBranch])
+
   // Auto-scroll to bottom when new messages arrive (only if should auto-scroll)
   useEffect(() => {
-    if (shouldAutoScroll && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    // Only auto-scroll if:
+    // 1. Should auto-scroll is enabled
+    // 2. We haven't already scrolled for this branch
+    // 3. There are messages to scroll to
+    if (shouldAutoScroll && messagesContainerRef.current && messages.length > 0) {
+      // Use scrollTop instead of scrollIntoView to avoid layout shifts
+      const container = messagesContainerRef.current
+      const isNewMessage = !hasScrolledRef.current
+      
+      if (isNewMessage) {
+        // Smooth scroll for new messages
+        requestAnimationFrame(() => {
+          container.scrollTo({
+            top: container.scrollHeight,
+            behavior: 'smooth'
+          })
+        })
+      } else {
+        // Instant scroll for branch changes
+        container.scrollTop = container.scrollHeight
+      }
+      
+      hasScrolledRef.current = true
     }
   }, [messages, shouldAutoScroll])
 
@@ -146,30 +194,74 @@ export default function ChatInterface({
   console.log('💬 ChatInterface rendering with messages:', messages.length, messages)
   
   // CRITICAL: Validate and fix isUser flags before processing
+  // This is the FINAL validation - ensure ALL messages have correct isUser flag
   const validatedMessages = messages.map((msg, index) => {
-    // Validate isUser flag based on message properties
-    if (msg.aiModel && msg.isUser === true) {
-      console.error('❌ CRITICAL: AI message has isUser=true! Fixing:', {
-        messageId: msg.id,
-        aiModel: msg.aiModel,
-        text: msg.text?.substring(0, 50),
-        index
-      })
-      return { ...msg, isUser: false }
+    // If message has aiModel OR ai property, it MUST be isUser: false
+    const hasAIModel = !!(msg.aiModel || msg.ai)
+    
+    if (hasAIModel) {
+      // This is an AI message - force isUser to false
+      if (msg.isUser !== false) {
+        console.error('❌ CRITICAL: AI message has isUser=true! Fixing:', {
+          messageId: msg.id,
+          aiModel: msg.aiModel || msg.ai,
+          isUser: msg.isUser,
+          text: msg.text?.substring(0, 50),
+          index
+        })
+        return { ...msg, isUser: false }
+      }
+      return msg
     }
-    if (!msg.aiModel && !msg.ai && msg.isUser === false && !msg.text?.startsWith('[Branched from:')) {
-      console.warn('⚠️ User message has isUser=false! Fixing:', {
-        messageId: msg.id,
-        text: msg.text?.substring(0, 50),
-        index
-      })
-      return { ...msg, isUser: true }
+    
+    // If message doesn't have aiModel or ai, it should be isUser: true
+    if (!hasAIModel) {
+      if (msg.isUser !== true && !msg.text?.startsWith('[Branched from:')) {
+        console.warn('⚠️ User message has isUser=false! Fixing:', {
+          messageId: msg.id,
+          isUser: msg.isUser,
+          text: msg.text?.substring(0, 50),
+          index
+        })
+        return { ...msg, isUser: true }
+      }
+      return msg
     }
+    
     return msg
   })
   
+  // Normalize all messages before rendering to fix alignment issues
+  // This ensures AI replies always appear on left, user messages on right
+  // CRITICAL: Force isUser flag based on AI indicators - ignore existing isUser value
+  const normalizedMessages = validatedMessages.map(msg => {
+    // Determine if this is an AI message based on properties
+    const isAI = Boolean(msg.aiModel || msg.ai || msg.role === 'assistant')
+    
+    // FORCE isUser to be the opposite of isAI - this is the source of truth
+    const forcedIsUser = !isAI
+    
+    // Log if we're fixing a misaligned message
+    if (msg.isUser !== forcedIsUser) {
+      console.warn('🔧 FORCING isUser flag:', {
+        messageId: msg.id,
+        oldIsUser: msg.isUser,
+        newIsUser: forcedIsUser,
+        hasAiModel: !!msg.aiModel,
+        hasAi: !!msg.ai,
+        role: msg.role,
+        text: msg.text?.substring(0, 30)
+      })
+    }
+    
+    return {
+      ...msg,
+      isUser: forcedIsUser, // FORCE the correct value
+    }
+  })
+  
   // Group messages by groupId for multi-model responses
-  const groupedMessages = validatedMessages.reduce((groups, msg) => {
+  const groupedMessages = normalizedMessages.reduce((groups, msg) => {
     if (msg.groupId) {
       if (!groups[msg.groupId]) {
         groups[msg.groupId] = []
@@ -212,7 +304,7 @@ export default function ChatInterface({
   
   return (
     <div 
-      className="w-full h-full flex flex-col overflow-hidden"
+      className="w-full h-full flex flex-col overflow-hidden min-h-0"
       data-scrollable
       onMouseDown={(e) => {
         // Prevent canvas panning when clicking inside chat interface
@@ -240,104 +332,134 @@ export default function ChatInterface({
               />
             </div>
             
-            {/* Mode Toggle and Export/Import */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Mode:</span>
-                <div className="flex bg-muted rounded-lg p-1" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (multiModelMode) {
-                        // Only toggle if currently in multi mode
-                        onToggleMultiModel?.(nodeId || '')
-                      }
-                    }}
-                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                      !multiModelMode
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    Single
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (!multiModelMode) {
-                        // Only toggle if currently in single mode
-                        onToggleMultiModel?.(nodeId || '')
-                      }
-                    }}
-                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                      multiModelMode
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    Multi
-                  </button>
+            {/* Mode Toggle and Export/Import - Only show for branches, not main (main has it in page.tsx header) */}
+            {!isMain && (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Mode:</span>
+                  <div className="flex bg-muted rounded-lg p-1" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (multiModelMode) {
+                          // Only toggle if currently in multi mode
+                          onToggleMultiModel?.(nodeId || '')
+                        }
+                      }}
+                      className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                        !multiModelMode
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Single
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (!multiModelMode) {
+                          // Only toggle if currently in single mode
+                          onToggleMultiModel?.(nodeId || '')
+                        }
+                      }}
+                      className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                        multiModelMode
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Multi
+                    </button>
+                  </div>
                 </div>
               </div>
-              
-              {/* Export/Import Button - Only for main conversation */}
-              {isMain && onExportImport && (
-                <button
-                  onClick={onExportImport}
-                  className="px-3 py-1 bg-card/80 backdrop-blur-sm hover:bg-accent text-foreground rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                  </svg>
-                  Export/Import
-                </button>
-              )}
-            </div>
+            )}
+            
+            {/* Export/Import Button - Only for main conversation */}
+            {isMain && onExportImport && (
+              <button
+                onClick={onExportImport}
+                className="px-3 py-1 bg-card/80 backdrop-blur-sm hover:bg-accent text-foreground rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                </svg>
+                Export/Import
+              </button>
+            )}
           </div>
         </div>
       )}
       
-      {/* Messages Area - Fixed height with scroll */}
-      {messages.length > 0 && (
-        <div 
-          className="flex-1 overflow-y-auto overflow-x-auto space-y-4 mb-4 touch-pan-y pr-2" 
-          ref={messagesContainerRef}
-          onScroll={handleScroll}
-          data-scrollable
-          onMouseDown={(e) => {
-            // Prevent canvas panning when clicking in scrollable area
-            e.stopPropagation()
-          }}
-          onWheel={(e) => {
-            // Allow scrolling, prevent canvas zoom
-            e.stopPropagation()
-          }}
-          style={{ 
-            height: '550px', 
-            maxHeight: '550px',
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehavior: 'contain',
-            scrollbarWidth: 'thin',
-            scrollbarColor: '#cbd5e1 #f1f5f9'
-          }}
-        >
+      {/* Messages Area - Flexible height with scroll */}
+      <div 
+        className="flex-1 overflow-y-auto overflow-x-auto space-y-4 touch-pan-y pr-2 min-h-0" 
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        data-scrollable
+        onMouseDown={(e) => {
+          // Prevent canvas panning when clicking in scrollable area
+          e.stopPropagation()
+        }}
+        onWheel={(e) => {
+          // Allow scrolling, prevent canvas zoom
+          e.stopPropagation()
+        }}
+        style={{ 
+          minHeight: 0, // Critical for flex children to scroll properly
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'hsl(var(--muted-foreground) / 0.3) hsl(var(--muted))',
+          scrollBehavior: 'smooth'
+        }}
+      >
           {Object.entries(groupedMessages).map(([groupId, groupMessages]) => {
             const isMultiModel = groupMessages.length > 1
             const aiModels = getAIModelsFromGroup(groupMessages)
+            const isComparisonView = comparisonViewGroupId === groupId
             
             return (
               <div key={groupId} className="space-y-2">
                 {/* Multi-model group header */}
                 {isMultiModel && (
-                  <div className="text-center py-2">
+                  <div className="flex items-center justify-center gap-3 py-2">
                     <div className="inline-flex items-center gap-2 px-3 py-1 bg-muted/80 backdrop-blur-sm rounded-full text-xs text-muted-foreground font-medium border border-border/50">
                       <span>Responses from {groupMessages.length} AIs</span>
                     </div>
+                    <button
+                      onClick={() => setComparisonViewGroupId(isComparisonView ? null : groupId)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-card dark:bg-card hover:bg-muted dark:hover:bg-muted/80 border border-border/60 dark:border-border/40 rounded-full text-xs font-medium text-foreground transition-all duration-200 shadow-sm hover:shadow"
+                      title={isComparisonView ? "Switch to normal view" : "Compare side-by-side"}
+                    >
+                      {isComparisonView ? (
+                        <>
+                          <ArrowsIn className="w-3.5 h-3.5" />
+                          <span>Normal View</span>
+                        </>
+                      ) : (
+                        <>
+                          <ArrowsOut className="w-3.5 h-3.5" />
+                          <span>Compare</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 )}
                 
-                {/* Group container */}
-                <div className={`${isMultiModel ? 'bg-muted/60 rounded-xl p-4 space-y-3 border border-border break-words' : 'space-y-3'}`}>
+                {/* Side-by-Side Comparison View */}
+                {isMultiModel && isComparisonView ? (
+                  <SideBySideComparison
+                    messages={normalizedMessages}
+                    selectedAIs={selectedAIs}
+                    groupId={groupId}
+                    onClose={() => setComparisonViewGroupId(null)}
+                    getAIColor={getAIColor}
+                    getAILogo={getAILogo}
+                  />
+                ) : (
+                  /* Group container */
+                  <div className={`${isMultiModel ? 'bg-muted/60 rounded-xl p-4 space-y-3 border border-border break-words' : 'space-y-3'}`}>
                   {groupMessages.map((msg, index) => (
             <motion.div
               key={msg.id}
@@ -354,42 +476,52 @@ export default function ChatInterface({
               {msg.isUser ? (
                 // User message - branch button only in multi-mode (creates branches for all AI responses)
                 multiModelMode && (
-                <button
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                      console.log('🌿 Branch clicked for user message (multi-mode):', msg.id)
-                    console.log('🌿 onBranchFromMessage function:', onBranchFromMessage)
-                    // Blur any focused input to ensure proper event handling
-                    if (document.activeElement && document.activeElement instanceof HTMLElement) {
-                      document.activeElement.blur()
-                    }
-                    onBranchFromMessage(msg.id, true) // Multi-branch: create branches for all AI models
-                  }}
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                  }}
-                  className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600 hover:text-blue-700 transition-all duration-200 mt-1 z-10 relative shadow-sm hover:shadow"
-                    title="Create branches for all AI responses"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* Branch count indicator */}
+                  {existingBranchesCount > 0 && (
+                    <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-muted text-xs text-muted-foreground">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="text-muted-foreground">
+                        <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      <span>{existingBranchesCount}</span>
+                    </div>
+                  )}
+                  
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                        console.log('🌿 Branch clicked for user message (multi-mode):', msg.id)
+                      console.log('🌿 onBranchFromMessage function:', onBranchFromMessage)
+                      // Blur any focused input to ensure proper event handling
+                      if (document.activeElement && document.activeElement instanceof HTMLElement) {
+                        document.activeElement.blur()
+                      }
+                      onBranchFromMessage(msg.id, true) // Multi-branch: create branches for all AI models
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                    }}
+                    className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-all duration-200 mt-1 z-10 relative shadow-sm hover:shadow"
+                      title="Create branches for all AI responses"
+                  >
+                    {branchingInProgress.current[msg.id] ? (
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </button>
+                </div>
                 )
               ) : (
                 // AI message - branch button on right
                 <div className="flex items-start gap-3">
                   {/* Simple message bubble */}
-                  <div className="max-w-[85%] bg-card rounded-2xl border border-border/80 shadow-sm hover:shadow-md transition-shadow duration-200 px-6 py-4 break-words overflow-wrap-anywhere">
+                  <div className="max-w-[70%] bg-card rounded-2xl border border-border/80 shadow-sm hover:shadow-md transition-shadow duration-200 px-6 py-4 break-words overflow-wrap-anywhere">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        msg.isUser ? 'bg-blue-500' : 'bg-muted-foreground'
-                      }`}></div>
-                      <span className="text-xs font-medium text-muted-foreground flex-shrink-0">
-                        {msg.isUser ? 'You' : 'AI'}
-                      </span>
                       {/* Model pill for AI messages */}
                       {msg.aiModel && (
                         <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border flex-shrink-0 ${getAIColor(msg.aiModel)}`}>
@@ -460,29 +592,75 @@ export default function ChatInterface({
                     </div>
                   </div>
                   
+                  <div className="flex items-center gap-2">
+                    {/* Branch count indicator */}
+                    {existingBranchesCount > 0 && (
+                      <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-muted text-xs text-muted-foreground">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="text-muted-foreground">
+                          <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        <span>{existingBranchesCount}</span>
+                      </div>
+                    )}
+                    
                   <button
                     onClick={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
+                      
+                      // Prevent duplicate clicks
+                      if (branchingInProgress.current[msg.id]) {
+                        console.log('⚠️ Branch creation already in progress for:', msg.id)
+                        return
+                      }
+                      
+                      // Check cache first
+                      if (branchCache.current[msg.id]) {
+                        console.log('📦 Branch already exists in cache:', branchCache.current[msg.id])
+                        // Show warning modal instead of creating duplicate
+                        return
+                      }
+                      
+                      // Set branching in progress
+                      branchingInProgress.current[msg.id] = true
+                      
                       console.log('🌿 Branch clicked for message:', msg.id)
                       console.log('🌿 onBranchFromMessage function:', onBranchFromMessage)
+                      
                       // Blur any focused input to ensure proper event handling
                       if (document.activeElement && document.activeElement instanceof HTMLElement) {
                         document.activeElement.blur()
                       }
+                      
+                      // Call branch creation
                       onBranchFromMessage(msg.id, false) // Single branch: create branch from this AI message
+                      
+                      // Reset after delay
+                      setTimeout(() => {
+                        branchingInProgress.current[msg.id] = false
+                      }, 2000)
                     }}
                     onMouseDown={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
                     }}
-                    className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600 hover:text-blue-700 transition-all duration-200 mt-1 z-10 relative shadow-sm hover:shadow"
-                    title="Branch from this message"
+                    disabled={branchingInProgress.current[msg.id]}
+                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 mt-1 z-10 relative shadow-sm ${
+                      branchingInProgress.current[msg.id]
+                        ? 'bg-muted text-muted-foreground cursor-not-allowed opacity-50'
+                        : 'bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:shadow'
+                    }`}
+                    title={branchingInProgress.current[msg.id] ? 'Creating branch...' : 'Branch from this message'}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
+                    {branchingInProgress.current[msg.id] ? (
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
                   </button>
+                  </div>
                 </div>
               )}
 
@@ -490,12 +668,6 @@ export default function ChatInterface({
                {msg.isUser && (
                  <div className="max-w-[85%] bg-card rounded-2xl border border-border shadow-sm px-6 py-4 break-words overflow-wrap-anywhere">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      msg.isUser ? 'bg-blue-500' : 'bg-muted-foreground'
-                    }`}></div>
-                    <span className="text-xs font-medium text-muted-foreground flex-shrink-0">
-                      {msg.isUser ? 'You' : 'AI'}
-                    </span>
                     <span className="text-xs text-muted-foreground flex-shrink-0">
                       {new Date(msg.timestamp).toLocaleTimeString([], { 
                         hour: '2-digit', 
@@ -564,14 +736,22 @@ export default function ChatInterface({
                       </div>
                     </div>
                   )}
-                </div>
+                  </div>
+                )}
               </div>
             )
           })}
           {/* Scroll target for auto-scroll */}
           <div ref={messagesEndRef} />
+          {messages.length === 0 && (
+            <div className="flex items-center justify-center py-12 text-muted-foreground/50">
+              <div className="text-center">
+                <p className="text-sm font-medium">No messages yet</p>
+                <p className="text-xs mt-1">Start a conversation below</p>
+              </div>
+            </div>
+          )}
         </div>
-      )}
 
       {/* Branch Warning Message */}
       {showBranchWarning && (
@@ -729,11 +909,12 @@ export default function ChatInterface({
         </motion.div>
       )}
 
-      {/* Simple Input Area */}
-      <div className="relative flex-shrink-0 w-full">
-        <form onSubmit={handleSubmit} className="relative">
-          <div className="flex items-end bg-card border border-border rounded-2xl shadow-sm hover:shadow-md focus-within:shadow-md focus-within:border-primary transition-all duration-200 p-2">
+      {/* Adaptive Input Area - Minimal, Clean Design */}
+      <div className="flex-shrink-0 w-full pt-4 border-t border-border/30">
+        <form onSubmit={handleSubmit} className="w-full">
+          <div className="flex items-end gap-2 bg-card border border-border/40 rounded-lg shadow-sm hover:shadow focus-within:shadow focus-within:border-primary/40 transition-all duration-200 p-3">
             <textarea
+              ref={textareaRef}
               value={message}
               onChange={handleInputChange}
               placeholder={
@@ -741,19 +922,18 @@ export default function ChatInterface({
                   ? `Ask ${selectedAIs.length} AIs...` 
                   : "Ask anything..."
               }
-               className="flex-1 px-6 py-6 rounded-2xl focus:outline-none text-lg placeholder-muted-foreground resize-none min-h-[80px] max-h-[300px] bg-transparent w-full"
+              className="flex-1 px-3 py-2.5 rounded-md focus:outline-none focus:ring-0 text-sm placeholder-muted-foreground/60 resize-none min-h-[44px] max-h-[160px] bg-transparent w-full transition-all duration-200"
               style={{ 
                 height: 'auto',
-                minHeight: '80px',
-                maxHeight: '300px',
-                fontSize: '18px',
-                lineHeight: '1.5',
-                letterSpacing: '-0.01em'
+                minHeight: '44px',
+                maxHeight: '160px',
+                fontSize: '14px',
+                lineHeight: '1.5'
               }}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement
                 target.style.height = 'auto'
-                target.style.height = Math.min(target.scrollHeight, 300) + 'px'
+                target.style.height = Math.min(target.scrollHeight, 160) + 'px'
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -761,8 +941,20 @@ export default function ChatInterface({
                   handleSubmit(e)
                 }
               }}
+              onFocus={() => {
+                setShouldAutoScroll(true)
+                requestAnimationFrame(() => {
+                  if (messagesContainerRef.current && messages.length > 0) {
+                    const container = messagesContainerRef.current
+                    container.scrollTo({
+                      top: container.scrollHeight,
+                      behavior: 'smooth'
+                    })
+                  }
+                })
+              }}
             />
-            <div className="self-end m-2">
+            <div className="flex-shrink-0">
               <TransformButton 
                 onSend={() => {
                   if (message.trim()) {
