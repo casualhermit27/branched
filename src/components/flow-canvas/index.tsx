@@ -1,0 +1,838 @@
+'use client'
+
+import { useEffect, useCallback, useRef, useMemo } from 'react'
+import ReactFlow, {
+	Background,
+	Controls,
+	MiniMap,
+	NodeTypes,
+	ReactFlowProvider,
+	OnNodesChange,
+	OnEdgesChange,
+	type Node as ReactFlowNode,
+	type Edge as ReactFlowEdge,
+	type BackgroundVariant
+} from 'reactflow'
+import 'reactflow/dist/style.css'
+import ChatNode from '../chat-node'
+import { useFlowCanvasState } from './hooks/use-flow-canvas-state'
+import { useBranchManagement } from '@/hooks/use-branch-management'
+import {
+	getLayoutedElements,
+	validateNodePositions,
+	calculateViewportFit,
+	calculateNodeDimensions
+} from './layout-engine'
+import { createMainNode, restoreNodesFromState } from './node-management'
+import { focusOnNode } from './viewport-navigation'
+import { getParentChainMessages, buildConversationContext } from './message-handling'
+import { createEdge } from './edge-management'
+import { messageStore } from './message-store'
+import { branchStore } from './branch-store'
+import type { FlowCanvasProps, Message } from './types'
+import { aiService } from '@/services/ai-api'
+
+const nodeTypes: NodeTypes = {
+	chatNode: ChatNode
+}
+
+export default function FlowCanvas(props: FlowCanvasProps) {
+	const {
+		selectedAIs,
+		onAddAI,
+		onRemoveAI,
+		mainMessages,
+		onSendMainMessage,
+		onBranchFromMain,
+		initialBranchMessageId,
+		pendingBranchMessageId,
+		onPendingBranchProcessed,
+		onNodesUpdate,
+		onNodeDoubleClick,
+		onPillClick,
+		getBestAvailableModel,
+		onSelectSingle,
+		multiModelMode,
+		onExportImport,
+		restoredConversationNodes,
+		selectedBranchId,
+		onBranchWarning,
+		onMinimizeAllRef,
+		onAllNodesMinimizedChange
+	} = props
+
+	const state = useFlowCanvasState()
+	const {
+		nodes,
+		edges,
+		minimizedNodes,
+		activeNodeId,
+		generatingNodeIds,
+		reactFlowInstance,
+		nodesRef,
+		edgesRef,
+		setNodes,
+		setEdges,
+		setReactFlowInstance,
+		toggleNodeMinimize,
+		minimizeAllNodes,
+		setNodeActive,
+		setNodeGenerating,
+		setBranchMultiModel,
+		getBranchMultiModel,
+		setBranchAIs,
+		getBranchAIs,
+		setAbortController,
+		abortGeneration
+	} = state
+
+	// Track initialization to prevent multiple triggers
+	const isInitializedRef = useRef(false)
+	const isRestoringRef = useRef(false)
+	const layoutInProgressRef = useRef(false)
+
+	// ============================================
+	// HANDLERS (Stable References with useCallback)
+	// ============================================
+
+	const handleSendMainMessage = useCallback(
+		async (nodeId: string, message: string) => {
+			if (nodeId !== 'main') return
+			await onSendMainMessage(message)
+		},
+		[onSendMainMessage]
+	)
+
+	const handleSendBranchMessage = useCallback(
+		async (nodeId: string, message: string) => {
+			if (nodeId === 'main') return
+
+			const node = nodes.find((n) => n.id === nodeId)
+			if (!node || !node.data) return
+
+			const branchAIs = getBranchAIs(nodeId, selectedAIs)
+			const isMultiModel = getBranchMultiModel(nodeId)
+			const contextMessages = getParentChainMessages(nodeId, nodes, mainMessages)
+
+			setNodeGenerating(nodeId, true)
+			const abortController = new AbortController()
+			setAbortController(nodeId, abortController)
+
+			// Helper to resolve "best" model
+			const resolveModel = (aiId: string): string => {
+				if (aiId === 'best' && getBestAvailableModel) {
+					return getBestAvailableModel()
+				}
+				return aiId
+			}
+
+			try {
+				if (isMultiModel && branchAIs.length > 1) {
+					for (const ai of branchAIs) {
+						const modelName = resolveModel(ai.id)
+						const response = await aiService.generateResponse(
+							modelName,
+							message,
+							{ messages: contextMessages, currentBranch: nodeId, memoryContext: '' },
+							undefined,
+							abortController.signal
+						)
+
+						const newMessage: Message = {
+							id: `msg-${Date.now()}-${ai.id}`,
+							text: response.text,
+							isUser: false,
+							ai: ai.id,
+							aiModel: ai.id,
+							timestamp: Date.now(),
+							children: [],
+							nodeId
+						}
+
+						setNodes((prev) =>
+							prev.map((n) => {
+								if (n.id === nodeId) {
+									return {
+										...n,
+										data: {
+											...n.data,
+											messages: [...(n.data.messages || []), newMessage]
+										}
+									}
+								}
+								return n
+							})
+						)
+					}
+				} else {
+					const ai = branchAIs[0] || selectedAIs[0]
+					const modelName = resolveModel(ai.id)
+					const response = await aiService.generateResponse(
+						modelName,
+						message,
+						{ messages: contextMessages, currentBranch: nodeId, memoryContext: '' },
+						undefined,
+						abortController.signal
+					)
+
+					const newMessage: Message = {
+						id: `msg-${Date.now()}`,
+						text: response.text,
+						isUser: false,
+						ai: ai.id,
+						aiModel: ai.id,
+						timestamp: Date.now(),
+						children: [],
+						nodeId
+					}
+
+					setNodes((prev) =>
+						prev.map((n) => {
+							if (n.id === nodeId) {
+								return {
+									...n,
+									data: {
+										...n.data,
+										messages: [...(n.data.messages || []), newMessage]
+									}
+								}
+							}
+							return n
+						})
+					)
+				}
+			} catch (error) {
+				if (error instanceof Error && error.name === 'AbortError') {
+					console.log('Generation aborted')
+				} else {
+					console.error('Error generating response:', error)
+				}
+			} finally {
+				setNodeGenerating(nodeId, false)
+				setAbortController(nodeId, null)
+			}
+		},
+		[
+			nodes,
+			selectedAIs,
+			mainMessages,
+			getBranchAIs,
+			getBranchMultiModel,
+			setNodeGenerating,
+			setAbortController,
+			setNodes,
+			getBestAvailableModel
+		]
+	)
+
+	const handleDeleteBranch = useCallback(
+		(nodeId: string) => {
+			abortGeneration(nodeId)
+
+			setNodes((prev) => prev.filter((n) => n.id !== nodeId))
+			setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId))
+
+			setBranchAIs(nodeId, [])
+			setBranchMultiModel(nodeId, false)
+
+			if (onNodesUpdate) {
+				const updatedNodes = nodes.filter((n) => n.id !== nodeId)
+				onNodesUpdate(updatedNodes)
+			}
+		},
+		[abortGeneration, setNodes, setEdges, setBranchAIs, setBranchMultiModel, nodes, onNodesUpdate]
+	)
+
+	// ============================================
+	// BRANCH MANAGEMENT
+	// ============================================
+
+	const handleSendMessageRef = useRef<
+		((nodeId: string, message: string) => Promise<void>) | undefined
+	>(undefined)
+	handleSendMessageRef.current = handleSendBranchMessage
+
+	const branchManagement = useBranchManagement({
+		nodesRef,
+		edgesRef,
+		setNodes,
+		setEdges,
+		selectedAIs,
+		mainMessages,
+		onNodesUpdate,
+		onBranchWarning,
+		onNodeDoubleClick,
+		handleBranchAddAI: (nodeId, ai) => {
+			const currentAIs = getBranchAIs(nodeId, selectedAIs)
+			if (!currentAIs.find((a) => a.id === ai.id)) {
+				setBranchAIs(nodeId, [...currentAIs, ai])
+			}
+		},
+		handleBranchRemoveAI: (nodeId, aiId) => {
+			const currentAIs = getBranchAIs(nodeId, selectedAIs)
+			setBranchAIs(nodeId, currentAIs.filter((a) => a.id !== aiId))
+		},
+		handleBranchSelectSingle: (nodeId, aiId) => {
+			const ai = selectedAIs.find((a) => a.id === aiId)
+			if (ai) {
+				setBranchAIs(nodeId, [ai])
+				setBranchMultiModel(nodeId, false)
+			}
+		},
+		handleBranchToggleMultiModel: (nodeId) => {
+			setBranchMultiModel(nodeId, !getBranchMultiModel(nodeId))
+		},
+		getBestAvailableModel,
+		validateNodePositions,
+		getLayoutedElements: (nodes: any[], edges: any[]) => {
+			return getLayoutedElements(nodes, edges)
+		},
+		fitViewportToNodes: (nodeIds, padding) => {
+			if (reactFlowInstance && nodeIds.length > 0) {
+				// Only focus if nodes actually exist in the current nodes array
+				const existingNodes = nodes.filter(n => nodeIds.includes(n.id))
+				if (existingNodes.length === nodeIds.length) {
+					const viewport = calculateViewportFit(nodes, nodeIds, padding)
+					reactFlowInstance.setViewport(viewport, { duration: 500 })
+					
+					// Set active node to the first branch if it's a new branch
+					if (nodeIds.length > 1 && nodeIds[1] !== 'main') {
+						setTimeout(() => {
+							setNodeActive(nodeIds[1])
+						}, 200)
+					}
+				} else {
+					// If nodes don't exist yet, wait a bit and try again
+					setTimeout(() => {
+						const retryNodes = nodes.filter(n => nodeIds.includes(n.id))
+						if (retryNodes.length === nodeIds.length) {
+							const viewport = calculateViewportFit(nodes, nodeIds, padding)
+							reactFlowInstance.setViewport(viewport, { duration: 500 })
+							if (nodeIds.length > 1 && nodeIds[1] !== 'main') {
+								setTimeout(() => {
+									setNodeActive(nodeIds[1])
+								}, 200)
+							}
+						}
+					}, 200)
+				}
+			}
+		},
+		handleSendMessageRef,
+		minimizedNodes,
+		activeNodeId,
+		toggleNodeMinimize,
+		onDeleteBranch: handleDeleteBranch
+	})
+
+	const { handleBranch } = branchManagement
+
+	// ============================================
+	// MEMOIZED NODE DATA (Prevent Unnecessary Updates)
+	// ============================================
+
+	const nodesWithHandlers = useMemo(() => {
+		return nodes.map((node) => {
+			const branchAIs = getBranchAIs(node.id, selectedAIs)
+			const isMultiModel = getBranchMultiModel(node.id)
+
+			return {
+				...node,
+				data: {
+					...node.data,
+					selectedAIs: node.id === 'main' ? selectedAIs : branchAIs,
+					multiModelMode: node.id === 'main' ? multiModelMode : isMultiModel,
+					onSendMessage: node.id === 'main' ? handleSendMainMessage : handleSendBranchMessage,
+					onToggleMinimize: toggleNodeMinimize,
+					onDeleteBranch: node.id === 'main' ? undefined : handleDeleteBranch,
+					onStopGeneration: () => abortGeneration(node.id),
+					isMinimized: minimizedNodes.has(node.id),
+					isActive: activeNodeId === node.id,
+					isGenerating: generatingNodeIds.has(node.id)
+				}
+			}
+		})
+	}, [
+		nodes,
+		selectedAIs,
+		multiModelMode,
+		minimizedNodes,
+		activeNodeId,
+		generatingNodeIds,
+		getBranchAIs,
+		getBranchMultiModel,
+		handleSendMainMessage,
+		handleSendBranchMessage,
+		toggleNodeMinimize,
+		handleDeleteBranch,
+		abortGeneration
+	])
+
+	// ============================================
+	// INITIALIZATION
+	// ============================================
+
+	useEffect(() => {
+		if (!isInitializedRef.current && nodes.length === 0) {
+			isInitializedRef.current = true
+			const mainNode = createMainNode(
+				mainMessages,
+				selectedAIs,
+				{
+					onAddAI,
+					onRemoveAI,
+					onSendMessage: handleSendMainMessage,
+					onBranch: handleBranch,
+					onExportImport,
+					getBestAvailableModel,
+					onSelectSingle,
+					onToggleMultiModel: () => {}
+				},
+				{
+					isMinimized: minimizedNodes.has('main'),
+					isActive: activeNodeId === 'main',
+					isGenerating: generatingNodeIds.has('main'),
+					multiModelMode,
+					onToggleMinimize: toggleNodeMinimize
+				}
+			)
+			setNodes([mainNode])
+		}
+	}, []) // Run once on mount
+
+	// ============================================
+	// RESTORE NODES
+	// ============================================
+
+	useEffect(() => {
+		if (
+			restoredConversationNodes &&
+			restoredConversationNodes.length > 0 &&
+			nodes.length <= 1 &&
+			!isRestoringRef.current
+		) {
+			isRestoringRef.current = true
+			
+			// Populate stores before restoring nodes
+			// 1. Populate messageStore with all messages from nodes
+			if (restoredConversationNodes) {
+				restoredConversationNodes.forEach((node: any) => {
+					// Check both node.messages (flat) and node.data.messages (nested)
+					const messages = node.data?.messages || node.messages || []
+					const inheritedMessages = node.data?.inheritedMessages || node.inheritedMessages || []
+					const branchMessages = node.data?.branchMessages || node.branchMessages || []
+					
+					// Add all messages to store
+					const allMessages = [...messages, ...inheritedMessages, ...branchMessages]
+					allMessages.forEach((msg: Message) => {
+						if (msg && msg.id) {
+							messageStore.set(msg)
+						}
+					})
+				})
+			}
+			
+			// 2. Populate branchStore with branch contexts
+			if (restoredConversationNodes) {
+				restoredConversationNodes.forEach((node: any) => {
+					if (node.id !== 'main' && (node.data?.contextSnapshot || node.contextSnapshot)) {
+						const contextSnapshot = node.data?.contextSnapshot || node.contextSnapshot
+						const branchContext = {
+							branchId: node.id,
+							parentBranchId: node.data?.parentId || node.parentId || 'main',
+							contextSnapshot: contextSnapshot,
+							branchMessageIds: (node.data?.branchMessages || node.branchMessages || []).map((m: Message) => m.id),
+							metadata: {
+								selectedAIs: node.data?.selectedAIs || node.selectedAIs || selectedAIs,
+								multiModelMode: node.data?.multiModelMode || node.multiModelMode || false
+							}
+						}
+						branchStore.set(branchContext)
+					}
+				})
+			}
+			
+			const restored = restoreNodesFromState(
+				restoredConversationNodes || [],
+				mainMessages,
+				selectedAIs,
+				{
+					onAddAI,
+					onRemoveAI,
+					onSendMessage: handleSendMainMessage,
+					onBranch: handleBranch,
+					onExportImport,
+					getBestAvailableModel,
+					onSelectSingle
+				},
+				{
+					isMinimized: false,
+					isActive: false,
+					isGenerating: false,
+					multiModelMode
+				}
+			)
+
+			// Reconstruct edges from node relationships
+			const restoredEdges: ReactFlowEdge[] = []
+			restored.forEach((node) => {
+				if (node.id !== 'main' && (node as any).data?.parentId) {
+					const parentId = (node as any).data.parentId
+					const edge = createEdge(
+						parentId,
+						node.id,
+						{
+							animated: false,
+							type: 'smoothstep',
+							style: {
+								stroke: parentId === 'main' ? '#8b5cf6' : '#cbd5e1',
+								strokeWidth: 2,
+								strokeDasharray: '6 4'
+							}
+						}
+					)
+					restoredEdges.push(edge)
+				}
+			})
+
+			// Check if nodes have valid positions, otherwise apply layout
+			const hasValidPositions = restored.every((node) => 
+				node.position && 
+				typeof node.position.x === 'number' && 
+				typeof node.position.y === 'number' &&
+				!isNaN(node.position.x) &&
+				!isNaN(node.position.y) &&
+				isFinite(node.position.x) &&
+				isFinite(node.position.y)
+			)
+
+			if (hasValidPositions && restored.length > 0) {
+				// Use saved positions
+				setNodes(restored)
+				setEdges(restoredEdges)
+			} else {
+				// Recalculate layout
+				const layouted = getLayoutedElements(restored, restoredEdges, {
+					direction: 'TB',
+					minimized: false
+				})
+				const validated = validateNodePositions(layouted.nodes)
+				setNodes(validated)
+				setEdges(layouted.edges)
+			}
+
+			setTimeout(() => {
+				isRestoringRef.current = false
+			}, 100)
+		}
+	}, [restoredConversationNodes])
+
+	// ============================================
+	// UPDATE MAIN NODE MESSAGES (Stable)
+	// ============================================
+
+	const mainMessagesString = JSON.stringify(mainMessages.map((m) => m.id))
+	useEffect(() => {
+		setNodes((prev) =>
+			prev.map((node) => {
+				if (node.id === 'main') {
+					return {
+						...node,
+						data: {
+							...node.data,
+							messages: mainMessages
+						}
+					}
+				}
+				return node
+			})
+		)
+	}, [mainMessagesString]) // Only update when message IDs change
+
+	// ============================================
+	// BRANCH CREATION TRIGGERS
+	// ============================================
+
+	const hasTriggeredInitialBranch = useRef(false)
+	useEffect(() => {
+		if (initialBranchMessageId && nodes.length > 0 && !hasTriggeredInitialBranch.current) {
+			hasTriggeredInitialBranch.current = true
+			handleBranch('main', initialBranchMessageId, false)
+		}
+	}, [initialBranchMessageId, nodes.length])
+
+	// Track the last processed messageId to prevent duplicate processing of the same messageId
+	const lastProcessedMessageIdRef = useRef<string | null>(null)
+	const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+	
+	useEffect(() => {
+		if (!pendingBranchMessageId) {
+			lastProcessedMessageIdRef.current = null
+			if (processingTimeoutRef.current) {
+				clearTimeout(processingTimeoutRef.current)
+				processingTimeoutRef.current = null
+			}
+			return
+		}
+		
+		// If we already successfully processed this exact messageId, skip
+		// But allow retries if messages weren't ready before
+		if (lastProcessedMessageIdRef.current === pendingBranchMessageId && processingTimeoutRef.current) {
+			console.log('⚠️ Already processing this messageId, skipping duplicate trigger:', pendingBranchMessageId)
+			return
+		}
+		
+		// Mark as processing (will be cleared after successful creation or failure)
+		lastProcessedMessageIdRef.current = pendingBranchMessageId
+		
+		// Wait for nodes to be initialized (main node should exist)
+		// Check if main node exists, or wait a bit for it to be created
+		let timeoutId: NodeJS.Timeout | null = null
+		let retryCount = 0
+		const maxRetries = 20 // Increased retries to 1 second total
+		
+		const checkAndCreateBranch = () => {
+			// Use nodesRef for always-fresh node data
+			const currentNodes = nodesRef.current
+			const mainNode = currentNodes.find(n => n.id === 'main')
+			
+			// Check both mainMessages prop AND mainNode.data.messages
+			// mainMessages is the source of truth from page.tsx
+			const hasMainMessages = mainMessages.length > 0
+			const mainNodeHasMessages = mainNode?.data?.messages && mainNode.data.messages.length > 0
+			const messageExists = mainMessages.some(m => m.id === pendingBranchMessageId)
+			
+			if (mainNode && hasMainMessages && messageExists) {
+				// Main node exists, messages are available, and target message exists
+				console.log('✅ Ready to create branch - main node, messages, and target message all found:', {
+					mainNode: !!mainNode,
+					mainMessagesCount: mainMessages.length,
+					targetMessageId: pendingBranchMessageId,
+					messageExists
+				})
+				
+				// Create branch
+				handleBranch('main', pendingBranchMessageId, false)
+				
+				// Clear processing timeout
+				if (processingTimeoutRef.current) {
+					clearTimeout(processingTimeoutRef.current)
+					processingTimeoutRef.current = null
+				}
+				
+				// Mark as processed and clear pending after a delay to allow branch creation to complete
+				processingTimeoutRef.current = setTimeout(() => {
+					lastProcessedMessageIdRef.current = null
+					processingTimeoutRef.current = null
+					onPendingBranchProcessed?.()
+				}, 300) // Increased delay to ensure branch is created
+			} else if (retryCount < maxRetries) {
+				// Wait a bit more for main node to be created or messages to be loaded
+				retryCount++
+				if (!mainNode) {
+					console.log(`⏳ Waiting for main node... (retry ${retryCount}/${maxRetries})`)
+				} else if (!hasMainMessages) {
+					console.log(`⏳ Waiting for main messages... (retry ${retryCount}/${maxRetries})`)
+				} else if (!messageExists) {
+					console.log(`⏳ Waiting for target message ${pendingBranchMessageId} to be available... (retry ${retryCount}/${maxRetries})`)
+				}
+				timeoutId = setTimeout(checkAndCreateBranch, 50)
+			} else {
+				// Give up after max retries
+				console.error('❌ Failed to create branch after retries:', {
+					mainNode: !!mainNode,
+					hasMainMessages,
+					messageExists,
+					targetMessageId: pendingBranchMessageId,
+					availableMessageIds: mainMessages.map(m => m.id)
+				})
+				// Reset processing flag so user can try again
+				lastProcessedMessageIdRef.current = null
+				if (processingTimeoutRef.current) {
+					clearTimeout(processingTimeoutRef.current)
+					processingTimeoutRef.current = null
+				}
+				// Don't clear pendingBranchMessageId - let user retry or wait for messages to load
+			}
+		}
+		
+		// Start checking after a small delay to allow React Flow to initialize
+		timeoutId = setTimeout(checkAndCreateBranch, 100)
+		
+		return () => {
+			if (timeoutId) clearTimeout(timeoutId)
+		}
+	}, [pendingBranchMessageId, mainMessages, handleBranch, onPendingBranchProcessed]) // Removed nodes from dependencies to prevent excessive re-runs
+
+	// ============================================
+	// NAVIGATION
+	// ============================================
+
+	useEffect(() => {
+		if (selectedBranchId && reactFlowInstance && nodes.length > 0) {
+			setTimeout(() => {
+				focusOnNode(reactFlowInstance, selectedBranchId, nodes)
+				setNodeActive(selectedBranchId)
+			}, 100)
+		}
+	}, [selectedBranchId, reactFlowInstance])
+
+	// ============================================
+	// LAYOUT ON MINIMIZE CHANGE (Debounced)
+	// ============================================
+
+	const previousNodesRef = useRef<ReactFlowNode[]>([])
+
+	// Helper to determine if layout should be applied
+	const shouldApplyLayout = useCallback(
+		(currentNodes: ReactFlowNode[], currentEdges: ReactFlowEdge[]): boolean => {
+			// Only apply layout if:
+			// 1. Node count changed (branch added/removed)
+			// 2. Minimize state changed
+			// 3. Messages changed significantly
+
+			if (currentNodes.length !== previousNodesRef.current.length) return true
+
+			const minimizeStateChanged = currentNodes.some((node, i) => {
+				const prev = previousNodesRef.current[i]
+				const nodeData = (node as any).data
+				const prevData = (prev as any)?.data
+				return nodeData?.isMinimized !== prevData?.isMinimized
+			})
+
+			if (minimizeStateChanged) return true
+
+			const messageCountChanged = currentNodes.some((node, i) => {
+				const prev = previousNodesRef.current[i]
+				const nodeData = (node as any).data
+				const prevData = (prev as any)?.data
+				return nodeData?.messages?.length !== prevData?.messages?.length
+			})
+
+			return messageCountChanged
+		},
+		[]
+	)
+
+	useEffect(() => {
+		if (
+			nodes.length > 0 &&
+			!layoutInProgressRef.current &&
+			shouldApplyLayout(nodes, edges)
+		) {
+			layoutInProgressRef.current = true
+
+			const timeoutId = setTimeout(() => {
+				const allMinimized = nodes.every((n) => n.data?.isMinimized)
+				const layouted = getLayoutedElements(nodes, edges, {
+					direction: 'TB',
+					minimized: allMinimized
+				})
+				const validated = validateNodePositions(layouted.nodes)
+				setNodes(validated)
+				setEdges(layouted.edges)
+				previousNodesRef.current = validated
+
+				setTimeout(() => {
+					layoutInProgressRef.current = false
+				}, 100)
+			}, 150)
+
+			return () => clearTimeout(timeoutId)
+		}
+	}, [nodes.length, minimizedNodes.size, nodes.map((n) => n.data?.messages?.length).join(',')])
+
+	// ============================================
+	// EXPOSE FUNCTIONS
+	// ============================================
+
+	useEffect(() => {
+		if (onMinimizeAllRef) {
+			onMinimizeAllRef(minimizeAllNodes)
+		}
+	}, [onMinimizeAllRef, minimizeAllNodes])
+
+	useEffect(() => {
+		if (onAllNodesMinimizedChange) {
+			const allMinimized = nodes.length > 0 && nodes.every((n) => minimizedNodes.has(n.id))
+			onAllNodesMinimizedChange(allMinimized)
+		}
+	}, [nodes.length, minimizedNodes.size])
+
+	// ============================================
+	// EVENT HANDLERS
+	// ============================================
+
+	const onNodeClick = useCallback(
+		(_event: React.MouseEvent, node: any) => {
+			setNodeActive(node.id)
+		},
+		[setNodeActive]
+	)
+
+	const onNodeDoubleClickHandler = useCallback(
+		(_event: React.MouseEvent, node: any) => {
+			if (onNodeDoubleClick) {
+				onNodeDoubleClick(node.id)
+			}
+			if (reactFlowInstance) {
+				focusOnNode(reactFlowInstance, node.id, nodes)
+			}
+		},
+		[onNodeDoubleClick, reactFlowInstance, nodes]
+	)
+
+	const onNodesChangeHandler: OnNodesChange = useCallback(
+		(changes) => {
+			// DON'T trigger layout here - it causes infinite loop
+			// Layout is handled separately in useEffect
+		},
+		[]
+	)
+
+	const onEdgesChangeHandler: OnEdgesChange = useCallback((changes) => {
+		// Handle edge changes if needed
+	}, [])
+
+	// ============================================
+	// RENDER
+	// ============================================
+
+	return (
+		<ReactFlowProvider>
+			<div className="w-full h-screen">
+				<ReactFlow
+					nodes={nodesWithHandlers}
+					edges={edges}
+					nodeTypes={nodeTypes}
+					onNodesChange={onNodesChangeHandler}
+					onEdgesChange={onEdgesChangeHandler}
+					onNodeClick={onNodeClick}
+					onNodeDoubleClick={onNodeDoubleClickHandler}
+					onInit={setReactFlowInstance}
+					fitView
+					fitViewOptions={{
+						padding: 0.2,
+						maxZoom: 1.2, // Prevent zooming in too much - keeps background visible
+						minZoom: 0.1
+					}}
+					defaultViewport={{ x: 0, y: 0, zoom: 0.8 }} // Default zoom that shows background
+					attributionPosition="bottom-left"
+					proOptions={{ hideAttribution: true }}
+				>
+					<Background variant={"dots" as BackgroundVariant} gap={20} size={1} />
+					<Controls />
+					<MiniMap
+						nodeColor={(node) => {
+							if (node.id === 'main') return '#8b5cf6'
+							if (node.data?.isActive) return '#3b82f6'
+							if (node.data?.isMinimized) return '#94a3b8'
+							return '#64748b'
+						}}
+						maskColor="rgba(0, 0, 0, 0.1)"
+					/>
+				</ReactFlow>
+			</div>
+		</ReactFlowProvider>
+	)
+}

@@ -393,7 +393,7 @@ export default function ChatInterface({
       
       {/* Messages Area - Flexible height with scroll */}
       <div 
-        className="flex-1 overflow-y-auto overflow-x-auto space-y-4 touch-pan-y pr-2 min-h-0" 
+        className="flex-1 overflow-y-auto overflow-x-auto space-y-4 touch-pan-y pr-2 min-h-0 messages-container" 
         ref={messagesContainerRef}
         onScroll={handleScroll}
         data-scrollable

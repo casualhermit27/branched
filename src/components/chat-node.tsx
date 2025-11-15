@@ -172,13 +172,15 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
         width: data.isMinimized ? '280px' : '1200px', 
         minWidth: data.isMinimized ? '280px' : '1200px',
         maxWidth: data.isMinimized ? '280px' : '1200px',
-        height: data.isMinimized ? 'auto' : 'auto',
-        minHeight: data.isMinimized ? 'auto' : '400px', // Minimum height for small content
-        maxHeight: data.isMinimized ? 'none' : '850px', // Fixed max height with scroll
+        height: data.isMinimized ? '200px' : 'auto',
+        minHeight: data.isMinimized ? '200px' : '400px',
+        maxHeight: data.isMinimized ? '200px' : '850px',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column'
       }}
+      data-minimized={data.isMinimized ? 'true' : undefined}
+      data-active={data.isActive ? 'true' : undefined}
     >
       <Handle 
         type="target" 

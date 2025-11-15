@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import FlowCanvas from '@/components/flow-canvas'
+import FlowCanvas from '@/components/flow-canvas/index'
 import AIPills from '@/components/ai-pills'
 import ChatInterface from '@/components/chat-interface'
 import ChatBranchesView from '@/components/chat-branches-view'
@@ -112,8 +112,6 @@ export default function Home() {
   
   // Guard to avoid duplicate branch creation from StrictMode double effects
   const creatingBranchRef = useRef<Set<string>>(new Set())
-  // Store branch data when created to ensure it's available for saving
-  const branchDataRef = useRef<Map<string, any>>(new Map())
   
   // Toast notifications
   const { addToast } = useToast()
@@ -322,17 +320,9 @@ export default function Home() {
       // Restore full conversation nodes with ALL data
       let restoredNodes = conversation.branches.map((b: any) => {
         const isMainNode = b.isMain || b.id === 'main'
-        return {
-          id: b.id,
-          type: b.type || (isMainNode ? 'main' : 'branch'), // Ensure type is set
-          title: b.label || b.title || (isMainNode ? 'Main Conversation' : 'Branch'),
-          messages: b.messages || [],
-          timestamp: b.timestamp || Date.now(),
-          parentId: isMainNode ? undefined : (b.parentId || 'main'), // Ensure parentId is 'main' for branches
-          children: b.children || [],
-          isActive: b.isActive || false,
-        // Restore AI and mode state
-        selectedAIs: b.selectedAIs?.map((ai: any) => {
+        
+        // Reconstruct AI objects with logos
+        const restoredAIs = b.selectedAIs?.map((ai: any) => {
           // Skip if ai is a serialized React element
           if (ai.type && ai.props && ai._owner !== undefined) {
             // This is a serialized React element, skip it
@@ -381,49 +371,62 @@ export default function Home() {
             functional: ai.functional !== undefined ? ai.functional : true,
             logo: logoElement
           }
-        }).filter((ai: any) => ai !== null) || [],
-        multiModelMode: b.multiModelMode || false,
-        isMain: b.isMain || b.id === 'main',
-        isMinimized: b.isMinimized || false,
-        showAIPill: b.showAIPill || false,
-        position: b.position || { x: 0, y: 0 },
-        nodeData: b.nodeData || {},
-        parentMessageId: b.parentMessageId,
-        inheritedMessages: b.inheritedMessages || [],
-        branchMessages: b.branchMessages || []
-      }
-    })
+        }).filter((ai: any) => ai !== null) || []
+        
+        // Return proper React Flow node structure with data property
+        return {
+          id: b.id,
+          type: 'chatNode', // React Flow requires 'chatNode' type
+          position: b.position || { x: 0, y: 0 },
+          data: {
+            label: b.label || b.title || (isMainNode ? 'Main Conversation' : 'Branch'),
+            messages: b.messages || [],
+            inheritedMessages: b.inheritedMessages || [],
+            branchMessages: b.branchMessages || [],
+            selectedAIs: restoredAIs || [],
+            multiModelMode: b.multiModelMode || false,
+            isMain: b.isMain || b.id === 'main',
+            isMinimized: b.isMinimized || false,
+            showAIPill: b.showAIPill !== undefined ? b.showAIPill : !isMainNode,
+            parentId: isMainNode ? undefined : (b.parentId || 'main'),
+            parentMessageId: b.parentMessageId,
+            contextSnapshot: b.contextSnapshot,
+            nodeId: b.id
+          }
+        }
+      })
     
     // If main node is not in branches, create it from mainMessages
     if (!mainNodeInBranches) {
       console.log('📝 Main node not in branches, creating from mainMessages')
       const mainNode = {
         id: 'main',
-        type: 'main',
-        title: 'Main Conversation',
-        messages: conversation.mainMessages || messages,
-        timestamp: Date.now(),
-        parentId: undefined,
-        children: [],
-        isActive: false,
-        selectedAIs: conversation.selectedAIs || selectedAIs,
-        multiModelMode: conversation.multiModelMode || false,
-        isMain: true,
-        isMinimized: false,
-        showAIPill: false,
+        type: 'chatNode', // React Flow requires 'chatNode' type
         position: { x: 400, y: 50 },
-        nodeData: {},
-        parentMessageId: undefined,
-        inheritedMessages: [],
-        branchMessages: []
+        data: {
+          label: 'Main Conversation',
+          messages: conversation.mainMessages || messages,
+          inheritedMessages: [],
+          branchMessages: [],
+          selectedAIs: conversation.selectedAIs || selectedAIs,
+          multiModelMode: conversation.multiModelMode || false,
+          isMain: true,
+          isMinimized: false,
+          showAIPill: false,
+          parentId: undefined,
+          parentMessageId: undefined,
+          nodeId: 'main'
+        }
       }
       restoredNodes = [mainNode, ...restoredNodes]
       console.log('✅ Added main node to restored nodes')
     } else {
       // Ensure main node messages are up to date
-      const mainNodeIndex = restoredNodes.findIndex((n: any) => n.id === 'main' || n.isMain)
+      const mainNodeIndex = restoredNodes.findIndex((n: any) => n.id === 'main' || n.data?.isMain)
       if (mainNodeIndex !== -1) {
-        restoredNodes[mainNodeIndex].messages = conversation.mainMessages || messages
+        if (restoredNodes[mainNodeIndex].data) {
+          restoredNodes[mainNodeIndex].data.messages = conversation.mainMessages || messages
+        }
         console.log('✅ Updated main node messages in restored nodes')
       }
     }
@@ -523,74 +526,7 @@ export default function Home() {
         branchTypes: branchesInConversationNodes.map(n => ({ id: n.id, type: n.type, parentId: n.parentId }))
       })
       
-      // If there are branches in the branches array that aren't in conversationNodes yet,
-      // create placeholder nodes for them so they get saved
-      const branchIdsInNodes = new Set(allNodes.map(n => n.id))
-      const missingBranches = branches.filter(b => b.id !== 'main' && !branchIdsInNodes.has(b.id))
-      
-      if (missingBranches.length > 0) {
-        console.warn('⚠️ Branches exist in branches array but not in conversationNodes yet:', missingBranches.map(b => b.id))
-        console.warn('⚠️ Creating placeholder nodes for these branches to ensure they are saved')
-        
-        // Create placeholder nodes for missing branches
-        // Try to find the branch data from conversationNodes that was just added
-        missingBranches.forEach(branch => {
-          // Try to find this branch in conversationNodes that was just added (before state update)
-          const branchFromState = conversationNodes.find(n => n.id === branch.id)
-          // Also check branchDataRef for branch data stored when created
-          const branchFromRef = branchDataRef.current.get(branch.id)
-          
-          const placeholderNode = branchFromState ? {
-            // Use the data from conversationNodes if available
-            ...branchFromState,
-            type: branchFromState.type || 'branch',
-            parentId: branchFromState.parentId || 'main',
-            isMain: false
-          } : branchFromRef ? {
-            // Use the data from branchDataRef if available
-            ...branchFromRef,
-            type: branchFromRef.type || 'branch',
-            parentId: branchFromRef.parentId || 'main',
-            isMain: false
-          } : {
-            // Otherwise create a basic placeholder
-            id: branch.id,
-            type: 'branch',
-            title: 'Branch',
-            messages: messages.filter(m => m.isUser), // At least include user messages
-            timestamp: Date.now(),
-            parentId: 'main',
-            children: [],
-            isActive: branch.id === currentBranch,
-            selectedAIs: selectedAIs.map(ai => ({
-              id: ai.id,
-              name: ai.name,
-              color: ai.color,
-              functional: ai.functional !== undefined ? ai.functional : true
-            })),
-            multiModelMode: multiModelMode,
-            isMain: false,
-            isMinimized: false,
-            showAIPill: false,
-            position: { x: 0, y: 0 },
-            nodeData: {}
-          }
-          allNodes.push(placeholderNode)
-          console.log('✅ Created placeholder node for branch:', {
-            branchId: branch.id,
-            fromState: !!branchFromState,
-            fromRef: !!branchFromRef,
-            hasMessages: !!placeholderNode.messages?.length,
-            type: placeholderNode.type,
-            parentId: placeholderNode.parentId
-          })
-        })
-        
-        console.log('📦 All nodes after adding placeholders:', {
-          count: allNodes.length,
-          ids: allNodes.map(n => n.id)
-        })
-      }
+      // FlowCanvas is the single source of truth - no placeholder nodes
       
       const hasMainNode = allNodes.some(node => node.id === 'main')
       
@@ -646,12 +582,26 @@ export default function Home() {
       const branchesForSave = allNodes.map(node => {
         const isMainNode = node.id === 'main' || node.isMain
         // CRITICAL FIX: Nodes can have messages in different places:
-        // 1. node.data.messages (React Flow format)
+        // 1. node.data.messages (React Flow format - combined for display)
         // 2. node.messages (flattened format from updateConversationNodes)
-        // Check both locations
-        const nodeMessages = isMainNode 
-          ? messages 
-          : (node.data?.messages || node.messages || [])
+        // 3. node.data.inheritedMessages + node.data.branchMessages (separate context)
+        // For branches, we need to combine inherited + branch messages for saving
+        let nodeMessages: any[] = []
+        if (isMainNode) {
+          nodeMessages = messages
+        } else {
+          // For branches, combine inheritedMessages + branchMessages
+          const inheritedMessages = node.data?.inheritedMessages || node.inheritedMessages || []
+          const branchMessages = node.data?.branchMessages || node.branchMessages || []
+          
+          // If we have separate inherited and branch messages, combine them
+          if (inheritedMessages.length > 0 || branchMessages.length > 0) {
+            nodeMessages = [...inheritedMessages, ...branchMessages]
+          } else {
+            // Fallback to combined messages if separate ones don't exist
+            nodeMessages = node.data?.messages || node.messages || []
+          }
+        }
         
         console.log('🔍 Processing node for save:', {
           id: node.id,
@@ -688,11 +638,21 @@ export default function Home() {
           }
         }
         
+        // Validate parentId - it should never be the node's own ID
+        let finalParentId = node.parentId || node.data?.parentId
+        if (!isMainNode && finalParentId === node.id) {
+          console.error('❌ Invalid parentId - equals node id:', node.id, 'Setting to main as fallback')
+          finalParentId = 'main'
+        }
+        if (!isMainNode && !finalParentId) {
+          finalParentId = 'main' // Fallback for branches without parentId
+        }
+        
         return {
           id: node.id,
           label: node.title || node.data?.label || 'Untitled',
-          parentId: node.parentId || node.data?.parentId || (isMainNode ? undefined : 'main'),
-          parentMessageId: isMainNode ? undefined : (parentMessageId || 'unknown'), // Use 'unknown' as fallback instead of empty string
+          parentId: isMainNode ? undefined : finalParentId,
+          parentMessageId: isMainNode ? undefined : parentMessageId, // ONLY trust FlowCanvas
           inheritedMessages: isMainNode ? undefined : (node.data?.inheritedMessages || node.inheritedMessages || []),
           branchMessages: isMainNode ? undefined : (node.data?.branchMessages || node.branchMessages || []),
           messages: sanitizeMessages(nodeMessages), // Sanitize messages before saving
@@ -1071,7 +1031,6 @@ export default function Home() {
     currentConversationIdRef.current = null
     branchCacheRef.current.clear()
     creatingBranchRef.current.clear()
-    branchDataRef.current.clear()
     
     console.log('🧹 Cleared all state and refs for new conversation')
     
@@ -1196,7 +1155,6 @@ export default function Home() {
       // Clear all refs and caches for complete isolation
       branchCacheRef.current.clear()
       creatingBranchRef.current.clear()
-      branchDataRef.current.clear()
       
       console.log('🧹 Cleared all state for conversation switch')
       
@@ -1362,158 +1320,115 @@ export default function Home() {
     
     // Only update if nodes have actually changed
     const newConversationNodes = nodes.map(node => {
-      // Find parent node by looking at edges or node data
-      let parentId = node.data.parentId
-      
-      // If no direct parentId, try to infer from node position or data
-      if (!parentId && node.id !== 'main') {
-        // For branch nodes, the parent is usually 'main' unless specified otherwise
-        parentId = 'main'
-      }
-      
-      const isMainNode = node.id === 'main' || node.data.isMain
+      // Do NOT infer or guess missing parents — trust ReactFlow (FlowCanvas) node data exactly.
+      const isMainNode = node.id === 'main' || node.data?.isMain
+      const parentId = node.data?.parentId // may be undefined for main
+      const parentMessageId = node.data?.parentMessageId // may be undefined; do not guess
       
       return {
         id: node.id,
         type: node.type || (isMainNode ? 'main' : 'branch'),
-        title: node.data.messages?.[0]?.text?.substring(0, 30) + '...' || node.data.label || 'Untitled',
-        messages: node.data.messages || [],
-        timestamp: node.data.messages?.[0]?.timestamp || Date.now(),
-        parentId: isMainNode ? undefined : (parentId || 'main'), // Ensure branches have parentId='main'
-        parentMessageId: isMainNode ? undefined : (node.data?.parentMessageId || node.parentMessageId || node.nodeData?.parentMessageId || ''), // CRITICAL: Include parentMessageId for branches
-        inheritedMessages: isMainNode ? undefined : (node.data?.inheritedMessages || node.inheritedMessages || []),
-        branchMessages: isMainNode ? undefined : (node.data?.branchMessages || node.branchMessages || []),
+        title: node.data?.messages?.[0]?.text?.substring(0, 30) + '...' || node.data?.label || 'Untitled',
+        messages: node.data?.messages || [],
+        timestamp: node.data?.messages?.[0]?.timestamp || Date.now(),
+        parentId: isMainNode ? undefined : parentId,
+        parentMessageId: isMainNode ? undefined : parentMessageId,
+        inheritedMessages: isMainNode ? undefined : (node.data?.inheritedMessages || []),
+        branchMessages: isMainNode ? undefined : (node.data?.branchMessages || []),
         children: [],
         isActive: node.id === activeBranchId,
-        // Store ALL node data for complete restoration
-        selectedAIs: node.data.selectedAIs || [],
-        multiModelMode: node.data.multiModelMode || false,
+        selectedAIs: node.data?.selectedAIs || [],
+        multiModelMode: node.data?.multiModelMode || false,
         isMain: isMainNode,
-        isMinimized: node.data.isMinimized || false,
-        showAIPill: node.data.showAIPill || false,
+        isMinimized: node.data?.isMinimized || false,
+        showAIPill: node.data?.showAIPill || false,
         position: node.position || { x: 0, y: 0 },
-        // Store all additional data
         nodeData: {
-          label: node.data.label,
-          onAddAI: node.data.onAddAI,
-          onRemoveAI: node.data.onRemoveAI,
-          onBranch: node.data.onBranch,
-          onSendMessage: node.data.onSendMessage,
-          onToggleMinimize: node.data.onToggleMinimize,
-          isGenerating: node.data.isGenerating,
-          existingBranchesCount: node.data.existingBranchesCount,
-          height: node.data.height,
-          isHighlighted: node.data.isHighlighted
+          label: node.data?.label,
+          onAddAI: node.data?.onAddAI,
+          onRemoveAI: node.data?.onRemoveAI,
+          onBranch: node.data?.onBranch,
+          onSendMessage: node.data?.onSendMessage,
+          onToggleMinimize: node.data?.onToggleMinimize,
+          isGenerating: node.data?.isGenerating,
+          existingBranchesCount: node.data?.existingBranchesCount,
+          height: node.data?.height,
+          isHighlighted: node.data?.isHighlighted
         }
       }
     })
     
-    // Merge FlowCanvas nodes with existing conversationNodes instead of replacing
-    // This ensures manually added branches (before FlowCanvas creates them) are preserved
-    setConversationNodes(prev => {
-      // Create a map of FlowCanvas nodes by ID for quick lookup
-      const flowCanvasNodesMap = new Map(newConversationNodes.map(n => [n.id, n]))
-      
-      // Start with FlowCanvas nodes (they're the source of truth once created)
-      const merged: any[] = [...newConversationNodes]
-      
-      // Ensure main node is always included
-      const hasMainNode = merged.some(n => n.id === 'main' || n.isMain)
-      if (!hasMainNode && prev.some(n => n.id === 'main' || n.isMain)) {
-        const mainNode = prev.find(n => n.id === 'main' || n.isMain)
-        if (mainNode) {
-          console.log('🔀 Adding main node to merged nodes')
-          merged.unshift(mainNode) // Add main node at the beginning
+    // FlowCanvas is the single source of truth for nodes — do not preserve legacy/placeholder nodes from prev
+    setConversationNodes(() => {
+      // Ensure main node always exists with proper messages
+      const hasMain = newConversationNodes.some(n => n.id === 'main' || n.isMain)
+      if (!hasMain) {
+        // If FlowCanvas hasn't provided main, create minimal main placeholder (will be replaced by FlowCanvas soon)
+        const mainNode = {
+          id: 'main',
+          type: 'main',
+          title: 'Main Conversation',
+          messages: messages || [], // Use current messages state
+          timestamp: Date.now(),
+          parentId: undefined,
+          children: [],
+          isActive: !currentBranch,
+          selectedAIs: selectedAIs || [],
+          multiModelMode,
+          isMain: true,
+          position: { x: 400, y: 50 }
         }
-      }
-      
-      // Add any nodes from prev that don't exist in FlowCanvas yet
-      // These are branches that were manually added but FlowCanvas hasn't created yet
-      prev.forEach(prevNode => {
-        if (!flowCanvasNodesMap.has(prevNode.id)) {
-          console.log('🔀 Preserving manually added node not yet in FlowCanvas:', {
-            id: prevNode.id,
-            type: prevNode.type,
-            parentId: prevNode.parentId,
-            isMain: prevNode.isMain
-          })
-          // Ensure preserved branches have correct structure
-          const preservedNode = {
-            ...prevNode,
-            type: prevNode.type || (prevNode.isMain ? 'main' : 'branch'),
-            parentId: prevNode.isMain ? undefined : (prevNode.parentId || 'main')
+        return [mainNode, ...newConversationNodes]
+      } else {
+        // Update main node messages if they're missing or outdated
+        return newConversationNodes.map(node => {
+          if (node.id === 'main' || node.isMain) {
+            return {
+              ...node,
+              messages: node.messages && node.messages.length > 0 ? node.messages : (messages || [])
+            }
           }
-          merged.push(preservedNode)
-        }
-      })
-      
-      // Log all branches in merged nodes
-      const branchesInMerged = merged.filter(n => !n.isMain && n.id !== 'main')
-      console.log('📊 Branches in merged conversationNodes:', {
-        totalNodes: merged.length,
-        branches: branchesInMerged.length,
-        branchIds: branchesInMerged.map(n => ({ id: n.id, type: n.type, parentId: n.parentId }))
-      })
-      
-      // Check if anything actually changed using a stable comparison
-      const prevIds = new Set(prev.map(n => n.id))
-      const mergedIds = new Set(merged.map(n => n.id))
-      
-      // Check if IDs changed
-      const idsChanged = prevIds.size !== mergedIds.size || 
-        [...mergedIds].some(id => !prevIds.has(id))
-      
-      // Check if node data changed (only check essential fields)
-      const dataChanged = idsChanged || merged.some((newNode) => {
-        const prevNode = prev.find(p => p.id === newNode.id)
-        if (!prevNode) {
-          console.log('🆕 New node detected:', { 
-            id: newNode.id, 
-            type: newNode.type, 
-            isMain: newNode.isMain,
-            parentMessageId: newNode.parentMessageId,
-            hasMessages: !!(newNode.messages?.length)
-          })
-          return true
-        }
-        
-        const changed = prevNode.messages?.length !== newNode.messages?.length ||
-               prevNode.isActive !== newNode.isActive ||
-               prevNode.isMain !== newNode.isMain ||
-               prevNode.parentMessageId !== newNode.parentMessageId
-        
-        if (changed) {
-          console.log('🔄 Node changed:', { 
-            id: newNode.id, 
-            messagesChanged: prevNode.messages?.length !== newNode.messages?.length,
-            isActiveChanged: prevNode.isActive !== newNode.isActive,
-            isMainChanged: prevNode.isMain !== newNode.isMain,
-            parentMessageIdChanged: prevNode.parentMessageId !== newNode.parentMessageId
-          })
-        }
-        
-        return changed
-      })
-      
-      if (dataChanged) {
-        console.log('🔄 Merged conversationNodes:', {
-          prevCount: prev.length,
-          newCount: merged.length,
-          ids: merged.map(n => n.id),
-          branches: merged.filter(n => !n.isMain && n.id !== 'main').map(n => ({
-            id: n.id,
-            parentMessageId: n.parentMessageId,
-            hasMessages: !!(n.messages?.length),
-            messagesCount: n.messages?.length || 0
-          }))
+          return node
         })
-        return merged
       }
-      
-      console.log('⏭️ No changes detected, skipping update')
-      return prev
     })
   }, [activeBranchId])
+  
+  // Ensure conversationNodes is populated when switching to chat view
+  useEffect(() => {
+    if (viewMode === 'chat' && conversationNodes.length === 0) {
+      // If switching to chat view and conversationNodes is empty, create main node
+      const mainNode = {
+        id: 'main',
+        type: 'main',
+        title: 'Main Conversation',
+        messages: messages || [],
+        timestamp: Date.now(),
+        parentId: undefined,
+        children: [],
+        isActive: !currentBranch,
+        selectedAIs: selectedAIs || [],
+        multiModelMode,
+        isMain: true,
+        position: { x: 400, y: 50 }
+      }
+      setConversationNodes([mainNode])
+    } else if (viewMode === 'chat' && conversationNodes.length > 0) {
+      // Ensure main node has messages when switching to chat view
+      const hasMain = conversationNodes.some(n => n.id === 'main' || n.isMain)
+      if (hasMain) {
+        setConversationNodes(prev => prev.map(node => {
+          if (node.id === 'main' || node.isMain) {
+            return {
+              ...node,
+              messages: node.messages && node.messages.length > 0 ? node.messages : (messages || [])
+            }
+          }
+          return node
+        }))
+      }
+    }
+  }, [viewMode, messages, selectedAIs, multiModelMode, currentBranch])
   
   // Stop AI generation
   const stopGeneration = () => {
@@ -2148,11 +2063,13 @@ export default function Home() {
     }
     
     // When in chat mode, switch to canvas mode first
-    if (branches.length === 0) {
+    // Check if we're in simple chat view (no branches and no conversation nodes except main)
+    const hasBranches = branches.length > 0 || conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length > 0
+    
+    if (!hasBranches) {
       console.log('📍 Switching to canvas mode for first branch')
-      setTimeout(() => {
-        setPendingBranchMessageId(messageId)
-      }, 50)
+      // Set pendingBranchMessageId immediately - FlowCanvas will create branch when it mounts
+      setPendingBranchMessageId(messageId)
     } else {
       console.log('📍 Already in canvas mode - creating new branch')
       // When already in canvas mode, create the branch directly
