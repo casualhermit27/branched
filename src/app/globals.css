@@ -92,3 +92,52 @@
 .react-flow {
   position: relative !important;
 }
+
+/* Dotted connector animation */
+@keyframes dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.react-flow__edge-path {
+  animation: dash 20s linear infinite;
+}
+
+/* Branch node shadow effect */
+.react-flow__node {
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+  transition: filter 0.3s ease;
+}
+
+.react-flow__node:hover {
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.15));
+}
+
+/* Active node highlight */
+.react-flow__node[data-active='true'] {
+  filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.5));
+}
+
+/* Minimized node styling */
+.react-flow__node[data-minimized='true'] {
+  opacity: 0.8;
+}
+
+/* Message container scrollbar */
+.messages-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.messages-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 4px;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}

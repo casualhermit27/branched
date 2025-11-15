@@ -7,19 +7,85 @@ async function getConversation(req: NextApiRequest, res: NextApiResponse, id: st
   try {
     await connectDB()
     
-    const conversation = await Conversation.findById(id)
+    // Check if using normalized structure
+    const useNormalized = req.query.normalized === 'true'
     
-    if (!conversation) {
-      return res.status(404).json({
-        success: false,
-        error: 'Conversation not found'
+    if (useNormalized) {
+      // Use normalized structure (messages and branches collections)
+      const { MongoClient } = await import('mongodb')
+      const client = await MongoClient.connect(process.env.MONGODB_URI || '')
+      const db = client.db(process.env.MONGODB_DB_NAME || 'branched')
+      
+      // 1. Get all branches for this conversation
+      const branches = await db
+        .collection('branches')
+        .find({ conversationId: id })
+        .sort({ createdAt: 1 })
+        .toArray()
+      
+      // 2. Get all message IDs from all branches
+      const allMessageIds = new Set<string>()
+      branches.forEach((branch: any) => {
+        // Add branch messages
+        if (branch.messageIds) {
+          branch.messageIds.forEach((msgId: string) => allMessageIds.add(msgId))
+        }
+        // Add inherited messages
+        if (branch.contextSnapshot?.inheritedMessageIds) {
+          branch.contextSnapshot.inheritedMessageIds.forEach((msgId: string) =>
+            allMessageIds.add(msgId)
+          )
+        }
+      })
+      
+      // 3. Fetch all messages
+      const messages = await db
+        .collection('messages')
+        .find({ _id: { $in: Array.from(allMessageIds) } })
+        .sort({ timestamp: 1 })
+        .toArray()
+      
+      // 4. Get conversation metadata
+      const conversation = await db
+        .collection('conversations')
+        .findOne({ _id: id })
+      
+      await client.close()
+      
+      return res.status(200).json({
+        success: true,
+        data: {
+          id,
+          title: conversation?.title || 'Conversation',
+          branches: branches.map((b: any) => ({
+            ...b,
+            _id: b._id.toString()
+          })),
+          messages: messages.map((m: any) => ({
+            ...m,
+            _id: m._id.toString(),
+            id: m._id // Use _id as id for compatibility
+          })),
+          createdAt: conversation?.createdAt,
+          updatedAt: conversation?.updatedAt
+        }
+      })
+    } else {
+      // Use legacy structure (single conversation document)
+      const conversation = await Conversation.findById(id)
+      
+      if (!conversation) {
+        return res.status(404).json({
+          success: false,
+          error: 'Conversation not found'
+        })
+      }
+      
+      return res.status(200).json({
+        success: true,
+        data: conversation
       })
     }
-    
-    return res.status(200).json({
-      success: true,
-      data: conversation
-    })
   } catch (error: any) {
     console.error('Error getting conversation:', error)
     return res.status(500).json({

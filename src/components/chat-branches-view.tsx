@@ -154,6 +154,12 @@ export default function ChatBranchesView({
   }, [branches])
 
   const { mainNode, rootBranches } = buildBranchTree
+  
+  // Ensure mainNode has messages - use mainMessages prop if mainNode.messages is missing
+  const mainNodeWithMessages = mainNode ? {
+    ...mainNode,
+    messages: mainNode.messages || mainMessages || []
+  } : null
 
   // Format timestamp for display
   const formatTime = (timestamp: number) => {
@@ -439,7 +445,7 @@ export default function ChatBranchesView({
                     <div className="flex items-center gap-2 mt-1">
                       <ChatCircle className="w-3 h-3 text-muted-foreground/50" weight="fill" />
                       <span className="text-xs text-muted-foreground/60 font-medium">
-                        {mainNode.messages.length} {mainNode.messages.length === 1 ? 'message' : 'messages'}
+                        {mainNodeWithMessages?.messages?.length || mainMessages.length || 0} {(mainNodeWithMessages?.messages?.length || mainMessages.length || 0) === 1 ? 'message' : 'messages'}
                       </span>
                     </div>
                   </div>
@@ -462,7 +468,7 @@ export default function ChatBranchesView({
                       : 'border-border/30 dark:border-border/20 bg-muted/10 dark:bg-muted/5'
                   }`}>
                     <ChatInterface
-                      messages={mainNode.messages}
+                      messages={mainNodeWithMessages?.messages || mainMessages || []}
                       onSendMessage={(text) => onSendMessage(text, 'main')}
                       selectedAIs={selectedAIs}
                       onBranchFromMessage={onBranchFromMessage}
