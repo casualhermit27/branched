@@ -566,7 +566,7 @@ export function useBranchManagement({
 					branchNode.id,
 					{
         animated: false,
-						type: 'smoothstep',
+						type: 'bezier',
 						nodes: nodesRef.current, // Pass nodes for level calculation
 						style: {
 							strokeWidth: 2,

@@ -527,7 +527,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 						node.id,
 						{
 							animated: false,
-							type: 'smoothstep',
+							type: 'bezier',
 							nodes: restored, // Pass nodes for level calculation
 							style: {
 								strokeWidth: 2,

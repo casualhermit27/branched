@@ -76,7 +76,7 @@ export function createEdge(
 		nodes?: Array<{ id: string; data?: { parentId?: string; isMain?: boolean } }> // Nodes for level calculation
 	} = {}
 ): Edge {
-	const { animated = false, type = 'smoothstep', style = {}, level, nodes } = options
+	const { animated = false, type = 'bezier', style = {}, level, nodes } = options
 
 	// Calculate level if not provided
 	let edgeLevel = level
@@ -153,7 +153,7 @@ export function createContextLinkEdge(
 ): Edge {
 	return createEdge(source, target, {
 		animated: false,
-		type: 'smoothstep',
+		type: 'bezier',
 		style: {
 			stroke: '#f59e0b', // amber-500
 			strokeWidth: 2.5,
@@ -173,7 +173,7 @@ export function createBranchEdges(
 	return branchIds.map((branchId) =>
 		createEdge(parentId, branchId, {
 			animated,
-			type: 'smoothstep'
+			type: 'bezier'
 		})
 	)
 }
