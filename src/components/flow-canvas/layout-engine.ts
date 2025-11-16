@@ -134,27 +134,25 @@ export function getLayoutedElements(
 		return { nodes, edges }
 	}
 
-	// Apply calculated positions to nodes
-	const layoutedNodes = nodes.map((node) => {
+	// First pass: Calculate all node positions and dimensions
+	const nodePositions: Array<{
+		node: Node
+		dims: { width: number; height: number }
+		x: number
+		y: number
+		centerY: number
+		parentId?: string
+	}> = []
+	const invalidNodes: Node[] = []
+
+	nodes.forEach((node) => {
 		try {
 			const nodeWithPosition = dagreGraph.node(node.id)
 
 			if (!nodeWithPosition || isNaN(nodeWithPosition.x) || isNaN(nodeWithPosition.y)) {
 				console.warn('Invalid position for node:', node.id)
-				return {
-					...node,
-					// Preserve all node data, especially parentId
-					data: {
-						...node.data,
-						// Ensure parentId is never the node's own ID
-						parentId: node.data?.parentId && node.data.parentId !== node.id 
-							? node.data.parentId 
-							: node.data?.parentId || (node.id === 'main' ? undefined : 'main')
-					},
-					position: node.position || { x: 400, y: 50 },
-					targetPosition: 'top' as const,
-					sourcePosition: 'bottom' as const
-				}
+				invalidNodes.push(node)
+				return
 			}
 
 			const dims = calculateNodeDimensions(
@@ -162,43 +160,95 @@ export function getLayoutedElements(
 				node.data?.isMinimized || false
 			)
 
-			// Calculate centered position
+			// Calculate centered position (Dagre's default)
 			const x = nodeWithPosition.x - dims.width / 2
 			const y = nodeWithPosition.y - dims.height / 2
 
-			return {
-				...node,
-				// Preserve all node data, especially parentId
-				data: {
-					...node.data,
-					// Ensure parentId is never the node's own ID
-					parentId: node.data?.parentId && node.data.parentId !== node.id 
-						? node.data.parentId 
-						: node.data?.parentId || (node.id === 'main' ? undefined : 'main')
-				},
-				position: { x, y },
-				width: dims.width,
-				height: dims.height,
-				targetPosition: 'top' as const,
-				sourcePosition: 'bottom' as const
-			}
+			nodePositions.push({
+				node,
+				dims,
+				x,
+				y,
+				centerY: nodeWithPosition.y, // Dagre's center Y position
+				parentId: node.data?.parentId
+			})
 		} catch (error) {
 			console.warn('Error processing node:', node.id, error)
-			return {
-				...node,
-				// Preserve all node data, especially parentId
-				data: {
-					...node.data,
-					// Ensure parentId is never the node's own ID
-					parentId: node.data?.parentId && node.data.parentId !== node.id 
-						? node.data.parentId 
-						: node.data?.parentId || (node.id === 'main' ? undefined : 'main')
-				},
-				position: node.position || { x: 400, y: 50 },
-				targetPosition: 'top' as const,
-				sourcePosition: 'bottom' as const
-			}
+			invalidNodes.push(node)
 		}
+	})
+
+	// Group nodes by their parent to identify branches at the same level
+	const nodesByParent = new Map<string, typeof nodePositions>()
+
+	nodePositions.forEach((item) => {
+		// Skip main node - only align branch nodes
+		if (item.node.id === 'main' || item.node.data?.isMain) {
+			return
+		}
+		
+		const parentId = item.parentId || 'main'
+		if (!nodesByParent.has(parentId)) {
+			nodesByParent.set(parentId, [])
+		}
+		nodesByParent.get(parentId)!.push(item)
+	})
+
+	// Align branches at the same level by their top edge
+	nodesByParent.forEach((siblingNodes) => {
+		if (siblingNodes.length <= 1) return // No alignment needed for single branch
+
+		// Find the minimum top Y position (highest node)
+		const minTopY = Math.min(...siblingNodes.map(item => item.y))
+
+		// Align all siblings to the same top Y position
+		siblingNodes.forEach((item) => {
+			item.y = minTopY
+		})
+	})
+
+	// Apply calculated positions to nodes
+	const layoutedNodes = nodePositions.map((item) => {
+		const { node, dims, x, y } = item
+
+		return {
+			...node,
+			// Preserve all node data, especially parentId
+			data: {
+				...node.data,
+				// Ensure parentId is never the node's own ID
+				parentId: node.data?.parentId && node.data.parentId !== node.id 
+					? node.data.parentId 
+					: node.data?.parentId || (node.id === 'main' ? undefined : 'main')
+			},
+			position: { x, y },
+			width: dims.width,
+			height: dims.height,
+			targetPosition: 'top' as const,
+			sourcePosition: 'bottom' as const
+		}
+	})
+
+	// Add invalid nodes with fallback positions
+	invalidNodes.forEach((node) => {
+		const dims = calculateNodeDimensions(
+			node.data?.messages?.length || 0,
+			node.data?.isMinimized || false
+		)
+		layoutedNodes.push({
+			...node,
+			data: {
+				...node.data,
+				parentId: node.data?.parentId && node.data.parentId !== node.id 
+					? node.data.parentId 
+					: node.data?.parentId || (node.id === 'main' ? undefined : 'main')
+			},
+			position: node.position || { x: 400, y: 50 },
+			width: dims.width,
+			height: dims.height,
+			targetPosition: 'top' as const,
+			sourcePosition: 'bottom' as const
+		})
 	})
 
 	// Validate positions
