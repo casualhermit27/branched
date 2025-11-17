@@ -22,7 +22,7 @@ The FlowCanvas now uses a **Context Service Pattern** with lightweight snapshots
 - Each branch only stores:
   - `contextSnapshot` (just IDs)
   - `branchMessageIds` (IDs of messages created in this branch)
-  - Metadata (selectedAIs, multiModelMode, etc.)
+  - Metadata (selectedAIs, etc.)
 
 ## Architecture Flow
 
@@ -42,7 +42,7 @@ const branchContext: BranchContext = {
   parentBranchId,
   contextSnapshot: snapshot,  // Just IDs!
   branchMessageIds: [],
-  metadata: { selectedAIs, multiModelMode }
+  metadata: { selectedAIs }
 }
 
 // 3. Store branch
@@ -117,7 +117,6 @@ branchStore.addMessage(branchId, aiResponse.id)  // Just reference
   "branchMessageIds": ["msg-101", "msg-102"],
   "metadata": {
     "selectedAIs": [...],
-    "multiModelMode": false
   }
 }
 ```

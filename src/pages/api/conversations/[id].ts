@@ -81,6 +81,14 @@ async function getConversation(req: NextApiRequest, res: NextApiResponse, id: st
         })
       }
       
+      console.log(`📥 GET conversation ${id}:`, {
+        mainMessagesCount: conversation.mainMessages?.length || 0,
+        branchesCount: conversation.branches?.length || 0,
+        hasMainMessages: !!conversation.mainMessages,
+        hasBranches: !!conversation.branches,
+        branchIds: conversation.branches?.map((b: any) => b.id) || []
+      })
+      
       return res.status(200).json({
         success: true,
         data: conversation
@@ -100,22 +108,29 @@ async function updateConversation(req: NextApiRequest, res: NextApiResponse, id:
   try {
     await connectDB()
     
-    console.log(`Updating conversation ${id} with data:`, {
+    console.log(`📝 Updating conversation ${id} with data:`, {
       hasBody: !!req.body,
       title: req.body?.title,
       mainMessagesCount: req.body?.mainMessages?.length,
+      mainMessages: req.body?.mainMessages?.map((m: any) => ({
+        id: m.id,
+        isUser: m.isUser,
+        textLength: m.text?.length || 0
+      })),
       selectedAIsCount: req.body?.selectedAIs?.length,
-      branchesCount: req.body?.branches?.length
+      branchesCount: req.body?.branches?.length,
+      branchIds: req.body?.branches?.map((b: any) => b.id) || []
     })
     
     // Prepare update data
-    const updateData: any = {}
+    const updateData: any = {
+      updatedAt: new Date() // Always update the timestamp
+    }
     
     // Only include fields that are provided
     if (req.body.title !== undefined) updateData.title = req.body.title
     if (req.body.mainMessages !== undefined) updateData.mainMessages = req.body.mainMessages
     if (req.body.selectedAIs !== undefined) updateData.selectedAIs = req.body.selectedAIs
-    if (req.body.multiModelMode !== undefined) updateData.multiModelMode = req.body.multiModelMode
     if (req.body.branches !== undefined) updateData.branches = req.body.branches
     if (req.body.contextLinks !== undefined) updateData.contextLinks = req.body.contextLinks
     if (req.body.collapsedNodes !== undefined) updateData.collapsedNodes = req.body.collapsedNodes
@@ -123,11 +138,19 @@ async function updateConversation(req: NextApiRequest, res: NextApiResponse, id:
     if (req.body.activeNodeId !== undefined) updateData.activeNodeId = req.body.activeNodeId
     if (req.body.viewport !== undefined) updateData.viewport = req.body.viewport
     
-    // Update conversation
+    console.log(`📦 Update data being applied:`, {
+      mainMessagesCount: updateData.mainMessages?.length || 0,
+      branchesCount: updateData.branches?.length || 0,
+      hasMainMessages: !!updateData.mainMessages,
+      hasBranches: !!updateData.branches,
+      updateDataKeys: Object.keys(updateData)
+    })
+    
+    // Update conversation - Mongoose handles the update object directly
     const conversation = await Conversation.findByIdAndUpdate(
       id,
-      updateData,
-      { new: true } // Return updated document
+      updateData, // Mongoose will automatically use $set internally
+      { new: true, runValidators: true } // Return updated document and run validators
     )
     
     if (!conversation) {
@@ -137,7 +160,12 @@ async function updateConversation(req: NextApiRequest, res: NextApiResponse, id:
       })
     }
     
-    console.log(`✅ Updated conversation ${id}`)
+    console.log(`✅ Updated conversation ${id}:`, {
+      mainMessagesCount: conversation.mainMessages?.length || 0,
+      branchesCount: conversation.branches?.length || 0,
+      hasMainMessages: !!conversation.mainMessages,
+      hasBranches: !!conversation.branches
+    })
     
     return res.status(200).json({
       success: true,

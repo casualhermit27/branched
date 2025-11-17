@@ -34,7 +34,6 @@ interface BranchNode {
   inheritedMessages?: Message[]
   branchMessages?: Message[]
   selectedAIs?: AI[]
-  multiModelMode?: boolean
   isMain?: boolean
   parentId?: string
   parentMessageId?: string
@@ -48,7 +47,6 @@ interface ChatBranchesViewProps {
   onRemoveAI: (aiId: string) => void
   onSelectSingle: (ai: AI) => void
   getBestAvailableModel: () => AI
-  multiModelMode: boolean
   onSendMessage: (text: string, branchId?: string) => void
   onBranchFromMessage: (messageId: string, isMultiBranch?: boolean) => void
   isGenerating: boolean
@@ -71,7 +69,6 @@ export default function ChatBranchesView({
   onRemoveAI,
   onSelectSingle,
   getBestAvailableModel,
-  multiModelMode,
   onSendMessage,
   onBranchFromMessage,
   isGenerating,
@@ -360,7 +357,6 @@ export default function ChatBranchesView({
                     selectedAIs={branch.selectedAIs || selectedAIs}
                     onBranchFromMessage={onBranchFromMessage}
                     currentBranch={branch.id}
-                    multiModelMode={branch.multiModelMode || multiModelMode}
                     isGenerating={isGenerating && isActive}
                     onStopGeneration={onStopGeneration}
                     existingBranchesCount={branch.children.length}
@@ -473,7 +469,6 @@ export default function ChatBranchesView({
                       selectedAIs={selectedAIs}
                       onBranchFromMessage={onBranchFromMessage}
                       currentBranch={null}
-                      multiModelMode={multiModelMode}
                       isGenerating={isGenerating && activeBranchId === 'main'}
                       onStopGeneration={onStopGeneration}
                       existingBranchesCount={rootBranches.length}

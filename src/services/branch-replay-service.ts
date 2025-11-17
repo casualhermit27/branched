@@ -41,7 +41,6 @@ export class BranchReplayService {
       parentId: branch.parentId,
       messages: [...branch.messages.slice(0, startIndex)], // Copy messages up to start point
       selectedAIs: [{ id: newModel, name: newModel, color: 'bg-blue-100 text-blue-800 border-blue-200', functional: true }],
-      multiModelMode: false,
       isMinimized: false,
       isActive: false,
       isGenerating: false,

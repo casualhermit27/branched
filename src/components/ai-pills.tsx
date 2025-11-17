@@ -159,11 +159,10 @@ interface AIPillsProps {
   onRemoveAI: (aiId: string) => void
   onSelectSingle?: (ai: AI) => void
   showAddButton?: boolean
-  singleMode?: boolean
   getBestAvailableModel?: () => string
 }
 
-export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSingle, showAddButton = true, singleMode = false, getBestAvailableModel }: AIPillsProps) {
+export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSingle, showAddButton = true, getBestAvailableModel }: AIPillsProps) {
   const [showDropdown, setShowDropdown] = useState(false)
   const MAX_AIS = 6 // Maximum number of AIs to prevent UI overflow
 
@@ -208,118 +207,7 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
     setShowDropdown(false)
   }
 
-  // Single mode: Show dropdown selector
-  if (singleMode) {
-    const currentAI = selectedAIs[0]
-    
-    return (
-      <div className="relative">
-        <motion.button
-          whileHover={{ scale: 1.01 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => setShowDropdown(!showDropdown)}
-          className="px-3.5 py-2 bg-card border border-border/40 rounded-lg text-foreground hover:bg-muted/50 hover:border-border/60 transition-all duration-200 flex items-center gap-2.5 shadow-sm hover:shadow"
-        >
-          <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 opacity-90">
-            {currentAI?.logo}
-          </span>
-          <span className="text-sm font-medium">{currentAI?.name || 'Select AI'}</span>
-          <motion.svg 
-            width="12" 
-            height="12" 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            className="ml-0.5 flex-shrink-0 text-muted-foreground"
-            animate={{ rotate: showDropdown ? 180 : 0 }}
-            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-          >
-            <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </motion.svg>
-        </motion.button>
-        
-        {/* Dropdown for single selection */}
-        <AnimatePresence>
-          {showDropdown && (
-            <>
-              {/* Backdrop */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                className="fixed inset-0 z-40"
-                onClick={() => setShowDropdown(false)}
-              />
-              {/* Dropdown Menu */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.96, y: -4 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: -4 }}
-                transition={{ 
-                  duration: 0.2,
-                  ease: [0.4, 0, 0.2, 1]
-                }}
-                className="absolute top-full left-0 mt-1.5 bg-card border border-border/50 shadow-[0_4px_16px_rgba(0,0,0,0.08)] z-50 min-w-[220px] max-h-[360px] overflow-y-auto rounded-lg backdrop-blur-xl"
-                style={{ 
-                  scrollbarWidth: 'thin',
-                  scrollbarColor: 'hsl(var(--muted-foreground) / 0.3) hsl(var(--muted))'
-                }}
-              >
-                <div className="p-1.5">
-                  {allAIOptions.map((ai, index) => (
-                    <motion.button
-                      key={ai.id}
-                      initial={{ opacity: 0, x: -4 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.02, duration: 0.15 }}
-                      onClick={() => selectAI(ai)}
-                      disabled={!ai.functional}
-                      className={`w-full px-3 py-2.5 text-left transition-all duration-150 flex items-center gap-3 rounded-md ${
-                        !ai.functional 
-                          ? 'opacity-40 cursor-not-allowed' 
-                          : 'hover:bg-muted/60 cursor-pointer active:scale-[0.98]'
-                      } ${
-                        currentAI?.id === ai.id 
-                          ? 'bg-primary/8 border border-primary/20' 
-                          : ''
-                      }`}
-                    >
-                      <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 opacity-90">
-                        {ai.logo}
-                      </span>
-                      <span className={`text-sm font-medium flex-1 ${
-                        !ai.functional 
-                          ? 'text-muted-foreground/50' 
-                          : currentAI?.id === ai.id
-                            ? 'text-foreground'
-                            : 'text-foreground/90'
-                      }`}>
-                        {getAIDisplayName(ai)}
-                        {!ai.functional && (
-                          <span className="ml-1.5 text-xs text-muted-foreground/60">(Coming Soon)</span>
-                        )}
-                      </span>
-                      {currentAI?.id === ai.id && ai.functional && (
-                        <motion.span 
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          className="ml-auto text-primary flex-shrink-0 text-sm"
-                        >
-                          ✓
-                        </motion.span>
-                      )}
-                    </motion.button>
-                  ))}
-                </div>
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>
-      </div>
-    )
-  }
-
-  // Multi mode: Show pills with add button
+  // Show pills with add button
   return (
     <div className="relative">
       {/* Selected AI Pills - Top Left */}

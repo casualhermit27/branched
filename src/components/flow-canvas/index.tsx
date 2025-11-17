@@ -31,6 +31,7 @@ import { messageStore } from './message-store'
 import { branchStore } from './branch-store'
 import type { FlowCanvasProps, Message } from './types'
 import { aiService } from '@/services/ai-api'
+import { GroupedBranchesContainer } from './grouped-branches-container'
 
 const nodeTypes: NodeTypes = {
 	chatNode: ChatNode
@@ -46,13 +47,13 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		onBranchFromMain,
 		initialBranchMessageId,
 		pendingBranchMessageId,
+		pendingBranchData,
 		onPendingBranchProcessed,
 		onNodesUpdate,
 		onNodeDoubleClick,
 		onPillClick,
 		getBestAvailableModel,
 		onSelectSingle,
-		multiModelMode,
 		onExportImport,
 		restoredConversationNodes,
 		selectedBranchId,
@@ -78,8 +79,6 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		minimizeAllNodes,
 		setNodeActive,
 		setNodeGenerating,
-		setBranchMultiModel,
-		getBranchMultiModel,
 		setBranchAIs,
 		getBranchAIs,
 		setAbortController,
@@ -111,7 +110,6 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			if (!node || !node.data) return
 
 			const branchAIs = getBranchAIs(nodeId, selectedAIs)
-			const isMultiModel = getBranchMultiModel(nodeId)
 			const contextMessages = getParentChainMessages(nodeId, nodes, mainMessages)
 
 			setNodeGenerating(nodeId, true)
@@ -127,28 +125,30 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			}
 
 			try {
-				if (isMultiModel && branchAIs.length > 1) {
+				if (branchAIs.length > 1) {
+					// Generate unique group ID for multi-AI responses
+					const groupId = `group-${Date.now()}`
+					
 					for (const ai of branchAIs) {
 						const modelName = resolveModel(ai.id)
-						const response = await aiService.generateResponse(
-							modelName,
-							message,
-							{ messages: contextMessages, currentBranch: nodeId, memoryContext: '' },
-							undefined,
-							abortController.signal
-						)
-
-						const newMessage: Message = {
-							id: `msg-${Date.now()}-${ai.id}`,
-							text: response.text,
+						
+						// Create streaming message placeholder
+						const streamingMessageId = `msg-${Date.now()}-${ai.id}`
+						const streamingMessage: Message = {
+							id: streamingMessageId,
+							text: '',
 							isUser: false,
 							ai: ai.id,
 							aiModel: ai.id,
 							timestamp: Date.now(),
 							children: [],
-							nodeId
+							nodeId,
+							groupId,
+							isStreaming: true,
+							streamingText: ''
 						}
-
+						
+						// Add streaming message immediately
 						setNodes((prev) =>
 							prev.map((n) => {
 								if (n.id === nodeId) {
@@ -156,7 +156,61 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 										...n,
 										data: {
 											...n.data,
-											messages: [...(n.data.messages || []), newMessage]
+											messages: [...(n.data.messages || []), streamingMessage]
+										}
+									}
+								}
+								return n
+							})
+						)
+						
+						// Generate response with streaming callback
+						const response = await aiService.generateResponse(
+							modelName,
+							message,
+							{ messages: contextMessages, currentBranch: nodeId, memoryContext: '' },
+							(chunk: string) => {
+								// Update streaming text
+								setNodes((prev) =>
+									prev.map((n) => {
+										if (n.id === nodeId) {
+											return {
+												...n,
+												data: {
+													...n.data,
+													messages: (n.data.messages || []).map((msg: Message) =>
+														msg.id === streamingMessageId
+															? { ...msg, streamingText: (msg.streamingText || '') + chunk }
+															: msg
+													)
+												}
+											}
+										}
+										return n
+									})
+								)
+							},
+							abortController.signal
+						)
+
+						// Finalize streaming message
+						setNodes((prev) =>
+							prev.map((n) => {
+								if (n.id === nodeId) {
+									return {
+										...n,
+										data: {
+											...n.data,
+											messages: (n.data.messages || []).map((msg: Message) =>
+												msg.id === streamingMessageId
+													? {
+															...msg,
+															text: response.text,
+															isStreaming: false,
+															streamingText: undefined
+														}
+													: msg
+											)
 										}
 									}
 								}
@@ -167,25 +221,23 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 				} else {
 					const ai = branchAIs[0] || selectedAIs[0]
 					const modelName = resolveModel(ai.id)
-					const response = await aiService.generateResponse(
-						modelName,
-						message,
-						{ messages: contextMessages, currentBranch: nodeId, memoryContext: '' },
-						undefined,
-						abortController.signal
-					)
-
-					const newMessage: Message = {
-						id: `msg-${Date.now()}`,
-						text: response.text,
+					
+					// Create streaming message placeholder
+					const streamingMessageId = `msg-${Date.now()}`
+					const streamingMessage: Message = {
+						id: streamingMessageId,
+						text: '',
 						isUser: false,
 						ai: ai.id,
 						aiModel: ai.id,
 						timestamp: Date.now(),
 						children: [],
-						nodeId
+						nodeId,
+						isStreaming: true,
+						streamingText: ''
 					}
-
+					
+					// Add streaming message immediately
 					setNodes((prev) =>
 						prev.map((n) => {
 							if (n.id === nodeId) {
@@ -193,7 +245,61 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 									...n,
 									data: {
 										...n.data,
-										messages: [...(n.data.messages || []), newMessage]
+										messages: [...(n.data.messages || []), streamingMessage]
+									}
+								}
+							}
+							return n
+						})
+					)
+					
+					// Generate response with streaming callback
+					const response = await aiService.generateResponse(
+						modelName,
+						message,
+						{ messages: contextMessages, currentBranch: nodeId, memoryContext: '' },
+						(chunk: string) => {
+							// Update streaming text
+							setNodes((prev) =>
+								prev.map((n) => {
+									if (n.id === nodeId) {
+										return {
+											...n,
+											data: {
+												...n.data,
+												messages: (n.data.messages || []).map((msg: Message) =>
+													msg.id === streamingMessageId
+														? { ...msg, streamingText: (msg.streamingText || '') + chunk }
+														: msg
+												)
+											}
+										}
+									}
+									return n
+								})
+							)
+						},
+						abortController.signal
+					)
+
+					// Finalize streaming message
+					setNodes((prev) =>
+						prev.map((n) => {
+							if (n.id === nodeId) {
+								return {
+									...n,
+									data: {
+										...n.data,
+										messages: (n.data.messages || []).map((msg: Message) =>
+											msg.id === streamingMessageId
+												? {
+														...msg,
+														text: response.text,
+														isStreaming: false,
+														streamingText: undefined
+													}
+												: msg
+										)
 									}
 								}
 							}
@@ -217,7 +323,6 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			selectedAIs,
 			mainMessages,
 			getBranchAIs,
-			getBranchMultiModel,
 			setNodeGenerating,
 			setAbortController,
 			setNodes,
@@ -233,14 +338,13 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId))
 
 			setBranchAIs(nodeId, [])
-			setBranchMultiModel(nodeId, false)
 
 			if (onNodesUpdate) {
 				const updatedNodes = nodes.filter((n) => n.id !== nodeId)
 				onNodesUpdate(updatedNodes)
 			}
 		},
-		[abortGeneration, setNodes, setEdges, setBranchAIs, setBranchMultiModel, nodes, onNodesUpdate]
+		[abortGeneration, setNodes, setEdges, setBranchAIs, nodes, onNodesUpdate]
 	)
 
 	// ============================================
@@ -276,11 +380,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			const ai = selectedAIs.find((a) => a.id === aiId)
 			if (ai) {
 				setBranchAIs(nodeId, [ai])
-				setBranchMultiModel(nodeId, false)
 			}
-		},
-		handleBranchToggleMultiModel: (nodeId) => {
-			setBranchMultiModel(nodeId, !getBranchMultiModel(nodeId))
 		},
 		getBestAvailableModel,
 		validateNodePositions,
@@ -295,11 +395,15 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					const viewport = calculateViewportFit(nodes, nodeIds, padding)
 					reactFlowInstance.setViewport(viewport, { duration: 500 })
 					
-					// Set active node to the first branch if it's a new branch
-					if (nodeIds.length > 1 && nodeIds[1] !== 'main') {
-						setTimeout(() => {
-							setNodeActive(nodeIds[1])
-						}, 200)
+					// Set active node to the LAST node (most recent/latest active branch)
+					// This ensures the latest branch is centered and active
+					if (nodeIds.length > 0) {
+						const lastNodeId = nodeIds[nodeIds.length - 1]
+						if (lastNodeId !== 'main') {
+							setTimeout(() => {
+								setNodeActive(lastNodeId)
+							}, 200)
+						}
 					}
 				} else {
 					// If nodes don't exist yet, wait a bit and try again
@@ -308,10 +412,14 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 						if (retryNodes.length === nodeIds.length) {
 							const viewport = calculateViewportFit(nodes, nodeIds, padding)
 							reactFlowInstance.setViewport(viewport, { duration: 500 })
-							if (nodeIds.length > 1 && nodeIds[1] !== 'main') {
-								setTimeout(() => {
-									setNodeActive(nodeIds[1])
-								}, 200)
+							// Set active node to the LAST node (most recent/latest active branch)
+							if (nodeIds.length > 0) {
+								const lastNodeId = nodeIds[nodeIds.length - 1]
+								if (lastNodeId !== 'main') {
+									setTimeout(() => {
+										setNodeActive(lastNodeId)
+									}, 200)
+								}
 							}
 						}
 					}, 200)
@@ -334,14 +442,12 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	const nodesWithHandlers = useMemo(() => {
 		return nodes.map((node) => {
 			const branchAIs = getBranchAIs(node.id, selectedAIs)
-			const isMultiModel = getBranchMultiModel(node.id)
 
 			return {
 				...node,
 				data: {
 					...node.data,
 					selectedAIs: node.id === 'main' ? selectedAIs : branchAIs,
-					multiModelMode: node.id === 'main' ? multiModelMode : isMultiModel,
 					onSendMessage: node.id === 'main' ? handleSendMainMessage : handleSendBranchMessage,
 					onToggleMinimize: toggleNodeMinimize,
 					onDeleteBranch: node.id === 'main' ? undefined : handleDeleteBranch,
@@ -355,12 +461,10 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	}, [
 		nodes,
 		selectedAIs,
-		multiModelMode,
 		minimizedNodes,
 		activeNodeId,
 		generatingNodeIds,
 		getBranchAIs,
-		getBranchMultiModel,
 		handleSendMainMessage,
 		handleSendBranchMessage,
 		toggleNodeMinimize,
@@ -385,14 +489,12 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					onBranch: handleBranch,
 					onExportImport,
 					getBestAvailableModel,
-					onSelectSingle,
-					onToggleMultiModel: () => {}
+					onSelectSingle
 				},
 				{
 					isMinimized: minimizedNodes.has('main'),
 					isActive: activeNodeId === 'main',
 					isGenerating: generatingNodeIds.has('main'),
-					multiModelMode,
 					onToggleMinimize: toggleNodeMinimize
 				}
 			)
@@ -443,8 +545,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 							contextSnapshot: contextSnapshot,
 							branchMessageIds: (node.data?.branchMessages || node.branchMessages || []).map((m: Message) => m.id),
 							metadata: {
-								selectedAIs: node.data?.selectedAIs || node.selectedAIs || selectedAIs,
-								multiModelMode: node.data?.multiModelMode || node.multiModelMode || false
+								selectedAIs: node.data?.selectedAIs || node.selectedAIs || selectedAIs
 							}
 						}
 						branchStore.set(branchContext)
@@ -468,8 +569,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 				{
 					isMinimized: false,
 					isActive: false,
-					isGenerating: false,
-					multiModelMode
+					isGenerating: false
 				}
 			)
 
@@ -611,8 +711,17 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					messageExists
 				})
 				
+				// Get isMultiBranch from pendingBranchData if available
+				const isMultiBranch = pendingBranchData?.isMultiBranch ?? false
+				
+				console.log('🔍 Creating branch with isMultiBranch:', { 
+					isMultiBranch, 
+					fromPendingBranchData: pendingBranchData?.isMultiBranch,
+					selectedAIsCount: selectedAIs.length
+				})
+				
 				// Create branch
-				handleBranch('main', pendingBranchMessageId, false)
+				handleBranch('main', pendingBranchMessageId, isMultiBranch)
 				
 				// Clear processing timeout
 				if (processingTimeoutRef.current) {
@@ -676,6 +785,21 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			}, 100)
 		}
 	}, [selectedBranchId, reactFlowInstance])
+
+	// Center viewport on active node when it changes
+	useEffect(() => {
+		if (activeNodeId && reactFlowInstance && nodes.length > 0) {
+			// Only center if the active node exists in the nodes array
+			const activeNode = nodes.find(n => n.id === activeNodeId)
+			if (activeNode) {
+				// Use a small delay to ensure layout is complete
+				const timeoutId = setTimeout(() => {
+					focusOnNode(reactFlowInstance, activeNodeId, nodes)
+				}, 300)
+				return () => clearTimeout(timeoutId)
+			}
+		}
+	}, [activeNodeId, reactFlowInstance, nodes.length])
 
 	// ============================================
 	// LAYOUT ON MINIMIZE CHANGE (Debounced)
@@ -831,6 +955,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 						}}
 						maskColor="rgba(0, 0, 0, 0.1)"
 					/>
+					<GroupedBranchesContainer nodes={nodesWithHandlers} />
 				</ReactFlow>
 			</div>
 		</ReactFlowProvider>

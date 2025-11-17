@@ -32,7 +32,6 @@ interface UseBranchManagementParams {
   handleBranchAddAI: (nodeId: string, ai: AI) => void
   handleBranchRemoveAI: (nodeId: string, aiId: string) => void
   handleBranchSelectSingle: (nodeId: string, aiId: string) => void
-  handleBranchToggleMultiModel: (nodeId: string) => void
   getBestAvailableModel?: () => string
   validateNodePositions: (nodeList: any[]) => any[]
 	getLayoutedElements: (nodes: any[], edges: Edge[], direction?: string) => {
@@ -67,7 +66,6 @@ export function useBranchManagement({
   handleBranchAddAI,
   handleBranchRemoveAI,
   handleBranchSelectSingle,
-  handleBranchToggleMultiModel,
   getBestAvailableModel,
   validateNodePositions,
   getLayoutedElements,
@@ -127,7 +125,8 @@ export function useBranchManagement({
     totalBranches: number,
 			parentNode: Node,
 			aiResponse?: Message,
-			userMessage?: Message | null // User message that was branched from (if any)
+			userMessage?: Message | null, // User message that was branched from (if any)
+			branchGroupId?: string // Group ID for visual grouping of related branches
   ): Node => {
 			const branchId = generateBranchId()
 
@@ -160,9 +159,28 @@ export function useBranchManagement({
 				if (userIndex >= 0) {
 					// Get all messages up to and including user message
 					inheritedMessageIds = parentMessages.slice(0, userIndex + 1).map((m) => m.id)
+					
+					// CRITICAL: If we have an AI response, include it in inherited messages
+					// This ensures the AI response appears in the branch
+					if (aiResponse) {
+						// Check if AI response is already in parent messages after user message
+						const aiResponseIndex = parentMessages.findIndex((m) => m.id === aiResponse.id)
+						if (aiResponseIndex > userIndex) {
+							// AI response is after user message, include it
+							inheritedMessageIds.push(aiResponse.id)
+						} else if (aiResponseIndex === -1) {
+							// AI response not found in parent messages, add it
+							inheritedMessageIds.push(aiResponse.id)
+						}
+						// If aiResponseIndex >= 0 and <= userIndex, it's already included in the slice
+					}
 				} else {
 					// User message not in parent, add it
 					inheritedMessageIds = [...parentMessages.map((m) => m.id), userMessage.id]
+					// Also add AI response if provided
+					if (aiResponse) {
+						inheritedMessageIds.push(aiResponse.id)
+					}
 				}
 			} else {
 				// Branching from AI message - get all messages up to and including the AI response
@@ -196,8 +214,7 @@ export function useBranchManagement({
 				contextSnapshot: snapshot,
 				branchMessageIds: [], // Empty initially - messages created in this branch will be added here
 				metadata: {
-					selectedAIs: [selectedAIs[0] || selectedAIs[branchIndex % selectedAIs.length]],
-					multiModelMode: false
+					selectedAIs: [selectedAIs[0] || selectedAIs[branchIndex % selectedAIs.length]]
 				}
 			}
 
@@ -223,8 +240,6 @@ export function useBranchManagement({
 						handleBranchRemoveAI(nodeId, aiId),
 					onSelectSingle: (nodeId: string, aiId: string) =>
 						handleBranchSelectSingle(nodeId, aiId),
-					onToggleMultiModel: (nodeId: string) =>
-						handleBranchToggleMultiModel(nodeId),
 					getBestAvailableModel,
 					onDeleteBranch
 				},
@@ -232,10 +247,10 @@ export function useBranchManagement({
 					isMinimized: minimizedNodes.has(branchId),
 					isActive: activeNodeId === branchId,
 					isGenerating: false,
-					multiModelMode: branchContext.metadata?.multiModelMode || false,
 					onToggleMinimize: toggleNodeMinimize
 				},
-				branchId // Pass branchId
+				branchId, // Pass branchId
+				branchGroupId // Pass group ID for visual grouping
 			)
 
 			return branchNode
@@ -246,11 +261,10 @@ export function useBranchManagement({
 			minimizedNodes,
 			activeNodeId,
 			toggleNodeMinimize,
-			handleBranchAddAI,
-			handleBranchRemoveAI,
-			handleBranchSelectSingle,
-			handleBranchToggleMultiModel,
-			getBestAvailableModel,
+  handleBranchAddAI,
+  handleBranchRemoveAI,
+  handleBranchSelectSingle,
+  getBestAvailableModel,
 			onDeleteBranch
 		]
 	)
@@ -352,15 +366,71 @@ export function useBranchManagement({
 			// Determine AI responses to create branches for
 			let aiResponses: Message[] = []
 			let userMessageForContext: Message | null = null
+			let branchGroupId: string | undefined = undefined
 
 			if (targetMessage.isUser && isMultiBranch) {
-				// Multi-branch: find all AI responses after user message
+				// Multi-branch: create one branch per selected AI
 				const userIndex = parentMessages.findIndex((m) => m.id === messageId)
 				userMessageForContext = targetMessage
-				aiResponses = parentMessages
+				
+				// Find all AI responses (including streaming ones) after the user message
+				const allAIResponses = parentMessages
 					.slice(userIndex + 1)
-					.filter((m) => !m.isUser && (m.aiModel || m.ai))
-					.slice(0, selectedAIs.length)
+					.filter((m) => {
+						// Include AI messages that have either aiModel or ai property
+						// Include both completed (has text) and streaming (has streamingText) messages
+						return !m.isUser && (m.aiModel || m.ai) && (m.text || m.streamingText)
+					})
+				
+				console.log('🔍 Multi-branch: Finding AI responses for selected AIs', {
+					selectedAIs: selectedAIs.map(ai => ({ id: ai.id, name: ai.name })),
+					allAIResponses: allAIResponses.map(r => ({ id: r.id, aiModel: r.aiModel || r.ai, hasText: !!r.text, hasStreamingText: !!r.streamingText }))
+				})
+				
+				// Create one branch per selected AI - match each selected AI to its response
+				// This ensures we create branches for ALL selected AIs, even if some responses are missing
+				aiResponses = selectedAIs
+					.map(ai => {
+						// Try to find a response that matches this AI's ID
+						const matchingResponse = allAIResponses.find(r => {
+							const responseAIId = r.aiModel || r.ai
+							return responseAIId === ai.id
+						})
+						
+						if (matchingResponse) {
+							return matchingResponse
+						}
+						
+						// If no matching response found, try to use any available response
+						// This handles cases where responses might not have the exact AI ID match
+						return null
+					})
+					.filter((r): r is Message => r !== null)
+				
+				// If we still don't have enough responses, use all available responses
+				// This ensures we create branches for all selected AIs if we have enough responses
+				if (aiResponses.length < selectedAIs.length && allAIResponses.length >= selectedAIs.length) {
+					// We have enough responses, just use them all (up to selectedAIs.length)
+					aiResponses = allAIResponses.slice(0, selectedAIs.length)
+					console.log('⚠️ Using all available responses (matching may have failed):', aiResponses.map(r => ({ id: r.id, aiModel: r.aiModel || r.ai })))
+				} else if (aiResponses.length < selectedAIs.length && allAIResponses.length > 0) {
+					// We don't have enough responses, but use what we have
+					const additionalResponses = allAIResponses
+						.filter(r => !aiResponses.some(ar => ar.id === r.id))
+						.slice(0, selectedAIs.length - aiResponses.length)
+					aiResponses = [...aiResponses, ...additionalResponses]
+					console.log('⚠️ Using partial responses (not enough for all selected AIs):', aiResponses.map(r => ({ id: r.id, aiModel: r.aiModel || r.ai })))
+				}
+				
+				console.log('🔍 Multi-branch AI responses determined:', {
+					selectedAIsCount: selectedAIs.length,
+					allAIResponsesCount: allAIResponses.length,
+					matchedResponsesCount: aiResponses.length,
+					matchedResponses: aiResponses.map(r => ({ id: r.id, aiModel: r.aiModel || r.ai }))
+				})
+				
+				// Generate group ID for branches created from same user message
+				branchGroupId = `group-${messageId}`
     } else if (targetMessage.isUser && !isMultiBranch) {
 				// Single branch: find first AI response
 				const userIndex = parentMessages.findIndex((m) => m.id === messageId)
@@ -369,9 +439,11 @@ export function useBranchManagement({
 					.slice(userIndex + 1)
 					.find((m) => !m.isUser && (m.aiModel || m.ai))
 				if (aiResponse) aiResponses = [aiResponse]
+				// No group ID for single branches
 			} else if (!targetMessage.isUser) {
 				// Branching from AI message - include it and all above
 				aiResponses = [targetMessage]
+				// No group ID for single AI message branches
 			}
 
 			console.log('🔍 AI responses determined:', {
@@ -441,7 +513,8 @@ export function useBranchManagement({
         aiResponses.length,
 					parentNode,
 					aiResponse,
-					userMessageForContext // Pass user message to include in context
+					userMessageForContext, // Pass user message to include in context
+					branchGroupId // Pass group ID for visual grouping
       )
       
       // Validate branch node before adding
@@ -478,7 +551,7 @@ export function useBranchManagement({
       
       newNodes.push(branchNode)
       
-				// Create edge with dotted connector
+				// Create edge with curved bezier connector
 				const newEdge = createEdge(
 					parentNodeId,
 					branchNode.id,
@@ -534,15 +607,16 @@ export function useBranchManagement({
 							onNodesUpdate(validatedNodes)
 						}
 
-						// Focus on first new branch AFTER nodes are fully rendered and in DOM
-						// Focus on the branch node specifically, not both parent and branch
+						// Focus on LAST new branch (latest created) AFTER nodes are fully rendered and in DOM
+						// This centers the viewport on the most recently created/active branch
         setTimeout(() => {
 							if (newNodes.length > 0) {
-								const firstBranchId = newNodes[0].id
-								// Focus only on the new branch node
+								// Use the LAST branch created (most recent) - this is the latest active branch
+								const lastBranchId = newNodes[newNodes.length - 1].id
+								// Center viewport on the latest branch
 								requestAnimationFrame(() => {
           setTimeout(() => {
-										fitViewportToNodes([firstBranchId], 0.3)
+										fitViewportToNodes([lastBranchId], 0.3)
 									}, 200)
 								})
 							}

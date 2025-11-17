@@ -269,10 +269,17 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
     console.log('🔍 Original data structure:', {
       hasMainMessages: !!data.mainMessages,
       mainMessagesLength: data.mainMessages?.length || 0,
+      mainMessages: data.mainMessages?.map((m: any) => ({
+        id: m.id,
+        isUser: m.isUser,
+        textLength: m.text?.length || 0,
+        hasText: !!m.text
+      })) || [],
       hasSelectedAIs: !!data.selectedAIs,
       selectedAIsLength: data.selectedAIs?.length || 0,
       hasBranches: !!data.branches,
-      branchesLength: data.branches?.length || 0
+      branchesLength: data.branches?.length || 0,
+      branchIds: data.branches?.map((b: any) => b.id) || []
     })
     
     const sanitizedData = sanitizeData(data)
@@ -280,10 +287,17 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
     console.log('📦 Sanitized data for MongoDB:', {
       hasMainMessages: !!sanitizedData.mainMessages,
       mainMessagesLength: sanitizedData.mainMessages?.length || 0,
+      mainMessages: sanitizedData.mainMessages?.map((m: any) => ({
+        id: m.id,
+        isUser: m.isUser,
+        textLength: m.text?.length || 0,
+        hasText: !!m.text
+      })) || [],
       hasSelectedAIs: !!sanitizedData.selectedAIs,
       selectedAIsLength: sanitizedData.selectedAIs?.length || 0,
       hasBranches: !!sanitizedData.branches,
-      branchesLength: sanitizedData.branches?.length || 0
+      branchesLength: sanitizedData.branches?.length || 0,
+      branchIds: sanitizedData.branches?.map((b: any) => b.id) || []
     })
 
     // Check if data has changed
@@ -291,17 +305,42 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
     const lastDataString = lastSavedDataRef.current ? JSON.stringify(lastSavedDataRef.current) : null
     
     if (dataString === lastDataString) {
+      console.log('⏭️ Skipping save - data unchanged')
       return // No changes, skip auto-save
     }
 
-    lastSavedDataRef.current = sanitizedData
+    // Prevent saving incomplete data that would overwrite better data
+    // Only save if we have more or equal messages/branches than last saved
+    if (lastSavedDataRef.current) {
+      const lastMessagesCount = lastSavedDataRef.current.mainMessages?.length || 0
+      const lastBranchesCount = lastSavedDataRef.current.branches?.length || 0
+      const currentMessagesCount = sanitizedData.mainMessages?.length || 0
+      const currentBranchesCount = sanitizedData.branches?.length || 0
+      
+      // If new data has significantly less content, it might be incomplete - skip save
+      // Allow if messages increased or branches increased (data is getting better)
+      // But prevent if both decreased significantly (likely incomplete state)
+      if (currentMessagesCount < lastMessagesCount - 1 && currentBranchesCount < lastBranchesCount) {
+        console.log('⏭️ Skipping save - new data has less content than last saved:', {
+          lastMessages: lastMessagesCount,
+          currentMessages: currentMessagesCount,
+          lastBranches: lastBranchesCount,
+          currentBranches: currentBranchesCount
+        })
+        return
+      }
+    }
 
     // Set new timeout
     autoSaveTimeoutRef.current = setTimeout(async () => {
       try {
         const result = await saveConversation(sanitizedData, id)
         if (result.success) {
+          // Only update lastSavedDataRef AFTER successful save
+          lastSavedDataRef.current = sanitizedData
           console.log('✅ Auto-saved conversation to MongoDB', result.conversationId ? `(ID: ${result.conversationId})` : '')
+        } else {
+          console.error('❌ Auto-save failed, not updating lastSavedDataRef')
         }
       } catch (error) {
         console.error('❌ Auto-save error:', error)

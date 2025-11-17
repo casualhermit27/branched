@@ -134,6 +134,24 @@ export function getLayoutedElements(
 		return { nodes, edges }
 	}
 
+	// Group branches by branchGroupId before applying positions
+	const groupedBranches = new Map<string, Node[]>()
+	const ungroupedNodes: Node[] = []
+	
+	nodes.forEach((node) => {
+		if (node.id === 'main') {
+			ungroupedNodes.push(node)
+		} else if (node.data?.branchGroupId) {
+			const groupId = node.data.branchGroupId
+			if (!groupedBranches.has(groupId)) {
+				groupedBranches.set(groupId, [])
+			}
+			groupedBranches.get(groupId)!.push(node)
+		} else {
+			ungroupedNodes.push(node)
+		}
+	})
+
 	// Apply calculated positions to nodes
 	const layoutedNodes = nodes.map((node) => {
 		try {
@@ -163,8 +181,165 @@ export function getLayoutedElements(
 			)
 
 			// Calculate centered position
-			const x = nodeWithPosition.x - dims.width / 2
-			const y = nodeWithPosition.y - dims.height / 2
+			let x = nodeWithPosition.x - dims.width / 2
+			let y = nodeWithPosition.y - dims.height / 2
+
+			// Find parent node to position relative to
+			const parentNode = nodes.find(n => n.id === node.data?.parentId)
+			
+			// If this is a branch (not main), ensure it's aligned with other branches from the same parent
+			if (parentNode && node.id !== 'main' && !node.data?.isMain) {
+				// Get all branches from the same parent
+				const siblingBranches = nodes.filter(n => 
+					n.data?.parentId === parentNode.id && 
+					n.id !== 'main' && 
+					!n.data?.isMain
+				)
+				
+				if (siblingBranches.length > 1) {
+					// Multiple branches from same parent - align them all at the same Y
+					const parentDims = calculateNodeDimensions(
+						parentNode.data?.messages?.length || 0,
+						parentNode.data?.isMinimized || false
+					)
+					
+					// Get parent position from Dagre layout
+					const parentPosition = dagreGraph.node(parentNode.id)
+					const parentX = parentPosition ? parentPosition.x : (parentNode.position?.x || 400)
+					const parentY = parentPosition ? parentPosition.y : (parentNode.position?.y || 50)
+					
+					// Calculate the top Y position for all branches from this parent
+					const topEdgeY = parentY + (parentDims.height / 2) + rankSpacing
+					
+					// Build ordered list of branch units (groups + individual branches)
+					// Each group is treated as a single unit for positioning
+					const branchUnits: Array<{ type: 'group' | 'single', nodes: Node[], groupId?: string }> = []
+					const processedNodes = new Set<string>()
+					
+					// First, add all grouped branches as units
+					groupedBranches.forEach((group, groupId) => {
+						const groupNodes = group.filter(n => siblingBranches.some(s => s.id === n.id))
+						if (groupNodes.length > 0) {
+							branchUnits.push({ type: 'group', nodes: groupNodes, groupId })
+							groupNodes.forEach(n => processedNodes.add(n.id))
+						}
+					})
+					
+					// Then, add ungrouped branches as individual units
+					siblingBranches.forEach(branch => {
+						if (!processedNodes.has(branch.id)) {
+							branchUnits.push({ type: 'single', nodes: [branch] })
+						}
+					})
+					
+					// Sort units by group ID or node ID for consistent ordering
+					branchUnits.sort((a, b) => {
+						if (a.groupId && b.groupId) return a.groupId.localeCompare(b.groupId)
+						if (a.groupId) return -1
+						if (b.groupId) return 1
+						return a.nodes[0].id.localeCompare(b.nodes[0].id)
+					})
+					
+					// Find which unit this node belongs to and its position within that unit
+					let unitIndex = -1
+					let positionInUnit = 0
+					for (let i = 0; i < branchUnits.length; i++) {
+						const unit = branchUnits[i]
+						const nodeIndex = unit.nodes.findIndex(n => n.id === node.id)
+						if (nodeIndex >= 0) {
+							unitIndex = i
+							positionInUnit = nodeIndex
+							break
+						}
+					}
+					
+					if (unitIndex === -1) {
+						// Fallback to simple positioning
+						const sortedSiblings = siblingBranches.sort((a, b) => a.id.localeCompare(b.id))
+						const branchIndex = sortedSiblings.findIndex(n => n.id === node.id)
+						const totalWidth = siblingBranches.length > 1 
+							? (siblingBranches.length - 1) * (dims.width + nodeSpacing)
+							: 0
+						const startX = parentX - totalWidth / 2
+						x = startX + branchIndex * (dims.width + nodeSpacing)
+						y = topEdgeY
+					} else {
+						// Calculate total width of all units
+						// Total width = sum of (nodeWidth * nodeCount + spacing * (nodeCount - 1)) for each unit
+						// Plus spacing between units
+						let totalUnitsWidth = 0
+						branchUnits.forEach((unit, idx) => {
+							// Width of this unit = nodeWidth * nodeCount + spacing * (nodeCount - 1)
+							// For single node: nodeWidth
+							// For multiple nodes: nodeWidth * N + spacing * (N-1)
+							if (unit.nodes.length === 1) {
+								totalUnitsWidth += dims.width
+							} else {
+								totalUnitsWidth += unit.nodes.length * dims.width + (unit.nodes.length - 1) * nodeSpacing
+							}
+							// Add spacing between units (not after the last one)
+							if (idx < branchUnits.length - 1) {
+								totalUnitsWidth += nodeSpacing
+							}
+						})
+						
+						// Center all units around parent
+						// startX is the left edge of the first unit
+						const startX = parentX - totalUnitsWidth / 2
+						
+						// Calculate position for each unit
+						let currentX = 0
+						branchUnits.forEach((unit, idx) => {
+							if (idx === unitIndex) {
+								// This is our unit - calculate position within it
+								const unitStartX = startX + currentX
+								if (unit.nodes.length > 1) {
+									// Multiple nodes in unit - spread them horizontally
+									x = unitStartX + positionInUnit * (dims.width + nodeSpacing)
+								} else {
+									// Single node in unit - position at unit start
+									x = unitStartX
+								}
+								y = topEdgeY
+							}
+							
+							// Move to next unit position
+							if (unit.nodes.length === 1) {
+								currentX += dims.width
+							} else {
+								currentX += unit.nodes.length * dims.width + (unit.nodes.length - 1) * nodeSpacing
+							}
+							if (idx < branchUnits.length - 1) {
+								currentX += nodeSpacing
+							}
+						})
+					}
+				}
+			} else if (node.data?.branchGroupId && groupedBranches.has(node.data.branchGroupId)) {
+				// Fallback: if parent not found but node is grouped, use group positioning
+				const group = groupedBranches.get(node.data.branchGroupId)!
+				const groupIndex = group.findIndex(n => n.id === node.id)
+				const groupSize = group.length
+				
+				const parentNode = nodes.find(n => n.id === node.data?.parentId)
+				if (parentNode) {
+					const parentDims = calculateNodeDimensions(
+						parentNode.data?.messages?.length || 0,
+						parentNode.data?.isMinimized || false
+					)
+					
+					const parentPosition = dagreGraph.node(parentNode.id)
+					const parentX = parentPosition ? parentPosition.x : (parentNode.position?.x || 400)
+					const parentY = parentPosition ? parentPosition.y : (parentNode.position?.y || 50)
+					
+					const groupWidth = (groupSize - 1) * (dims.width + nodeSpacing)
+					const startX = parentX - groupWidth / 2
+					const topEdgeY = parentY + (parentDims.height / 2) + rankSpacing
+					
+					x = startX + groupIndex * (dims.width + nodeSpacing)
+					y = topEdgeY
+				}
+			}
 
 			return {
 				...node,

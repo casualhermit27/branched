@@ -85,7 +85,6 @@ export interface IBranch {
   inheritedMessages: IMessage[] // All messages from root till the parent message (for context)
   branchMessages: IMessage[] // Only new messages within this branch
   selectedAIs: IAIModel[] // Which model(s) this branch is exploring
-  multiModelMode: boolean
   isMinimized: boolean
   isActive: boolean
   isGenerating: boolean
@@ -120,7 +119,6 @@ const BranchSchema = new Schema<IBranch>({
   inheritedMessages: [MessageSchema], // Context messages from root
   branchMessages: [MessageSchema], // Messages within this branch only
   selectedAIs: [AIModelSchema],
-  multiModelMode: { type: Boolean, default: false },
   isMinimized: { type: Boolean, default: false },
   isActive: { type: Boolean, default: false },
   isGenerating: { type: Boolean, default: false },
@@ -166,7 +164,6 @@ export interface IConversation {
   // Legacy fields for backward compatibility (will be migrated)
   mainMessages?: IMessage[]
   selectedAIs?: IAIModel[]
-  multiModelMode?: boolean
 }
 
 const ConversationSchema = new Schema<IConversation>({
@@ -190,8 +187,7 @@ const ConversationSchema = new Schema<IConversation>({
   userId: { type: String },
   // Legacy fields for backward compatibility
   mainMessages: { type: [MessageSchema], required: false },
-  selectedAIs: { type: [AIModelSchema], required: false },
-  multiModelMode: { type: Boolean, required: false }
+  selectedAIs: { type: [AIModelSchema], required: false }
 })
 
 // Update timestamps
