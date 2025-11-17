@@ -43,7 +43,6 @@ async function createConversation(req: NextApiRequest, res: NextApiResponse) {
       title: req.body.title || 'New Conversation',
       mainMessages: req.body.mainMessages || [],
       selectedAIs: req.body.selectedAIs || [],
-      multiModelMode: req.body.multiModelMode || false,
       branches: req.body.branches || [],
       contextLinks: req.body.contextLinks || [],
       collapsedNodes: req.body.collapsedNodes || [],
@@ -112,7 +111,6 @@ async function updateConversation(req: NextApiRequest, res: NextApiResponse) {
       // Legacy format
       if (req.body.mainMessages !== undefined) updateData.mainMessages = req.body.mainMessages
       if (req.body.selectedAIs !== undefined) updateData.selectedAIs = req.body.selectedAIs
-      if (req.body.multiModelMode !== undefined) updateData.multiModelMode = req.body.multiModelMode
     }
     
     // Update conversation

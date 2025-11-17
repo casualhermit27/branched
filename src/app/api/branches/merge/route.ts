@@ -75,7 +75,6 @@ export async function POST(request: NextRequest) {
       parentId: branchesToMerge[0].parentId,
       messages: mergedMessages,
       selectedAIs: branchesToMerge[0].selectedAIs,
-      multiModelMode: false,
       isMinimized: false,
       isActive: false,
       isGenerating: false,

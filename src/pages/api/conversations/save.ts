@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import connectDB from '../../lib/mongodb'
+import connectDB from '../../../lib/mongodb'
 import { MongoClient } from 'mongodb'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -62,7 +62,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 						messageIds: branch.messageIds,
 						contextSnapshot: branch.contextSnapshot,
 						selectedAIs: branch.selectedAIs,
-						multiModelMode: branch.multiModelMode,
 						groupId: branch.groupId,
 						metadata: branch.metadata,
 						updatedAt: new Date()

@@ -82,7 +82,6 @@ export default function Home() {
   const [selectedAIs, setSelectedAIs] = useState<AI[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [currentBranch, setCurrentBranch] = useState<string>('')
-  const [multiModelMode, setMultiModelMode] = useState(false)
   const [branches, setBranches] = useState<{ id: string }[]>([])
   const [conversationNodes, setConversationNodes] = useState<any[]>([])
   const [showExportImport, setShowExportImport] = useState(false)
@@ -205,10 +204,27 @@ export default function Home() {
                 if (data.success && data.data) {
                   setAllConversations(data.data)
                   
-                  // Restore most recent conversation if available
+                  // Restore most recent conversation if available AND it has content
                   if (data.data.length > 0) {
-                    const mostRecent = data.data[0]
-                    restoreConversation(mostRecent)
+                    // Find the most recent conversation with actual content
+                    const conversationWithContent = data.data.find((conv: any) => {
+                      const hasMessages = (conv.mainMessages && conv.mainMessages.length > 0) || 
+                                         (conv.messages && conv.messages.length > 0)
+                      const hasBranches = conv.branches && conv.branches.length > 0
+                      return hasMessages || hasBranches
+                    })
+                    
+                    if (conversationWithContent) {
+                      console.log('✅ Found conversation with content, restoring:', {
+                        id: conversationWithContent._id,
+                        messagesCount: conversationWithContent.mainMessages?.length || conversationWithContent.messages?.length || 0,
+                        branchesCount: conversationWithContent.branches?.length || 0
+                      })
+                      restoreConversation(conversationWithContent)
+                    } else {
+                      console.log('⚠️ No conversations with content found, starting fresh')
+                      // Don't restore empty conversations - start fresh
+                    }
                   }
                 } else {
                   console.log('⚠️ No conversations found in database')
@@ -234,6 +250,16 @@ export default function Home() {
       selectedAIsCount: conversation.selectedAIs?.length || 0
     })
     
+    // Don't restore empty conversations
+    const hasMessages = (conversation.mainMessages && conversation.mainMessages.length > 0) ||
+                        (conversation.messages && conversation.messages.length > 0)
+    const hasBranches = conversation.branches && conversation.branches.length > 0
+    
+    if (!hasMessages && !hasBranches) {
+      console.log('⚠️ Skipping restore - conversation has no content')
+      return
+    }
+    
     // Ensure conversation ID is set
     if (conversation._id) {
       currentConversationIdRef.current = conversation._id
@@ -242,10 +268,50 @@ export default function Home() {
     
     // Restore ALL state immediately with complete isolation
     if (conversation.mainMessages && Array.isArray(conversation.mainMessages)) {
-      setMessages(conversation.mainMessages)
-      console.log('✅ Restored messages:', conversation.mainMessages.length)
+      console.log('📥 Raw mainMessages from API:', {
+        count: conversation.mainMessages.length,
+        messages: conversation.mainMessages.map((m: any) => ({
+          id: m.id,
+          isUser: m.isUser,
+          hasText: !!m.text,
+          textPreview: m.text?.substring(0, 50),
+          aiModel: m.aiModel
+        }))
+      })
+      
+      // Filter out any invalid messages and ensure all have required fields
+      // IMPORTANT: Don't filter by text content - AI messages might be empty but still valid
+      const validMessages = conversation.mainMessages
+        .filter((msg: any) => msg && msg.id) // Only require id, not text
+        .map((msg: any) => ({
+          ...msg,
+          text: msg.text || msg.streamingText || '', // Ensure text exists
+          isStreaming: false, // Clear streaming state on restore
+          streamingText: undefined // Remove streaming text
+        }))
+      
+      setMessages(validMessages)
+      console.log('✅ Restored messages:', {
+        total: validMessages.length,
+        userMessages: validMessages.filter((m: any) => m.isUser).length,
+        aiMessages: validMessages.filter((m: any) => !m.isUser).length,
+        messageIds: validMessages.map((m: any) => ({ 
+          id: m.id, 
+          isUser: m.isUser, 
+          hasText: !!m.text,
+          textLength: m.text?.length || 0,
+          aiModel: m.aiModel
+        }))
+      })
     } else {
       console.log('⚠️ No mainMessages in conversation, setting empty array')
+      console.log('📊 Conversation structure:', {
+        hasMainMessages: !!conversation.mainMessages,
+        mainMessagesType: typeof conversation.mainMessages,
+        hasMessages: !!conversation.messages,
+        messagesType: typeof conversation.messages,
+        keys: Object.keys(conversation)
+      })
       setMessages([])
     }
     
@@ -290,19 +356,22 @@ export default function Home() {
       setSelectedAIs([defaultAI])
     }
     
-    if (conversation.multiModelMode !== undefined) {
-      setMultiModelMode(conversation.multiModelMode)
-      console.log('✅ Restored multiModelMode:', conversation.multiModelMode)
-    } else {
-      setMultiModelMode(false)
-    }
     
     // Always ensure main node is included in restored nodes
     const mainNodeInBranches = conversation.branches?.find((b: any) => b.id === 'main' || b.isMain)
     
     if (conversation.branches && conversation.branches.length > 0) {
       console.log('📦 Restoring branches data:', conversation.branches.length)
-      console.log('📦 Branch IDs from MongoDB:', conversation.branches.map((b: any) => ({ id: b.id, isMain: b.isMain || b.id === 'main' })))
+      console.log('📦 Branch IDs from MongoDB:', conversation.branches.map((b: any) => ({ 
+        id: b.id, 
+        isMain: b.isMain || b.id === 'main',
+        messagesCount: b.messages?.length || 0,
+        inheritedCount: b.inheritedMessages?.length || 0,
+        branchCount: b.branchMessages?.length || 0,
+        hasMessages: !!(b.messages?.length),
+        hasInherited: !!(b.inheritedMessages?.length),
+        hasBranch: !!(b.branchMessages?.length)
+      })))
       
       // Get non-main branches for UI control
       const nonMainBranches = conversation.branches.filter((b: any) => b.id !== 'main' && !b.isMain)
@@ -373,6 +442,79 @@ export default function Home() {
           }
         }).filter((ai: any) => ai !== null) || []
         
+        // CRITICAL: Ensure messages are properly restored
+        // Messages can be in different places: b.messages, b.inheritedMessages + b.branchMessages
+        let branchMessages: any[] = []
+        let inheritedMessages: any[] = []
+        
+        if (isMainNode) {
+          // Main node uses mainMessages
+          branchMessages = (conversation.mainMessages || [])
+            .filter((msg: any) => msg && msg.id && (msg.text || msg.streamingText))
+            .map((msg: any) => ({
+              ...msg,
+              text: msg.text || msg.streamingText || '',
+              isStreaming: false,
+              streamingText: undefined
+            }))
+        } else {
+          // For branches, try to get messages from multiple sources
+          // IMPORTANT: Don't filter by text content - restore all messages even if empty
+          if (b.messages && Array.isArray(b.messages) && b.messages.length > 0) {
+            // If we have combined messages, use them
+            branchMessages = b.messages
+              .filter((msg: any) => msg && msg.id) // Only require id
+              .map((msg: any) => ({
+                ...msg,
+                text: msg.text || msg.streamingText || '', // Ensure text exists
+                isStreaming: false,
+                streamingText: undefined
+              }))
+          } else if ((b.inheritedMessages && b.inheritedMessages.length > 0) || 
+                     (b.branchMessages && b.branchMessages.length > 0)) {
+            // Use separate inherited and branch messages
+            inheritedMessages = (b.inheritedMessages || [])
+              .filter((msg: any) => msg && msg.id) // Only require id
+              .map((msg: any) => ({
+                ...msg,
+                text: msg.text || msg.streamingText || '',
+                isStreaming: false,
+                streamingText: undefined
+              }))
+            branchMessages = (b.branchMessages || [])
+              .filter((msg: any) => msg && msg.id) // Only require id
+              .map((msg: any) => ({
+                ...msg,
+                text: msg.text || msg.streamingText || '',
+                isStreaming: false,
+                streamingText: undefined
+              }))
+          }
+          
+          // Log branch message restoration (even if empty)
+          console.log('📦 Branch messages restored:', {
+            branchId: b.id,
+            inheritedCount: inheritedMessages.length,
+            branchCount: branchMessages.length,
+            total: inheritedMessages.length + branchMessages.length,
+            hasMessages: !!(b.messages?.length),
+            hasInheritedMessages: !!(b.inheritedMessages?.length),
+            hasBranchMessages: !!(b.branchMessages?.length)
+          })
+        }
+        
+        // Combine messages for display (inherited + branch)
+        const allMessages = [...inheritedMessages, ...branchMessages]
+        
+        console.log('📦 Restoring branch node:', {
+          id: b.id,
+          isMain: isMainNode,
+          inheritedCount: inheritedMessages.length,
+          branchCount: branchMessages.length,
+          totalMessages: allMessages.length,
+          hasAIs: restoredAIs.length > 0
+        })
+        
         // Return proper React Flow node structure with data property
         return {
           id: b.id,
@@ -380,18 +522,18 @@ export default function Home() {
           position: b.position || { x: 0, y: 0 },
           data: {
             label: b.label || b.title || (isMainNode ? 'Main Conversation' : 'Branch'),
-            messages: b.messages || [],
-            inheritedMessages: b.inheritedMessages || [],
-            branchMessages: b.branchMessages || [],
+            messages: allMessages, // Combined for display
+            inheritedMessages: inheritedMessages, // Separate for context
+            branchMessages: branchMessages, // Separate for branch-specific messages
             selectedAIs: restoredAIs || [],
-            multiModelMode: b.multiModelMode || false,
             isMain: b.isMain || b.id === 'main',
             isMinimized: b.isMinimized || false,
             showAIPill: b.showAIPill !== undefined ? b.showAIPill : !isMainNode,
             parentId: isMainNode ? undefined : (b.parentId || 'main'),
             parentMessageId: b.parentMessageId,
             contextSnapshot: b.contextSnapshot,
-            nodeId: b.id
+            nodeId: b.id,
+            branchGroupId: b.branchGroupId || b.groupId // Support branch grouping
           }
         }
       })
@@ -399,17 +541,27 @@ export default function Home() {
     // If main node is not in branches, create it from mainMessages
     if (!mainNodeInBranches) {
       console.log('📝 Main node not in branches, creating from mainMessages')
+      
+      // Get main messages, ensuring they're valid
+      const mainMessages = (conversation.mainMessages || [])
+        .filter((msg: any) => msg && msg.id && (msg.text || msg.streamingText))
+        .map((msg: any) => ({
+          ...msg,
+          text: msg.text || msg.streamingText || '',
+          isStreaming: false,
+          streamingText: undefined
+        }))
+      
       const mainNode = {
         id: 'main',
         type: 'chatNode', // React Flow requires 'chatNode' type
         position: { x: 400, y: 50 },
         data: {
           label: 'Main Conversation',
-          messages: conversation.mainMessages || messages,
+          messages: mainMessages,
           inheritedMessages: [],
           branchMessages: [],
           selectedAIs: conversation.selectedAIs || selectedAIs,
-          multiModelMode: conversation.multiModelMode || false,
           isMain: true,
           isMinimized: false,
           showAIPill: false,
@@ -419,15 +571,23 @@ export default function Home() {
         }
       }
       restoredNodes = [mainNode, ...restoredNodes]
-      console.log('✅ Added main node to restored nodes')
+      console.log('✅ Added main node to restored nodes with', mainMessages.length, 'messages')
     } else {
       // Ensure main node messages are up to date
       const mainNodeIndex = restoredNodes.findIndex((n: any) => n.id === 'main' || n.data?.isMain)
       if (mainNodeIndex !== -1) {
         if (restoredNodes[mainNodeIndex].data) {
-          restoredNodes[mainNodeIndex].data.messages = conversation.mainMessages || messages
+          const mainMessages = (conversation.mainMessages || [])
+            .filter((msg: any) => msg && msg.id && (msg.text || msg.streamingText))
+            .map((msg: any) => ({
+              ...msg,
+              text: msg.text || msg.streamingText || '',
+              isStreaming: false,
+              streamingText: undefined
+            }))
+          restoredNodes[mainNodeIndex].data.messages = mainMessages
+          console.log('✅ Updated main node messages in restored nodes:', mainMessages.length)
         }
-        console.log('✅ Updated main node messages in restored nodes')
       }
     }
       
@@ -449,29 +609,36 @@ export default function Home() {
     } else {
       console.log('⚠️ No branches in conversation')
       // Create main node even if no branches
+      const mainMessages = (conversation.mainMessages || [])
+        .filter((msg: any) => msg && msg.id && (msg.text || msg.streamingText))
+        .map((msg: any) => ({
+          ...msg,
+          text: msg.text || msg.streamingText || '',
+          isStreaming: false,
+          streamingText: undefined
+        }))
+      
       const mainNode = {
         id: 'main',
-        type: 'main',
-        title: 'Main Conversation',
-        messages: conversation.mainMessages || messages,
-        timestamp: Date.now(),
-        parentId: undefined,
-        children: [],
-        isActive: false,
-        selectedAIs: conversation.selectedAIs || selectedAIs,
-        multiModelMode: conversation.multiModelMode || false,
-        isMain: true,
-        isMinimized: false,
-        showAIPill: false,
+        type: 'chatNode', // Use chatNode type for consistency
         position: { x: 400, y: 50 },
-        nodeData: {},
-        parentMessageId: undefined,
-        inheritedMessages: [],
-        branchMessages: []
+        data: {
+          label: 'Main Conversation',
+          messages: mainMessages,
+          inheritedMessages: [],
+          branchMessages: [],
+          selectedAIs: conversation.selectedAIs || selectedAIs,
+          isMain: true,
+          isMinimized: false,
+          showAIPill: false,
+          parentId: undefined,
+          parentMessageId: undefined,
+          nodeId: 'main'
+        }
       }
       setBranches([])
       setConversationNodes([mainNode])
-      console.log('✅ Created main node for conversation without branches')
+      console.log('✅ Created main node for conversation without branches with', mainMessages.length, 'messages')
     }
     
     // Reset current branch when switching conversations
@@ -485,7 +652,15 @@ export default function Home() {
   // MongoDB: Auto-save conversation whenever state changes
   useEffect(() => {
     // Save whenever we have messages OR conversation nodes (for branch preservation)
-    const shouldSave = !isInitialLoadRef.current && (messages.length > 0 || conversationNodes.length > 0 || branches.length > 0)
+    // But only save if we have actual content (not just empty arrays)
+    const hasMessages = messages.length > 0 && messages.some((m: any) => m.text || m.streamingText)
+    const hasNodes = conversationNodes.length > 0 && conversationNodes.some((n: any) => {
+      const nodeMessages = n.data?.messages || n.messages || []
+      return nodeMessages.length > 0
+    })
+    const hasBranches = branches.length > 0
+    
+    const shouldSave = !isInitialLoadRef.current && (hasMessages || hasNodes || hasBranches)
     
     if (shouldSave) {
       // Use a small delay to ensure React has finished batching state updates
@@ -496,7 +671,6 @@ export default function Home() {
         selectedAIs: selectedAIs.length,
         conversationNodes: conversationNodes.length,
         branches: branches.length,
-        multiModelMode,
         currentBranchId: currentConversationIdRef.current
       })
       
@@ -541,7 +715,6 @@ export default function Home() {
           children: [],
           isActive: !currentBranch,
           selectedAIs: selectedAIs,
-          multiModelMode: multiModelMode,
           isMain: true,
           position: { x: 0, y: 0 }
         })
@@ -552,11 +725,16 @@ export default function Home() {
         if (!msgs || !Array.isArray(msgs)) return []
         
         return msgs
-          .filter(msg => msg && typeof msg === 'object' && (msg.text || msg.streamingText)) // Only include valid messages with text
+          .filter(msg => msg && typeof msg === 'object' && msg.id) // Only require id - don't filter by text
           .map(msg => {
+            // Use streamingText if text is empty (for messages still streaming)
+            const finalText = msg.text || msg.streamingText || ''
+            
             const sanitized = {
               ...msg,
-              text: msg.text || msg.streamingText || '', // Ensure text field exists, use streamingText as fallback
+              text: finalText, // Always ensure text field exists
+              isStreaming: false, // Mark as not streaming when saving
+              streamingText: undefined // Remove streaming text
             }
             
             // Clean up: remove undefined values and ensure required fields
@@ -565,14 +743,6 @@ export default function Home() {
                 delete sanitized[key]
               }
             })
-            
-            // If message has text (not just streamingText), mark as complete
-            if (msg.text && !msg.isStreaming) {
-              sanitized.isStreaming = false
-              if (sanitized.streamingText && sanitized.text === sanitized.streamingText) {
-                delete sanitized.streamingText
-              }
-            }
             
             return sanitized
           })
@@ -648,22 +818,28 @@ export default function Home() {
           finalParentId = 'main' // Fallback for branches without parentId
         }
         
+        // For branches, preserve both combined messages AND separate inherited/branch messages
+        // This ensures we can restore correctly regardless of how the data is structured
+        const inheritedMessages = isMainNode ? undefined : sanitizeMessages(node.data?.inheritedMessages || node.inheritedMessages || [])
+        const branchMessages = isMainNode ? undefined : sanitizeMessages(node.data?.branchMessages || node.branchMessages || [])
+        const combinedMessages = sanitizeMessages(nodeMessages)
+        
         return {
           id: node.id,
           label: node.title || node.data?.label || 'Untitled',
           parentId: isMainNode ? undefined : finalParentId,
           parentMessageId: isMainNode ? undefined : parentMessageId, // ONLY trust FlowCanvas
-          inheritedMessages: isMainNode ? undefined : (node.data?.inheritedMessages || node.inheritedMessages || []),
-          branchMessages: isMainNode ? undefined : (node.data?.branchMessages || node.branchMessages || []),
-          messages: sanitizeMessages(nodeMessages), // Sanitize messages before saving
+          inheritedMessages: inheritedMessages, // Separate inherited messages for branches
+          branchMessages: branchMessages, // Separate branch-specific messages
+          messages: combinedMessages, // Combined messages for compatibility
           selectedAIs: isMainNode ? selectedAIs : (node.selectedAIs || node.data?.selectedAIs || []),
-          multiModelMode: isMainNode ? multiModelMode : (node.multiModelMode || false),
           isMinimized: node.isMinimized || node.data?.isMinimized || false,
           isActive: node.id === currentBranch,
           isGenerating: node.data?.isGenerating || false,
           isHighlighted: node.data?.isHighlighted || false,
           position: node.position || node.data?.position || { x: 0, y: 0 },
-          isMain: isMainNode
+          isMain: isMainNode,
+          branchGroupId: node.data?.branchGroupId || node.branchGroupId // Preserve branch grouping
         }
       })
       
@@ -725,17 +901,134 @@ export default function Home() {
         nonMainCount: branchesOnly.length
       })
       
+      // CRITICAL: Save main messages separately from branch messages
+      // mainMessages should ONLY contain the main conversation messages (including AI responses)
+      // Save ALL messages (user and AI) - don't filter by content as AI responses might be empty during streaming
+      const mainMessagesToSave = sanitizeMessages(messages).filter((msg: any) => 
+        msg && msg.id && (msg.text || msg.streamingText)
+      )
+      
+      console.log('📦 Messages to save:', {
+        totalInState: messages.length,
+        rawMessages: messages.map((m: any) => ({
+          id: m.id,
+          isUser: m.isUser,
+          hasText: !!m.text,
+          textLength: m.text?.length || 0,
+          hasStreamingText: !!m.streamingText,
+          textPreview: m.text?.substring(0, 50)
+        })),
+        afterSanitize: sanitizeMessages(messages).length,
+        afterFilter: mainMessagesToSave.length,
+        userMessages: mainMessagesToSave.filter((m: any) => m.isUser).length,
+        aiMessages: mainMessagesToSave.filter((m: any) => !m.isUser).length,
+        messageDetails: mainMessagesToSave.map((m: any) => ({
+          id: m.id,
+          isUser: m.isUser,
+          hasText: !!m.text,
+          textLength: m.text?.length || 0,
+          hasStreamingText: !!m.streamingText,
+          textPreview: m.text?.substring(0, 50)
+        }))
+      })
+      
+      // Don't save if we have no valid messages and no branches
+      if (mainMessagesToSave.length === 0 && branchesOnly.length === 0) {
+        console.log('⚠️ Skipping save - no valid messages or branches to save')
+        return
+      }
+      
+      console.log('📦 Preparing to save:', {
+        mainMessagesCount: mainMessagesToSave.length,
+        mainMessages: mainMessagesToSave.map((m: any) => ({ 
+          id: m.id, 
+          isUser: m.isUser, 
+          hasText: !!m.text,
+          textLength: m.text?.length || 0,
+          textPreview: m.text?.substring(0, 50),
+          aiModel: m.aiModel
+        })),
+        branchesCount: branchesOnly.length,
+        branchesWithMessages: branchesOnly.filter(b => (b.messages?.length || 0) > 0).length,
+        allBranchIds: branchesOnly.map(b => b.id)
+      })
+      
+      // Ensure branches have their messages properly structured
+      const branchesWithMessages = branchesOnly.map((branch: any) => {
+        // Ensure messages array exists and is properly formatted
+        const branchMessages = branch.messages || []
+        const inheritedMessages = branch.inheritedMessages || []
+        const branchOnlyMessages = branch.branchMessages || []
+        
+        // If we have separate inherited and branch messages, use them
+        // Otherwise use the combined messages array
+        const finalMessages = (inheritedMessages.length > 0 || branchOnlyMessages.length > 0)
+          ? [...inheritedMessages, ...branchOnlyMessages]
+          : branchMessages
+        
+        return {
+          ...branch,
+          messages: sanitizeMessages(finalMessages), // Ensure messages are sanitized
+          inheritedMessages: sanitizeMessages(inheritedMessages),
+          branchMessages: sanitizeMessages(branchOnlyMessages)
+        }
+      })
+      
+      console.log('📦 Branches with messages:', branchesWithMessages.map((b: any) => ({
+        id: b.id,
+        messagesCount: b.messages?.length || 0,
+        inheritedCount: b.inheritedMessages?.length || 0,
+        branchCount: b.branchMessages?.length || 0
+      })))
+      
+      console.log('🔄 Before convertAppStateToMongoDB:', {
+        mainMessagesToSaveCount: mainMessagesToSave.length,
+        mainMessagesToSave: mainMessagesToSave.map((m: any) => ({
+          id: m.id,
+          isUser: m.isUser,
+          textLength: m.text?.length || 0,
+          textPreview: m.text?.substring(0, 50),
+          aiModel: m.aiModel
+        })),
+        branchesWithMessagesCount: branchesWithMessages.length,
+        branchIds: branchesWithMessages.map((b: any) => b.id),
+        branchDetails: branchesWithMessages.map((b: any) => ({
+          id: b.id,
+          messagesCount: b.messages?.length || 0,
+          inheritedCount: b.inheritedMessages?.length || 0,
+          branchCount: b.branchMessages?.length || 0
+        }))
+      })
+      
       const conversationData = mongoDBService.convertAppStateToMongoDB({
         title: 'Conversation',
-        messages: sanitizeMessages(messages), // Sanitize main messages too
+        messages: mainMessagesToSave, // ONLY main conversation messages
         selectedAIs,
-        multiModelMode,
-        branches: branchesOnly, // Only save non-main branches
+        branches: branchesWithMessages, // Branches with their own messages
         contextLinks: [],
         collapsedNodes: [],
         minimizedNodes: [],
         activeNodeId: currentBranch || undefined,
         viewport: { x: 0, y: 0, zoom: 1 }
+      })
+      
+      console.log('🔄 After convertAppStateToMongoDB:', {
+        mainMessagesCount: conversationData.mainMessages?.length || 0,
+        mainMessages: conversationData.mainMessages?.map((m: any) => ({
+          id: m.id,
+          isUser: m.isUser,
+          textLength: m.text?.length || 0,
+          textPreview: m.text?.substring(0, 50),
+          aiModel: m.aiModel
+        })) || [],
+        branchesCount: conversationData.branches?.length || 0,
+        branchIds: conversationData.branches?.map((b: any) => b.id) || [],
+        branchDetails: conversationData.branches?.map((b: any) => ({
+          id: b.id,
+          messagesCount: b.messages?.length || 0,
+          inheritedCount: b.inheritedMessages?.length || 0,
+          branchCount: b.branchMessages?.length || 0
+        })) || []
       })
       
       console.log('📤 Calling autoSaveConversation with:', {
@@ -774,7 +1067,6 @@ export default function Home() {
               functional: ai.functional
               // Exclude logo and other React components
             })) || [],
-            multiModelMode: b.multiModelMode,
             isMain: b.isMain,
             position: b.position
           }))
@@ -799,7 +1091,13 @@ export default function Home() {
       
       console.log('💾 Calling autoSaveConversation with conversationData:', {
         branchesCount: conversationData.branches?.length || 0,
+        branchIds: conversationData.branches?.map((b: any) => b.id) || [],
         messagesCount: conversationData.mainMessages?.length || 0,
+        messageDetails: conversationData.mainMessages?.map((m: any) => ({
+          id: m.id,
+          isUser: m.isUser,
+          textLength: m.text?.length || 0
+        })) || [],
         conversationId: conversationIdToSave,
         isNewConversation: !conversationIdToSave
       })
@@ -812,16 +1110,14 @@ export default function Home() {
       
       return () => clearTimeout(timeoutId)
     }
-  }, [messages, selectedAIs, multiModelMode, conversationNodes, currentBranch, branches, autoSaveConversation])
+  }, [messages, selectedAIs, conversationNodes, currentBranch, branches, autoSaveConversation])
 
-  // Auto-select "Best" AI in single mode, clear selection in multi-mode
+  // Auto-select "Best" AI if no AIs are selected
   useEffect(() => {
-    if (!multiModelMode && selectedAIs.length === 0) {
+    if (selectedAIs.length === 0) {
       setSelectedAIs([defaultAI])
-    } else if (multiModelMode && selectedAIs.length === 1 && selectedAIs[0].id === 'best') {
-      setSelectedAIs([])
     }
-  }, [multiModelMode, selectedAIs.length])
+  }, [selectedAIs.length])
 
   // Function to get the best available model for "Best" AI
   const getBestAvailableModel = (): string => {
@@ -970,7 +1266,6 @@ export default function Home() {
                       parentId: n.parentId,
                       parentMessageId: n.parentMessageId,
                       selectedAIs: n.selectedAIs || [],
-                      multiModelMode: n.multiModelMode || false,
                       isMain: n.isMain || false,
                       position: n.position || { x: 0, y: 0 }
                     }))
@@ -1020,7 +1315,6 @@ export default function Home() {
     // COMPLETE STATE RESET - Ensure everything is cleared
     setMessages([])
     setSelectedAIs([defaultAI])
-    setMultiModelMode(false)
     setBranches([])
     setConversationNodes([])
     setCurrentBranch(null)
@@ -1050,7 +1344,6 @@ export default function Home() {
             color: defaultAI.color,
             functional: true
           }],
-          multiModelMode: false,
           branches: [{
             id: 'main',
             label: 'Main Conversation',
@@ -1061,7 +1354,6 @@ export default function Home() {
               color: defaultAI.color,
               functional: true
             }],
-            multiModelMode: false,
             isMain: true,
             position: { x: 0, y: 0 }
           }],
@@ -1095,7 +1387,6 @@ export default function Home() {
           children: [],
           isActive: false,
           selectedAIs: [defaultAI],
-          multiModelMode: false,
           isMain: true,
           isMinimized: false,
           showAIPill: false,
@@ -1166,11 +1457,44 @@ export default function Home() {
         // Set conversation ID immediately
         currentConversationIdRef.current = conversationId
         
-        console.log('✅ Loaded conversation:', {
+        console.log('✅ Loaded conversation from API:', {
           id: conversationId,
           title: data.data.title,
           messagesCount: data.data.mainMessages?.length || 0,
-          branchesCount: data.data.branches?.length || 0
+          branchesCount: data.data.branches?.length || 0,
+          hasMainMessages: !!data.data.mainMessages,
+          mainMessagesType: typeof data.data.mainMessages,
+          mainMessagesIsArray: Array.isArray(data.data.mainMessages),
+          firstMessage: data.data.mainMessages?.[0],
+          allMessageTypes: data.data.mainMessages?.map((m: any) => ({ 
+            id: m.id, 
+            isUser: m.isUser, 
+            hasText: !!m.text,
+            textLength: m.text?.length || 0
+          }))
+        })
+        
+        // Log full conversation structure for debugging
+        console.log('📊 Full conversation data structure:', {
+          keys: Object.keys(data.data),
+          mainMessagesCount: data.data.mainMessages?.length || 0,
+          mainMessages: data.data.mainMessages?.map((m: any) => ({
+            id: m.id,
+            isUser: m.isUser,
+            textLength: m.text?.length || 0,
+            textPreview: m.text?.substring(0, 50)
+          })) || [],
+          branchesCount: data.data.branches?.length || 0,
+          branches: data.data.branches?.map((b: any) => ({
+            id: b.id,
+            isMain: b.isMain || b.id === 'main',
+            messagesCount: b.messages?.length || 0,
+            inheritedCount: b.inheritedMessages?.length || 0,
+            branchCount: b.branchMessages?.length || 0,
+            hasMessages: !!(b.messages?.length),
+            hasInherited: !!(b.inheritedMessages?.length),
+            hasBranch: !!(b.branchMessages?.length)
+          })) || []
         })
         
         // Restore conversation with complete isolation
@@ -1227,7 +1551,6 @@ export default function Home() {
           // Reset all state to blank
           setMessages([])
           setSelectedAIs([defaultAI])
-          setMultiModelMode(false)
           setBranches([])
           setConversationNodes([])
           setCurrentBranch(null)
@@ -1338,7 +1661,6 @@ export default function Home() {
         children: [],
         isActive: node.id === activeBranchId,
         selectedAIs: node.data?.selectedAIs || [],
-        multiModelMode: node.data?.multiModelMode || false,
         isMain: isMainNode,
         isMinimized: node.data?.isMinimized || false,
         showAIPill: node.data?.showAIPill || false,
@@ -1374,7 +1696,6 @@ export default function Home() {
           children: [],
           isActive: !currentBranch,
           selectedAIs: selectedAIs || [],
-          multiModelMode,
           isMain: true,
           position: { x: 400, y: 50 }
         }
@@ -1408,7 +1729,6 @@ export default function Home() {
         children: [],
         isActive: !currentBranch,
         selectedAIs: selectedAIs || [],
-        multiModelMode,
         isMain: true,
         position: { x: 400, y: 50 }
       }
@@ -1428,7 +1748,7 @@ export default function Home() {
         }))
       }
     }
-  }, [viewMode, messages, selectedAIs, multiModelMode, currentBranch])
+  }, [viewMode, messages, selectedAIs, currentBranch])
   
   // Stop AI generation
   const stopGeneration = () => {
@@ -1543,7 +1863,6 @@ export default function Home() {
     if (selectedAIs.length > 1) {
       console.log(`📍 Multi-model mode: Creating ${selectedAIs.length} AI responses`)
       console.log('📍 Selected AIs:', selectedAIs.map(ai => ai.name))
-      console.log('📍 Multi-model mode enabled:', multiModelMode)
       
       // Don't auto-trigger canvas mode - let user decide when to branch
       // Canvas mode only triggers when user explicitly clicks branch button
@@ -1573,7 +1892,8 @@ export default function Home() {
           const mockResponse = `This is a mock response from ${ai.name} to: "${text}". In a real scenario, this would be generated by the ${modelName} API. This response simulates what the AI would say based on the conversation context.`
           
           // Create streaming message placeholder for multi-model
-          const streamingMessageId = `msg-${Date.now()}-${ai.id}-${index}`
+          // Use a more unique ID to prevent collisions when multiple messages are created simultaneously
+          const streamingMessageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${ai.id}-${index}`
           const streamingMessage: Message = {
             id: streamingMessageId,
             text: '',
@@ -1778,29 +2098,18 @@ export default function Home() {
         }
       })
 
-      // Wait for all AI responses
-      const aiResponses = await Promise.all(aiPromises)
-      
-      // Responses are already added as streaming messages, just update branches
-      aiResponses.forEach((response, index) => {
-        setTimeout(() => {
-          // Update branch if needed
-          if (activeBranchId) {
-            setSavedBranches(prev => 
-              prev.map(b => b.id === activeBranchId 
-                ? { ...b, messages: [...b.messages, response] } 
-                : b
-              )
-            )
-          }
-          
-          // If this is the last AI, stop generating
-          if (index === aiResponses.length - 1) {
-            setIsGenerating(false)
-            mainAbortControllerRef.current = null // Clean up abort controller
-          }
-        }, (index + 1) * 500)
-      })
+      // Wait for all AI responses with error handling
+      try {
+        const aiResponses = await Promise.all(aiPromises)
+        console.log('✅ All AI responses completed:', aiResponses.length)
+      } catch (error) {
+        console.error('❌ Error in multi-AI response generation:', error)
+      } finally {
+        // Always clear generating state, even if some responses failed
+        setIsGenerating(false)
+        mainAbortControllerRef.current = null // Clean up abort controller
+        console.log('✅ Generation state cleared')
+      }
     } else {
       // Single AI response (or multi-mode OFF)
       const selectedAI = selectedAIs[0]
@@ -2066,12 +2375,19 @@ export default function Home() {
     // Check if we're in simple chat view (no branches and no conversation nodes except main)
     const hasBranches = branches.length > 0 || conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length > 0
     
+    // Store isMultiBranch in pendingBranchData so it can be passed to FlowCanvas
+    setPendingBranchData({
+      messageId,
+      isMultiBranch,
+      messageText: targetMessage?.text?.substring(0, 100)
+    })
+    
     if (!hasBranches) {
-      console.log('📍 Switching to canvas mode for first branch')
+      console.log('📍 Switching to canvas mode for first branch', { isMultiBranch })
       // Set pendingBranchMessageId immediately - FlowCanvas will create branch when it mounts
       setPendingBranchMessageId(messageId)
     } else {
-      console.log('📍 Already in canvas mode - creating new branch')
+      console.log('📍 Already in canvas mode - creating new branch', { isMultiBranch })
       // When already in canvas mode, create the branch directly
       setPendingBranchMessageId(messageId)
     }
@@ -2112,9 +2428,6 @@ export default function Home() {
     setShowBranchWarning(true)
   }, [])
 
-  const toggleMultiModel = () => {
-    setMultiModelMode(!multiModelMode)
-  }
 
   // Effect to auto-save conversation as branch when it changes
   useEffect(() => {
@@ -2125,12 +2438,6 @@ export default function Home() {
   
   // Command palette commands
   const commandPaletteCommands = [
-    {
-      id: 'toggle-multi-model',
-      title: 'Toggle Multi-Model Mode',
-      description: 'Switch between single and multi-AI mode',
-      action: () => setMultiModelMode(!multiModelMode)
-    },
     {
       id: 'export-conversation',
       title: 'Export Conversation',
@@ -2316,37 +2623,9 @@ export default function Home() {
                 onAddAI={addAI}
                 onRemoveAI={removeAI}
                 onSelectSingle={selectSingleAI}
-                showAddButton={multiModelMode}
-                singleMode={!multiModelMode}
+                showAddButton={true}
                 getBestAvailableModel={getBestAvailableModel}
               />
-              
-              {/* Multi-Model Toggle */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Mode:</span>
-                <div className="flex bg-muted rounded-lg p-1">
-                  <button
-                    onClick={() => setMultiModelMode(false)}
-                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                      !multiModelMode
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    Single
-                  </button>
-                  <button
-                    onClick={() => setMultiModelMode(true)}
-                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                      multiModelMode
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    Multi
-                  </button>
-                </div>
-              </div>
 
               {/* Export/Import Button */}
               <button
@@ -2367,7 +2646,6 @@ export default function Home() {
               selectedAIs={selectedAIs}
               onBranchFromMessage={branchFromMessage}
               currentBranch={currentBranch}
-              multiModelMode={multiModelMode}
               isGenerating={isGenerating}
               onStopGeneration={stopGeneration}
               existingBranchesCount={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length}
@@ -2387,7 +2665,6 @@ export default function Home() {
             onRemoveAI={removeAI}
             onSelectSingle={selectSingleAI}
             getBestAvailableModel={getBestAvailableModel}
-            multiModelMode={multiModelMode}
             onSendMessage={sendMessage}
             onBranchFromMessage={branchFromMessage}
             isGenerating={isGenerating}
@@ -2406,19 +2683,20 @@ export default function Home() {
             onBranchFromMain={branchFromMessage}
             initialBranchMessageId={currentBranch}
             pendingBranchMessageId={pendingBranchMessageId}
-            onPendingBranchProcessed={() => setPendingBranchMessageId(null)}
+            pendingBranchData={pendingBranchData}
+            onPendingBranchProcessed={() => {
+              setPendingBranchMessageId(null)
+              setPendingBranchData(null)
+            }}
             onNodesUpdate={updateConversationNodes}
             onNodeDoubleClick={(nodeId) => {
               console.log('Node double-clicked:', nodeId)
-              // TODO: Implement focus mode in Phase 4
             }}
             onPillClick={(aiId) => {
               console.log('Pill clicked:', aiId)
-              // TODO: Implement pill navigation in Phase 1
             }}
             getBestAvailableModel={getBestAvailableModel}
             onSelectSingle={selectSingleAI}
-            multiModelMode={multiModelMode}
             onExportImport={() => setShowExportImport(true)}
             restoredConversationNodes={conversationNodes}
             selectedBranchId={activeBranchId}

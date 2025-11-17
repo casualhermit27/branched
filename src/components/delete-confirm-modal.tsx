@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Warning, X, Trash } from '@phosphor-icons/react'
 
@@ -26,17 +27,47 @@ export function DeleteConfirmModal({
   itemType = 'item',
   destructive = true
 }: DeleteConfirmModalProps) {
-  if (!isOpen) return null
+  const deleteButtonRef = useRef<HTMLButtonElement>(null)
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     onCancel?.()
     onClose()
-  }
+  }, [onCancel, onClose])
 
-  const handleConfirm = () => {
+  const handleConfirm = useCallback(() => {
     onConfirm()
     onClose()
-  }
+  }, [onConfirm, onClose])
+
+  useEffect(() => {
+    if (isOpen) {
+      // Auto-focus the delete button when modal opens
+      setTimeout(() => {
+        deleteButtonRef.current?.focus()
+      }, 100)
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        handleConfirm()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        handleCancel()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, handleConfirm, handleCancel])
+
+  if (!isOpen) return null
 
   const defaultTitle = title || `Delete ${itemType === 'branch' ? 'Branch' : itemType === 'conversation' ? 'Conversation' : 'Item'}?`
   const defaultMessage = message || `Are you sure you want to delete this ${itemType}? This action cannot be undone.`
@@ -112,12 +143,14 @@ export function DeleteConfirmModal({
                 Cancel
               </button>
               <button
+                ref={deleteButtonRef}
                 onClick={handleConfirm}
                 className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors ${
                   destructive
                     ? 'bg-destructive hover:bg-destructive/90 text-white'
                     : 'bg-blue-600 hover:bg-blue-700 text-white'
                 }`}
+                autoFocus
               >
                 Delete
               </button>

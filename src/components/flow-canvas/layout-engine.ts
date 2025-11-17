@@ -134,15 +134,17 @@ export function getLayoutedElements(
 		return { nodes, edges }
 	}
 
-	// First pass: Calculate all node positions and dimensions
-	const nodePositions: Array<{
+	type PositionedNode = {
 		node: Node
 		dims: { width: number; height: number }
 		x: number
 		y: number
 		centerY: number
 		parentId?: string
-	}> = []
+	}
+
+	// First pass: Calculate all node positions and dimensions
+	const nodePositions: PositionedNode[] = []
 	const invalidNodes: Node[] = []
 
 	nodes.forEach((node) => {
@@ -179,7 +181,7 @@ export function getLayoutedElements(
 	})
 
 	// Group nodes by their parent to identify branches at the same level
-	const nodesByParent = new Map<string, typeof nodePositions>()
+	const nodesByParent = new Map<string, PositionedNode[]>()
 
 	nodePositions.forEach((item) => {
 		// Skip main node - only align branch nodes
@@ -194,16 +196,98 @@ export function getLayoutedElements(
 		nodesByParent.get(parentId)!.push(item)
 	})
 
-	// Align branches at the same level by their top edge
-	nodesByParent.forEach((siblingNodes) => {
+	// Align branches at the same level by their top edge and group units
+	nodesByParent.forEach((siblingNodes, parentId) => {
 		if (siblingNodes.length <= 1) return // No alignment needed for single branch
 
-		// Find the minimum top Y position (highest node)
-		const minTopY = Math.min(...siblingNodes.map(item => item.y))
+		const parentNode = nodes.find((n) => n.id === parentId)
+		const parentDims = calculateNodeDimensions(
+			parentNode?.data?.messages?.length || 0,
+			parentNode?.data?.isMinimized || false
+		)
+		const parentPosition = dagreGraph.node(parentId)
+		const parentX = parentPosition?.x ?? parentNode?.position?.x ?? 400
+		const parentY = parentPosition?.y ?? parentNode?.position?.y ?? 50
+		const topEdgeY = parentY + parentDims.height / 2 + rankSpacing
 
-		// Align all siblings to the same top Y position
+		type BranchUnit = {
+			type: 'group' | 'single'
+			items: PositionedNode[]
+			groupId?: string
+		}
+
+		const branchUnits: BranchUnit[] = []
+		const groupMap = new Map<string, PositionedNode[]>()
+
+		// Collect grouped branches
 		siblingNodes.forEach((item) => {
-			item.y = minTopY
+			const groupId = item.node.data?.branchGroupId
+			if (groupId) {
+				if (!groupMap.has(groupId)) {
+					groupMap.set(groupId, [])
+				}
+				groupMap.get(groupId)!.push(item)
+			}
+		})
+
+		// Add grouped units first for consistent ordering
+		Array.from(groupMap.entries())
+			.sort(([a], [b]) => a.localeCompare(b))
+			.forEach(([groupId, items]) => {
+				branchUnits.push({ type: 'group', items, groupId })
+			})
+
+		// Add remaining single branches sorted by node ID
+		siblingNodes
+			.filter((item) => !item.node.data?.branchGroupId)
+			.sort((a, b) => a.node.id.localeCompare(b.node.id))
+			.forEach((item) => {
+				branchUnits.push({ type: 'single', items: [item] })
+			})
+
+		if (branchUnits.length === 0) {
+			// Fallback to simple vertical alignment
+			const minTopY = Math.min(...siblingNodes.map((item) => item.y))
+			siblingNodes.forEach((item) => {
+				item.y = minTopY
+			})
+			return
+		}
+
+		const getUnitWidth = (unit: BranchUnit) =>
+			unit.items.reduce((sum, item, idx) => {
+				const spacing = idx > 0 ? nodeSpacing : 0
+				return sum + item.dims.width + spacing
+			}, 0)
+
+		// Total width = sum of unit widths + spacing between units
+		const totalUnitsWidth = branchUnits.reduce((sum, unit, idx) => {
+			const unitWidth = getUnitWidth(unit)
+			const spacing = idx < branchUnits.length - 1 ? nodeSpacing : 0
+			return sum + unitWidth + spacing
+		}, 0)
+
+		const startX = parentX - totalUnitsWidth / 2
+		let currentX = 0
+
+		branchUnits.forEach((unit, unitIndex) => {
+			const unitStartX = startX + currentX
+			let offsetWithinUnit = 0
+
+			unit.items.forEach((item, itemIndex) => {
+				item.x = unitStartX + offsetWithinUnit
+				item.y = topEdgeY
+
+				offsetWithinUnit += item.dims.width
+				if (itemIndex < unit.items.length - 1) {
+					offsetWithinUnit += nodeSpacing
+				}
+			})
+
+			currentX += getUnitWidth(unit)
+			if (unitIndex < branchUnits.length - 1) {
+				currentX += nodeSpacing
+			}
 		})
 	})
 

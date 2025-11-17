@@ -15,7 +15,6 @@ export interface BranchContext {
 	branchMessageIds: string[]
 	metadata?: {
 		selectedAIs?: any[]
-		multiModelMode?: boolean
 		[label: string]: any
 	}
 }

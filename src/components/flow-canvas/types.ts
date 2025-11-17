@@ -54,7 +54,6 @@ export interface ChatNodeData {
 	existingBranchesCount?: number
 	height?: number
 	isHighlighted?: boolean
-	multiModelMode?: boolean
 	nodeId?: string
 	parentMessageId?: string
 	inheritedMessages?: Message[]
@@ -67,6 +66,7 @@ export interface ChatNodeData {
 		inheritedMessageIds: string[]
 		timestamp: number
 	}
+	branchGroupId?: string // ID to group branches created from same multi-AI response
 }
 
 export interface FlowCanvasProps {
@@ -78,13 +78,17 @@ export interface FlowCanvasProps {
 	onBranchFromMain: (messageId: string) => void
 	initialBranchMessageId?: string | null
 	pendingBranchMessageId?: string | null
+	pendingBranchData?: {
+		messageId: string
+		isMultiBranch: boolean
+		messageText?: string
+	} | null
 	onPendingBranchProcessed?: () => void
 	onNodesUpdate?: (nodes: any[]) => void
 	onNodeDoubleClick?: (nodeId: string) => void
 	onPillClick?: (aiId: string) => void
 	getBestAvailableModel?: () => string
 	onSelectSingle?: (aiId: string) => void
-	multiModelMode: boolean
 	onExportImport?: () => void
 	restoredConversationNodes?: any[]
 	selectedBranchId?: string | null

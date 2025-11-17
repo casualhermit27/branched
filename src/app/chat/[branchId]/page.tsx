@@ -10,17 +10,13 @@ export default function BranchPage() {
 
   useEffect(() => {
     if (branchId && branchId !== 'main') {
-      // TODO: Load branch data when hook is available
       console.log('Loading branch:', branchId)
     }
   }, [branchId])
 
-  // This component would render the branch-specific view
-  // The actual implementation depends on your app structure
   return (
     <div>
       {/* Branch content will be rendered here */}
-      {/* This is a placeholder - integrate with your existing FlowCanvas */}
     </div>
   )
 }

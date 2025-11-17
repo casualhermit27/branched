@@ -4,7 +4,6 @@ export interface ConversationData {
   title: string
   mainMessages: IMessage[]
   selectedAIs: IAIModel[]
-  multiModelMode: boolean
   branches: IBranch[]
   contextLinks: string[]
   collapsedNodes: string[]
@@ -40,7 +39,20 @@ class MongoDBService {
         const url = `${this.baseUrl}/${conversationId}`
         const method = 'PUT'
 
-        console.log('🌐 Making request to update conversation:', { url, method, conversationId, bodySize: JSON.stringify(conversationData).length })
+        console.log('🌐 Making request to update conversation:', { 
+          url, 
+          method, 
+          conversationId, 
+          bodySize: JSON.stringify(conversationData).length,
+          mainMessagesCount: conversationData.mainMessages?.length || 0,
+          branchesCount: conversationData.branches?.length || 0,
+          mainMessages: conversationData.mainMessages?.map((m: any) => ({
+            id: m.id,
+            isUser: m.isUser,
+            textLength: m.text?.length || 0
+          })) || [],
+          branchIds: conversationData.branches?.map((b: any) => b.id) || []
+        })
 
         const response = await fetch(url, {
           method,
@@ -209,7 +221,6 @@ class MongoDBService {
       title: appState.title || 'New Conversation',
       mainMessages: appState.messages || [],
       selectedAIs: appState.selectedAIs || [],
-      multiModelMode: appState.multiModelMode || false,
       branches: appState.branches || [],
       contextLinks: appState.contextLinks || [],
       collapsedNodes: appState.collapsedNodes || [],
@@ -226,7 +237,6 @@ class MongoDBService {
       title: mongoData.title,
       messages: mongoData.mainMessages,
       selectedAIs: mongoData.selectedAIs,
-      multiModelMode: mongoData.multiModelMode,
       branches: mongoData.branches,
       contextLinks: mongoData.contextLinks,
       collapsedNodes: mongoData.collapsedNodes,

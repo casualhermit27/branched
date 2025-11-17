@@ -15,7 +15,6 @@ export interface BranchData {
 		timestamp: number
 	}
 	selectedAIs: any[]
-	multiModelMode: boolean
 	groupId?: string
 	metadata: {
 		isMinimized: boolean
@@ -102,7 +101,6 @@ class BranchService {
 				branchPointMessageId: null,
 				messageIds: (node.data?.messages || node.messages || []).map((m: Message) => m.id),
 				selectedAIs: this.sanitizeAIs(node.data?.selectedAIs || node.selectedAIs || []),
-				multiModelMode: node.data?.multiModelMode || node.multiModelMode || false,
 				metadata: {
 					isMinimized: node.data?.isMinimized || node.isMinimized || false,
 					lastActivity: Date.now()
@@ -139,7 +137,6 @@ class BranchService {
 				timestamp: nodeData.contextSnapshot?.timestamp || Date.now()
 			},
 			selectedAIs: this.sanitizeAIs(nodeData.selectedAIs || []),
-			multiModelMode: nodeData.multiModelMode || false,
 			groupId: nodeData.groupId, // For multi-model branches
 			metadata: {
 				isMinimized: nodeData.isMinimized || false,
@@ -188,7 +185,6 @@ class BranchService {
 				parentId: branch.parentBranchId,
 				parentMessageId: branch.branchPointMessageId,
 				selectedAIs: branch.selectedAIs,
-				multiModelMode: branch.multiModelMode,
 				isMain,
 				isMinimized: branch.metadata.isMinimized,
 				groupId: branch.groupId,

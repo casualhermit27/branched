@@ -33,7 +33,6 @@ export function createMainNode(
 		isMinimized: boolean
 		isActive: boolean
 		isGenerating: boolean
-		multiModelMode: boolean
 		onToggleMinimize?: (nodeId: string) => void
 	}
 ): Node<ChatNodeData> {
@@ -58,7 +57,6 @@ export function createMainNode(
 			isMinimized: state.isMinimized,
 			isActive: state.isActive,
 			isGenerating: state.isGenerating,
-			multiModelMode: state.multiModelMode,
 			nodeId: 'main',
 			onToggleMinimize: state.onToggleMinimize
 		}
@@ -90,10 +88,10 @@ export function createBranchNode(
 		isMinimized: boolean
 		isActive: boolean
 		isGenerating: boolean
-		multiModelMode: boolean
 		onToggleMinimize?: (nodeId: string) => void
 	},
-	branchId: string
+	branchId: string,
+	branchGroupId?: string // Group ID for visual grouping
 ): Node<ChatNodeData> {
 	// Calculate position based on branch count
 	const parentDims = calculateNodeDimensions(
@@ -141,7 +139,6 @@ export function createBranchNode(
 				isMinimized: state.isMinimized,
 				isActive: state.isActive,
 				isGenerating: state.isGenerating,
-				multiModelMode: state.multiModelMode,
 				nodeId: branchId,
 				onToggleMinimize: state.onToggleMinimize,
 				onDeleteBranch: handlers.onDeleteBranch
@@ -195,10 +192,10 @@ export function createBranchNode(
 			isMinimized: state.isMinimized,
 			isActive: state.isActive,
 			isGenerating: state.isGenerating,
-			multiModelMode: state.multiModelMode,
 			nodeId: branchId,
 			onToggleMinimize: state.onToggleMinimize,
-			onDeleteBranch: handlers.onDeleteBranch
+			onDeleteBranch: handlers.onDeleteBranch,
+			branchGroupId // Store group ID for visual grouping
 		}
 	}
 }

@@ -36,7 +36,6 @@ interface ChatInterfaceProps {
   selectedAIs: AI[]
   onBranchFromMessage: (messageId: string, isMultiBranch?: boolean) => void
   currentBranch: string | null
-  multiModelMode: boolean
   isGenerating?: boolean
   onStopGeneration?: () => void
   existingBranchesCount?: number
@@ -44,7 +43,6 @@ interface ChatInterfaceProps {
   onAddAI?: (ai: AI) => void
   onRemoveAI?: (aiId: string) => void
   onSelectSingle?: (aiId: string) => void
-  onToggleMultiModel?: (nodeId: string) => void
   getBestAvailableModel?: () => string
   isMain?: boolean
   nodeId?: string
@@ -57,7 +55,6 @@ export default function ChatInterface({
   selectedAIs, 
   onBranchFromMessage,
   currentBranch,
-  multiModelMode,
   isGenerating = false,
   onStopGeneration,
   existingBranchesCount = 0,
@@ -65,7 +62,6 @@ export default function ChatInterface({
   onAddAI,
   onRemoveAI,
   onSelectSingle,
-  onToggleMultiModel,
   getBestAvailableModel,
   isMain = false,
   nodeId,
@@ -326,54 +322,10 @@ export default function ChatInterface({
                 onAddAI={onAddAI}
                 onRemoveAI={onRemoveAI}
                 onSelectSingle={onSelectSingle ? (ai: AI) => onSelectSingle(ai.id) : undefined}
-                showAddButton={multiModelMode}
-                singleMode={!multiModelMode}
+                showAddButton={true}
                 getBestAvailableModel={getBestAvailableModel}
               />
             </div>
-            
-            {/* Mode Toggle and Export/Import - Only show for branches, not main (main has it in page.tsx header) */}
-            {!isMain && (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Mode:</span>
-                  <div className="flex bg-muted rounded-lg p-1" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (multiModelMode) {
-                          // Only toggle if currently in multi mode
-                          onToggleMultiModel?.(nodeId || '')
-                        }
-                      }}
-                      className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                        !multiModelMode
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Single
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (!multiModelMode) {
-                          // Only toggle if currently in single mode
-                          onToggleMultiModel?.(nodeId || '')
-                        }
-                      }}
-                      className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                        multiModelMode
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Multi
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
             
             {/* Export/Import Button - Only for main conversation */}
             {isMain && onExportImport && (
@@ -472,10 +424,10 @@ export default function ChatInterface({
               }}
               className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'} items-start gap-3`}
             >
-              {/* Branch Button - Only show on user messages in multi-mode (to create all branches), always show on AI messages */}
+              {/* Branch Button - Show on user messages when multiple AIs selected (to create all branches), always show on AI messages */}
               {msg.isUser ? (
-                // User message - branch button only in multi-mode (creates branches for all AI responses)
-                multiModelMode && (
+                // User message - branch button when multiple AIs selected (creates branches for all AI responses)
+                selectedAIs.length > 1 && (
                 <div className="flex items-center gap-2">
                   {/* Branch count indicator */}
                   {existingBranchesCount > 0 && (
@@ -918,7 +870,7 @@ export default function ChatInterface({
               value={message}
               onChange={handleInputChange}
               placeholder={
-                multiModelMode 
+                selectedAIs.length > 1
                   ? `Ask ${selectedAIs.length} AIs...` 
                   : "Ask anything..."
               }

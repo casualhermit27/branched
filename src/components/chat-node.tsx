@@ -52,9 +52,9 @@ interface ChatNodeData {
   existingBranchesCount?: number
   height?: number
   isHighlighted?: boolean
-  multiModelMode?: boolean
   nodeId?: string
   parentMessageId?: string
+  branchGroupId?: string
   inheritedMessages?: Message[]
   onDeleteBranch?: (nodeId: string) => void
 }
@@ -175,12 +175,13 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
         height: data.isMinimized ? '200px' : 'auto',
         minHeight: data.isMinimized ? '200px' : '400px',
         maxHeight: data.isMinimized ? '200px' : '850px',
-        overflow: 'hidden',
+        overflow: 'visible',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
       }}
       data-minimized={data.isMinimized ? 'true' : undefined}
       data-active={data.isActive ? 'true' : undefined}
+      data-grouped={data.branchGroupId ? 'true' : undefined}
     >
       <Handle 
         type="target" 
@@ -411,7 +412,6 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
             selectedAIs={data.selectedAIs}
             onBranchFromMessage={handleBranch}
             currentBranch={null}
-            multiModelMode={data.multiModelMode || false}
             isGenerating={data.isGenerating}
             onStopGeneration={() => {
               // Call the stop handler if available

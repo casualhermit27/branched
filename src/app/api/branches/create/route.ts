@@ -52,7 +52,6 @@ export async function POST(req: NextRequest) {
       inheritedMessages: [],
       branchMessages: [],
       selectedAIs: aiModel ? [{ id: aiModel, name: aiModel, color: '', functional: true }] : [],
-      multiModelMode: branchType === 'multi',
       isMinimized: false,
       isActive: false,
       isGenerating: false,
