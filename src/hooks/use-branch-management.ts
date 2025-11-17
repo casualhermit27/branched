@@ -113,7 +113,7 @@ export function useBranchManagement({
 		},
 		[nodesRef]
 	)
-
+  
 	/**
 	 * Create branch node using ContextManager
 	 */
@@ -131,9 +131,32 @@ export function useBranchManagement({
 			const branchId = generateBranchId()
 
 			// 1. Get all parent messages FIRST to ensure we have the full context
-			const parentMessages = parentNodeId === 'main'
+			let parentMessages = parentNodeId === 'main'
 				? mainMessages
 				: contextManager.getContextForDisplay(parentNodeId)
+			
+			// If branching from a branch node, also check the node's own messages
+			// This ensures we get ALL messages (inherited + branch messages) from the parent branch
+			if (parentNodeId !== 'main') {
+				const parentNode = nodesRef.current.find((n) => n.id === parentNodeId)
+				if (parentNode?.data?.messages) {
+					// Merge node messages with context messages, avoiding duplicates
+					const nodeMessageIds = new Set(parentMessages.map(m => m.id))
+					const additionalMessages = parentNode.data.messages.filter(
+						m => !nodeMessageIds.has(m.id)
+					)
+					// Combine: inherited messages first, then branch messages
+					// This maintains the correct order (inherited messages come before branch messages)
+					parentMessages = [...parentMessages, ...additionalMessages]
+					
+					// Also ensure all node messages are in messageStore
+					parentNode.data.messages.forEach((msg) => {
+						if (msg && msg.id) {
+							messageStore.set(msg)
+						}
+					})
+				}
+			}
 			
 			// 2. Store ALL parent messages in messageStore FIRST before creating snapshot
 			// This ensures ContextManager can find them when resolving inheritedMessageIds
@@ -151,36 +174,41 @@ export function useBranchManagement({
 				messageStore.set(aiResponse)
 			}
 			
-			// 4. Build inherited message IDs: all messages up to and including user message
+			// 4. Build inherited message IDs: all messages up to and including branch point
+			// When branching from a branch, we want to inherit ALL parent messages (inherited + branch) up to the branch point
 			let inheritedMessageIds: string[] = []
+			
+			console.log('🔍 Building inheritedMessageIds for branch:', {
+				parentNodeId,
+				parentMessagesCount: parentMessages.length,
+				parentMessageIds: parentMessages.map(m => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 30) })),
+				hasUserMessage: !!userMessage,
+				userMessageId: userMessage?.id,
+				hasAiResponse: !!aiResponse,
+				branchPointMessageId
+			})
+			
 			if (userMessage) {
-				// Find user message index in parent messages
 				const userIndex = parentMessages.findIndex((m) => m.id === userMessage.id)
 				if (userIndex >= 0) {
-					// Get all messages up to and including user message
 					inheritedMessageIds = parentMessages.slice(0, userIndex + 1).map((m) => m.id)
-					
-					// CRITICAL: If we have an AI response, include it in inherited messages
-					// This ensures the AI response appears in the branch
+
 					if (aiResponse) {
-						// Check if AI response is already in parent messages after user message
 						const aiResponseIndex = parentMessages.findIndex((m) => m.id === aiResponse.id)
 						if (aiResponseIndex > userIndex) {
-							// AI response is after user message, include it
 							inheritedMessageIds.push(aiResponse.id)
 						} else if (aiResponseIndex === -1) {
-							// AI response not found in parent messages, add it
 							inheritedMessageIds.push(aiResponse.id)
 						}
-						// If aiResponseIndex >= 0 and <= userIndex, it's already included in the slice
 					}
+
+					console.log('✅ Found user message at index', userIndex, '- inherited', inheritedMessageIds.length, 'messages')
 				} else {
-					// User message not in parent, add it
 					inheritedMessageIds = [...parentMessages.map((m) => m.id), userMessage.id]
-					// Also add AI response if provided
 					if (aiResponse) {
 						inheritedMessageIds.push(aiResponse.id)
 					}
+					console.log('⚠️ User message not in parent messages - including all parent messages + user message')
 				}
 			} else {
 				// Branching from AI message - get all messages up to and including the AI response
@@ -188,15 +216,27 @@ export function useBranchManagement({
 				const aiIndex = parentMessages.findIndex((m) => m.id === branchPointMessageId)
 				if (aiIndex >= 0) {
 					// Include all messages up to and including the AI response
+					// This ensures the new branch inherits ALL context from parent branch (inherited + branch messages)
 					inheritedMessageIds = parentMessages.slice(0, aiIndex + 1).map((m) => m.id)
+					console.log('✅ Found AI message at index', aiIndex, '- inherited', inheritedMessageIds.length, 'messages (all parent context up to branch point)')
 				} else {
 					// AI response not found in parent, include all parent messages + AI response
 					inheritedMessageIds = [...parentMessages.map((m) => m.id)]
 					if (aiResponse) {
 						inheritedMessageIds.push(aiResponse.id)
 					}
+					console.log('⚠️ AI message not in parent messages - including all parent messages + AI response')
 				}
 			}
+			
+			console.log('📦 Final inheritedMessageIds:', {
+				count: inheritedMessageIds.length,
+				ids: inheritedMessageIds,
+				messageTexts: inheritedMessageIds.map(id => {
+					const msg = messageStore.get(id) || parentMessages.find(m => m.id === id)
+					return msg ? { id, isUser: msg.isUser, text: msg.text?.substring(0, 30) } : { id, found: false }
+				})
+			})
 			
 			// 4. Create context snapshot with proper inherited messages
 			const snapshot = {
@@ -268,14 +308,14 @@ export function useBranchManagement({
 			onDeleteBranch
 		]
 	)
-
+  
 	/**
 	 * Main branch creation handler - simplified using ContextManager
 	 */
 	handleBranchRef.current = useCallback(
 		(parentNodeId: string, messageId?: string, isMultiBranch: boolean = false) => {
 			if (!messageId) return
-
+    
 			// Check if branch already exists FIRST (before lock)
 			const existingBranch = nodesRef.current.find(
 				(node) =>
@@ -292,7 +332,7 @@ export function useBranchManagement({
 						: contextManager
 								.getContextForDisplay(parentNodeId)
 								.find((m) => m.id === messageId)
-
+      
       if (onBranchWarning) {
         onBranchWarning({
           messageId,
@@ -302,16 +342,16 @@ export function useBranchManagement({
         })
 				} else if (onNodeDoubleClick) {
           onNodeDoubleClick(existingBranch.id)
-      }
+        }
       return
-    }
+      }
     
 			// Lock check - prevent duplicate branch creation (after checking if exists)
 			// Check if this specific messageId is already locked (prevents rapid double-clicks)
 			if (branchCreationLockRef.current.has(messageId)) {
 				console.log('⚠️ Branch creation already in progress for message:', messageId)
-				return
-			}
+      return
+    }
     
 			// Set lock for messageId to prevent rapid double-clicks
 			// This will be checked in the forEach loop for AI responses
@@ -328,10 +368,31 @@ export function useBranchManagement({
     }
     
 			// Get parent messages
-			const parentMessages =
+			let parentMessages =
 				parentNodeId === 'main'
 					? mainMessages
 					: contextManager.getContextForDisplay(parentNodeId)
+
+			// If branching from a branch node, also check the node's own messages
+			// This ensures we can find messages that were just created in the branch
+			if (parentNodeId !== 'main') {
+				const parentNode = nodesRef.current.find((n) => n.id === parentNodeId)
+				if (parentNode?.data?.messages) {
+					// Merge node messages with context messages, avoiding duplicates
+					const nodeMessageIds = new Set(parentMessages.map(m => m.id))
+					const additionalMessages = parentNode.data.messages.filter(
+						m => !nodeMessageIds.has(m.id)
+					)
+					parentMessages = [...parentMessages, ...additionalMessages]
+					
+					// Also ensure all node messages are in messageStore
+					parentNode.data.messages.forEach((msg) => {
+						if (msg && msg.id) {
+							messageStore.set(msg)
+						}
+					})
+				}
+			}
 
 			console.log('🔍 Looking for message in parent messages:', {
 				messageId,
@@ -340,17 +401,29 @@ export function useBranchManagement({
 				parentMessageIds: parentMessages.map(m => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 30) })),
 				mainMessagesCount: mainMessages.length,
 				mainMessageIds: parentNodeId === 'main' ? mainMessages.map(m => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 30) })) : []
-			})
-
+    })
+    
 			// Find target message
-			const targetMessage = parentMessages.find((m) => m.id === messageId)
+			let targetMessage = parentMessages.find((m) => m.id === messageId)
+			
+			// If still not found, try messageStore directly
+			if (!targetMessage) {
+				targetMessage = messageStore.get(messageId)
+				if (targetMessage) {
+					console.log('✅ Found message in messageStore, adding to parentMessages')
+					parentMessages.push(targetMessage)
+				}
+			}
+			
 			if (!targetMessage) {
 				console.error('❌ Target message not found for branching:', {
 					messageId,
       parentNodeId,
 					parentMessagesCount: parentMessages.length,
 					parentMessageIds: parentMessages.map(m => m.id),
-					mainMessagesCount: mainMessages.length
+					mainMessagesCount: mainMessages.length,
+					messageStoreHasMessage: messageStore.has(messageId),
+					nodeMessages: parentNodeId !== 'main' ? nodesRef.current.find(n => n.id === parentNodeId)?.data?.messages?.map(m => m.id) : []
 				})
 				branchCreationLockRef.current.delete(messageId)
         return
@@ -452,13 +525,13 @@ export function useBranchManagement({
 				targetMessageIsUser: targetMessage.isUser,
 				isMultiBranch
 			})
-
+      
 			if (aiResponses.length === 0) {
 				console.error('❌ No AI responses found for branching')
 				branchCreationLockRef.current.delete(messageId)
-      return
-    }
-    
+        return
+      }
+      
 			// Create branch nodes
     const newNodes: Node[] = []
     const newEdges: Edge[] = []
@@ -487,15 +560,15 @@ export function useBranchManagement({
 				// Prevent double-create if branch exists
 				if (branchExists) {
 					console.warn('⚠️ Skipping branch creation - branch already exists')
-					return
-				}
+        return
+      }
 				
 				// Prevent double-create if locked (this handles both same-message and different-message cases)
 				if (isLocked) {
 					console.warn('⚠️ Skipping branch creation - locked to prevent duplicates')
-					return
-				}
-
+      return
+    }
+    
 				// Lock this AI response to prevent duplicates
 				// Use aiResponse.id as the lock key (not messageId) to prevent duplicate branches for the same AI response
 				branchCreationLockRef.current.set(aiResponse.id, true)
@@ -522,8 +595,8 @@ export function useBranchManagement({
         console.error('❌ Invalid branch node created - missing id')
         branchCreationLockRef.current.delete(aiResponse.id)
         return
-      }
-      
+    }
+    
       // Ensure parentId is correct (should never be the branch's own ID)
       if (branchNode.data?.parentId === branchNode.id) {
         console.error('❌ Invalid branch node - parentId equals branch id:', branchNode.id)
@@ -551,17 +624,18 @@ export function useBranchManagement({
       
       newNodes.push(branchNode)
       
-				// Create edge with curved bezier connector
+				// Create edge with dotted connector - color adapts to branch depth
 				const newEdge = createEdge(
 					parentNodeId,
 					branchNode.id,
 					{
         animated: false,
-						type: 'smoothstep',
+						type: 'bezier',
+						nodes: nodesRef.current, // Pass nodes for level calculation
 						style: {
-							stroke: parentNodeId === 'main' ? '#8b5cf6' : '#cbd5e1',
 							strokeWidth: 2,
 							strokeDasharray: '6 4'
+							// stroke color will be calculated based on level
 						}
 					}
 				)
@@ -581,7 +655,7 @@ export function useBranchManagement({
     })
     
 			// Update state
-			try {
+    try {
 				const currentNodes = nodesRef.current
         const currentEdges = edgesRef.current
         
@@ -601,7 +675,7 @@ export function useBranchManagement({
 						
 						setNodes(validatedNodes)
             setEdges(allEdges)
-
+        
 						// Update parent
         if (onNodesUpdate) {
 							onNodesUpdate(validatedNodes)

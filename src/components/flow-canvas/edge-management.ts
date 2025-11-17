@@ -10,6 +10,59 @@ export interface EdgeStyle {
 }
 
 /**
+ * Color palette for different branch levels
+ * Each level gets a subtly different color
+ */
+const LEVEL_COLORS = [
+	'#8b5cf6', // Level 0 (main -> first level): Purple
+	'#06b6d4', // Level 1 (first -> second level): Cyan
+	'#10b981', // Level 2 (second -> third level): Emerald
+	'#f59e0b', // Level 3 (third -> fourth level): Amber
+	'#ef4444', // Level 4 (fourth -> fifth level): Red
+	'#ec4899', // Level 5 (fifth -> sixth level): Pink
+	'#6366f1', // Level 6 (sixth -> seventh level): Indigo
+	'#14b8a6', // Level 7 (seventh -> eighth level): Teal
+]
+
+/**
+ * Calculate branch level (depth from main node)
+ */
+export function calculateBranchLevel(
+	parentNodeId: string,
+	nodes: Array<{ id: string; data?: { parentId?: string; isMain?: boolean } }>
+): number {
+	if (parentNodeId === 'main') {
+		return 0 // Main node is level 0
+	}
+
+	// Find parent node
+	const parentNode = nodes.find((n) => n.id === parentNodeId)
+	if (!parentNode) {
+		return 0 // Fallback to level 0 if parent not found
+	}
+
+	// If parent is main, this is level 1
+	if (parentNode.data?.isMain || parentNode.id === 'main') {
+		return 1
+	}
+
+	// Recursively calculate parent's level + 1
+	const parentLevel = calculateBranchLevel(
+		parentNode.data?.parentId || 'main',
+		nodes
+	)
+	return parentLevel + 1
+}
+
+/**
+ * Get color for branch level
+ */
+export function getColorForLevel(level: number): string {
+	// Use modulo to cycle through colors if level exceeds palette
+	return LEVEL_COLORS[level % LEVEL_COLORS.length]
+}
+
+/**
  * Create an edge between two nodes with dotted connector
  */
 export function createEdge(
@@ -19,9 +72,22 @@ export function createEdge(
 		animated?: boolean
 		type?: string
 		style?: React.CSSProperties
+		level?: number // Branch level for color calculation
+		nodes?: Array<{ id: string; data?: { parentId?: string; isMain?: boolean } }> // Nodes for level calculation
 	} = {}
 ): Edge {
-	const { animated = false, type = 'smoothstep', style = {} } = options
+	const { animated = false, type = 'bezier', style = {}, level, nodes } = options
+
+	// Calculate level if not provided
+	let edgeLevel = level
+	if (edgeLevel === undefined && nodes) {
+		edgeLevel = calculateBranchLevel(sourceId, nodes)
+	}
+
+	// Get color based on level (default to gray if level can't be determined)
+	const strokeColor = edgeLevel !== undefined 
+		? getColorForLevel(edgeLevel)
+		: (style.stroke as string) || '#cbd5e1'
 
 	return {
 		id: `edge-${sourceId}-${targetId}-${Date.now()}`,
@@ -30,7 +96,7 @@ export function createEdge(
 		type,
 		animated,
 		style: {
-			stroke: '#cbd5e1',
+			stroke: strokeColor,
 			strokeWidth: 2,
 			strokeDasharray: '6 4', // Dotted line
 			...style
@@ -39,7 +105,7 @@ export function createEdge(
 			type: MarkerType.ArrowClosed,
 			width: 20,
 			height: 20,
-			color: '#cbd5e1'
+			color: strokeColor
 		}
 	}
 }
@@ -87,7 +153,7 @@ export function createContextLinkEdge(
 ): Edge {
 	return createEdge(source, target, {
 		animated: false,
-		type: 'smoothstep',
+		type: 'bezier',
 		style: {
 			stroke: '#f59e0b', // amber-500
 			strokeWidth: 2.5,
@@ -107,7 +173,7 @@ export function createBranchEdges(
 	return branchIds.map((branchId) =>
 		createEdge(parentId, branchId, {
 			animated,
-			type: 'smoothstep'
+			type: 'bezier'
 		})
 	)
 }

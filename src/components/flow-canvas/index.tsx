@@ -116,7 +116,6 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			const abortController = new AbortController()
 			setAbortController(nodeId, abortController)
 
-			// Helper to resolve "best" model
 			const resolveModel = (aiId: string): string => {
 				if (aiId === 'best' && getBestAvailableModel) {
 					return getBestAvailableModel()
@@ -124,106 +123,47 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 				return aiId
 			}
 
-			try {
-				if (branchAIs.length > 1) {
-					// Generate unique group ID for multi-AI responses
-					const groupId = `group-${Date.now()}`
-					
-					for (const ai of branchAIs) {
-						const modelName = resolveModel(ai.id)
-						
-						// Create streaming message placeholder
-						const streamingMessageId = `msg-${Date.now()}-${ai.id}`
-						const streamingMessage: Message = {
-							id: streamingMessageId,
-							text: '',
-							isUser: false,
-							ai: ai.id,
-							aiModel: ai.id,
-							timestamp: Date.now(),
-							children: [],
-							nodeId,
-							groupId,
-							isStreaming: true,
-							streamingText: ''
-						}
-						
-						// Add streaming message immediately
-						setNodes((prev) =>
-							prev.map((n) => {
-								if (n.id === nodeId) {
-									return {
-										...n,
-										data: {
-											...n.data,
-											messages: [...(n.data.messages || []), streamingMessage]
-										}
-									}
-								}
-								return n
-							})
-						)
-						
-						// Generate response with streaming callback
-						const response = await aiService.generateResponse(
-							modelName,
-							message,
-							{ messages: contextMessages, currentBranch: nodeId, memoryContext: '' },
-							(chunk: string) => {
-								// Update streaming text
-								setNodes((prev) =>
-									prev.map((n) => {
-										if (n.id === nodeId) {
-											return {
-												...n,
-												data: {
-													...n.data,
-													messages: (n.data.messages || []).map((msg: Message) =>
-														msg.id === streamingMessageId
-															? { ...msg, streamingText: (msg.streamingText || '') + chunk }
-															: msg
-													)
-												}
-											}
-										}
-										return n
-									})
-								)
-							},
-							abortController.signal
-						)
+			const userMessage: Message = {
+				id: `msg-${Date.now()}-user`,
+				text: message,
+				isUser: true,
+				timestamp: Date.now(),
+				children: [],
+				nodeId
+			}
 
-						// Finalize streaming message
-						setNodes((prev) =>
-							prev.map((n) => {
-								if (n.id === nodeId) {
-									return {
-										...n,
-										data: {
-											...n.data,
-											messages: (n.data.messages || []).map((msg: Message) =>
-												msg.id === streamingMessageId
-													? {
-															...msg,
-															text: response.text,
-															isStreaming: false,
-															streamingText: undefined
-														}
-													: msg
-											)
-										}
-									}
-								}
-								return n
-							})
-						)
+			setNodes((prev) =>
+				prev.map((n) => {
+					if (n.id === nodeId) {
+						return {
+							...n,
+							data: {
+								...n.data,
+								messages: [...(n.data.messages || []), userMessage]
+							}
+						}
 					}
-				} else {
-					const ai = branchAIs[0] || selectedAIs[0]
+					return n
+				})
+			)
+
+			messageStore.set(userMessage)
+			if (nodeId !== 'main') {
+				branchStore.addMessage(nodeId, userMessage.id)
+			}
+
+			try {
+				const effectiveAIs = branchAIs.length > 0 ? branchAIs : selectedAIs
+				if (effectiveAIs.length === 0) {
+					throw new Error('No AI models selected for this branch')
+				}
+
+				const groupId = effectiveAIs.length > 1 ? `group-${Date.now()}` : undefined
+				const responseContext = [...contextMessages, userMessage]
+
+				for (const ai of effectiveAIs) {
 					const modelName = resolveModel(ai.id)
-					
-					// Create streaming message placeholder
-					const streamingMessageId = `msg-${Date.now()}`
+					const streamingMessageId = `msg-${Date.now()}-${ai.id}`
 					const streamingMessage: Message = {
 						id: streamingMessageId,
 						text: '',
@@ -233,11 +173,11 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 						timestamp: Date.now(),
 						children: [],
 						nodeId,
+						groupId,
 						isStreaming: true,
 						streamingText: ''
 					}
-					
-					// Add streaming message immediately
+
 					setNodes((prev) =>
 						prev.map((n) => {
 							if (n.id === nodeId) {
@@ -252,14 +192,12 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 							return n
 						})
 					)
-					
-					// Generate response with streaming callback
+
 					const response = await aiService.generateResponse(
 						modelName,
 						message,
-						{ messages: contextMessages, currentBranch: nodeId, memoryContext: '' },
+						{ messages: responseContext, currentBranch: nodeId, memoryContext: '' },
 						(chunk: string) => {
-							// Update streaming text
 							setNodes((prev) =>
 								prev.map((n) => {
 									if (n.id === nodeId) {
@@ -282,7 +220,13 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 						abortController.signal
 					)
 
-					// Finalize streaming message
+					const finalizedMessage: Message = {
+						...streamingMessage,
+						text: response.text,
+						isStreaming: false,
+						streamingText: undefined
+					}
+
 					setNodes((prev) =>
 						prev.map((n) => {
 							if (n.id === nodeId) {
@@ -291,14 +235,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 									data: {
 										...n.data,
 										messages: (n.data.messages || []).map((msg: Message) =>
-											msg.id === streamingMessageId
-												? {
-														...msg,
-														text: response.text,
-														isStreaming: false,
-														streamingText: undefined
-													}
-												: msg
+											msg.id === streamingMessageId ? finalizedMessage : msg
 										)
 									}
 								}
@@ -306,6 +243,11 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 							return n
 						})
 					)
+
+					messageStore.set(finalizedMessage)
+					if (nodeId !== 'main') {
+						branchStore.addMessage(nodeId, finalizedMessage.id)
+					}
 				}
 			} catch (error) {
 				if (error instanceof Error && error.name === 'AbortError') {
@@ -583,11 +525,12 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 						node.id,
 						{
 							animated: false,
-							type: 'smoothstep',
+							type: 'bezier',
+							nodes: restored, // Pass nodes for level calculation
 							style: {
-								stroke: parentId === 'main' ? '#8b5cf6' : '#cbd5e1',
 								strokeWidth: 2,
 								strokeDasharray: '6 4'
+								// stroke color will be calculated based on level
 							}
 						}
 					)
