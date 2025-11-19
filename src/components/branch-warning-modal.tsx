@@ -11,16 +11,20 @@ interface BranchWarningModalProps {
   messageText?: string
   existingBranchesCount?: number
   isMultiBranch?: boolean
+	limitReached?: boolean
+	maxBranches?: number
 }
 
 export function BranchWarningModal({
-  isOpen,
-  onClose,
-  onConfirm,
-  onCancel,
-  messageText,
-  existingBranchesCount = 0,
-  isMultiBranch = false
+	isOpen,
+	onClose,
+	onConfirm,
+	onCancel,
+	messageText,
+	existingBranchesCount = 0,
+	isMultiBranch = false,
+	limitReached = false,
+	maxBranches = 6
 }: BranchWarningModalProps) {
   if (!isOpen) return null
 
@@ -59,21 +63,25 @@ export function BranchWarningModal({
 
           {/* Content */}
           <div className="text-center space-y-4">
-            <h3 className="text-xl font-semibold text-foreground">
-              Branch Already Exists
-            </h3>
-            
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              {isMultiBranch ? (
-                <>
-                  A branch already exists for this message. Creating {existingBranchesCount} more branches will add to your conversation tree.
-                </>
-              ) : (
-                <>
-                  A branch already exists for this message. This is a duplicate branch. Do you want to create another branch from this point?
-                </>
-              )}
-            </p>
+						<h3 className="text-xl font-semibold text-foreground">
+							{limitReached ? 'Branch Limit Reached' : 'Branch Already Exists'}
+						</h3>
+						
+						<p className="text-sm text-muted-foreground leading-relaxed">
+							{limitReached ? (
+								<>
+									You already have {existingBranchesCount} branches from this message. You can keep at most {maxBranches}. Delete or merge an existing branch to create another.
+								</>
+							) : isMultiBranch ? (
+								<>
+									A branch already exists for this message. Creating {existingBranchesCount + 1} more branches will add to your conversation tree.
+								</>
+							) : (
+								<>
+									A branch already exists for this message. This is a duplicate branch. Do you want to create another branch from this point? (limit {maxBranches})
+								</>
+							)}
+						</p>
 
             {messageText && (
               <div className="p-3 bg-muted rounded-lg border border-border">
@@ -85,20 +93,22 @@ export function BranchWarningModal({
             )}
 
             {/* Actions */}
-            <div className="flex gap-3 pt-4">
-              <button
-                onClick={onCancel}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-muted hover:bg-accent text-foreground font-medium transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={onConfirm}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
-              >
-                Create {isMultiBranch ? 'Branches' : 'Branch'}
-              </button>
-            </div>
+						<div className="flex gap-3 pt-4">
+							<button
+								onClick={onCancel}
+								className="flex-1 px-4 py-2.5 rounded-lg bg-muted hover:bg-accent text-foreground font-medium transition-colors"
+							>
+								{limitReached ? 'Close' : 'Cancel'}
+							</button>
+							{!limitReached && (
+								<button
+									onClick={onConfirm}
+									className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
+								>
+									Create {isMultiBranch ? 'Branches' : 'Branch'}
+								</button>
+							)}
+						</div>
           </div>
         </motion.div>
       </div>

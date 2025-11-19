@@ -127,6 +127,48 @@ export function getViewportState(
 }
 
 /**
+ * Focus on a newly created branch with smooth zoom-in animation
+ * Centers the branch and zooms in slightly for better focus
+ */
+export function focusOnBranchWithZoom(
+	reactFlowInstance: ReactFlowInstance | null,
+	nodeId: string,
+	nodes: Node[],
+	padding: number = 0.25,
+	zoomMultiplier: number = 1.15 // Slight zoom-in (15% more zoomed than fit)
+): void {
+	if (!reactFlowInstance) return
+
+	const targetNode = nodes.find((n) => n.id === nodeId)
+	if (!targetNode) return
+
+	// Calculate viewport to fit the branch
+	const viewport = calculateViewportFit(nodes, [nodeId], padding)
+	
+	// Apply zoom multiplier for slight zoom-in effect
+	// Cap at reasonable max zoom (1.5x) to avoid zooming too much
+	const targetZoom = Math.min(viewport.zoom * zoomMultiplier, 1.5)
+	
+	// Smooth ease-out easing for natural animation
+	const easing = (t: number) => {
+		// ease-out-cubic: smooth deceleration
+		return 1 - Math.pow(1 - t, 3)
+	}
+	
+	reactFlowInstance.setViewport(
+		{
+			x: viewport.x,
+			y: viewport.y,
+			zoom: targetZoom
+		},
+		{
+			duration: 600, // Smooth 600ms animation
+			easing
+		}
+	)
+}
+
+/**
  * Highlight path from root to target node
  */
 export function highlightPath(

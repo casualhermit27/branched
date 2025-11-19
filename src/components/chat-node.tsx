@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Handle, Position } from 'reactflow'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Minus, ArrowsOut, GitBranch, Trash, DotsThreeVertical } from '@phosphor-icons/react'
+import { Minus, ArrowsOut, GitBranch, Trash, DotsThreeVertical, Link, ArrowsClockwise } from '@phosphor-icons/react'
 import ChatInterface from './chat-interface'
 import AIPills from './ai-pills'
 import { DeleteConfirmModal } from './delete-confirm-modal'
@@ -257,6 +257,41 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
                         </>
                       )}
                     </button>
+                  )}
+
+                  {/* Link Branch Option - Only for branch nodes */}
+                  {!data.isMain && data.onLinkBranch && (
+                    <>
+                      <div className="h-px bg-border/50 my-1" />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          data.onLinkBranch?.(id)
+                          setShowMenu(false)
+                        }}
+                        className="w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-muted/60 transition-colors duration-150 flex items-center gap-3"
+                      >
+                        <Link className="w-4 h-4 flex-shrink-0" weight="regular" />
+                        <span>Link Branch</span>
+                      </button>
+                    </>
+                  )}
+
+                  {/* Compare Branch Option - Only for branch nodes */}
+                  {!data.isMain && data.onCompareBranch && (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          data.onCompareBranch?.(id)
+                          setShowMenu(false)
+                        }}
+                        className="w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-muted/60 transition-colors duration-150 flex items-center gap-3"
+                      >
+                        <ArrowsClockwise className="w-4 h-4 flex-shrink-0" weight="regular" />
+                        <span>Compare Branch</span>
+                      </button>
+                    </>
                   )}
 
                   {/* Delete Option - Only for branch nodes */}

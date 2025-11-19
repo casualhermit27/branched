@@ -2325,15 +2325,17 @@ export default function Home() {
     messageId: string
     isMultiBranch: boolean
     messageText?: string
+    parentNodeId?: string
+    allowDuplicate?: boolean
+    existingBranchesCount?: number
+    limitReached?: boolean
   } | null>(null)
+  const MAX_DUPLICATE_BRANCHES = 6
 
-  // Check if branch exists for a message
-  const checkBranchExists = (messageId: string): boolean => {
-    // Check in conversationNodes if any branch has this messageId as parentMessageId
-    return conversationNodes.some(node => 
+  const getBranchCountForMessage = (messageId: string): number =>
+    conversationNodes.filter(node => 
       node.parentMessageId === messageId && node.id !== 'main' && !node.isMain
-    )
-  }
+    ).length
 
   const branchFromMessage = (messageId: string, isMultiBranch: boolean = false) => {
     console.log('📍 branchFromMessage called with:', { messageId, isMultiBranch })
@@ -2357,18 +2359,29 @@ export default function Home() {
     const targetMessage = messages.find(m => m.id === messageId) || 
                          conversationNodes.flatMap(n => n.messages || []).find(m => m.id === messageId)
     
-    // Check if branch already exists
-    const branchExists = checkBranchExists(messageId)
+    const existingBranchCount = getBranchCountForMessage(messageId)
     
-    if (branchExists && !isMultiBranch) {
-      // Show warning modal for single branch
-      setPendingBranchData({
-        messageId,
-        isMultiBranch: false,
-        messageText: targetMessage?.text?.substring(0, 100)
-      })
-      setShowBranchWarning(true)
-      return
+    if (!isMultiBranch) {
+      if (existingBranchCount >= MAX_DUPLICATE_BRANCHES) {
+        addToast({
+          type: 'warning',
+          title: 'Branch limit reached',
+          message: `You can create up to ${MAX_DUPLICATE_BRANCHES} branches from the same message. Delete or merge one to continue.`
+        })
+        return
+      }
+      
+      if (existingBranchCount > 0) {
+        setPendingBranchData({
+          messageId,
+          isMultiBranch: false,
+          messageText: targetMessage?.text?.substring(0, 100),
+          parentNodeId: 'main',
+          existingBranchesCount: existingBranchCount
+        })
+        setShowBranchWarning(true)
+        return
+      }
     }
     
     // When in chat mode, switch to canvas mode first
@@ -2379,7 +2392,8 @@ export default function Home() {
     setPendingBranchData({
       messageId,
       isMultiBranch,
-      messageText: targetMessage?.text?.substring(0, 100)
+      messageText: targetMessage?.text?.substring(0, 100),
+      parentNodeId: 'main'
     })
     
     if (!hasBranches) {
@@ -2398,8 +2412,8 @@ export default function Home() {
     if (pendingBranchData) {
       setShowBranchWarning(false)
       const { messageId } = pendingBranchData
+      setPendingBranchData(prev => prev ? { ...prev, allowDuplicate: true } : prev)
       
-      // When in chat mode, switch to canvas mode first
       if (branches.length === 0) {
         setTimeout(() => {
           setPendingBranchMessageId(messageId)
@@ -2407,8 +2421,6 @@ export default function Home() {
       } else {
         setPendingBranchMessageId(messageId)
       }
-      
-      setPendingBranchData(null)
     }
   }
 
@@ -2419,11 +2431,14 @@ export default function Home() {
   }
 
   // Handle branch warning from FlowCanvas
-  const handleBranchWarning = useCallback((data: { messageId: string; messageText?: string; existingBranchId: string; isMultiBranch: boolean }) => {
+  const handleBranchWarning = useCallback((data: { messageId: string; messageText?: string; existingBranchId?: string; isMultiBranch: boolean; existingBranchesCount?: number; parentNodeId: string; limitReached?: boolean }) => {
     setPendingBranchData({
       messageId: data.messageId,
       isMultiBranch: data.isMultiBranch,
-      messageText: data.messageText
+      messageText: data.messageText,
+      parentNodeId: data.parentNodeId,
+      existingBranchesCount: data.existingBranchesCount,
+      limitReached: data.limitReached
     })
     setShowBranchWarning(true)
   }, [])
@@ -2575,8 +2590,10 @@ export default function Home() {
         onConfirm={handleBranchWarningConfirm}
         onCancel={handleBranchWarningCancel}
         messageText={pendingBranchData?.messageText}
-        existingBranchesCount={conversationNodes.filter(n => n.parentMessageId === pendingBranchData?.messageId).length}
+        existingBranchesCount={pendingBranchData?.existingBranchesCount}
         isMultiBranch={pendingBranchData?.isMultiBranch || false}
+        limitReached={pendingBranchData?.limitReached}
+        maxBranches={MAX_DUPLICATE_BRANCHES}
       />
       
       {/* Sidebar */}
@@ -2703,6 +2720,7 @@ export default function Home() {
             onBranchWarning={handleBranchWarning}
             onMinimizeAllRef={(fn) => { minimizeAllRef.current = fn }}
             onAllNodesMinimizedChange={(minimized) => setAllNodesMinimized(minimized)}
+            conversationId={currentConversationIdRef.current}
           />
         )
       )}
