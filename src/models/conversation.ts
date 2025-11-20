@@ -109,6 +109,15 @@ export interface IBranch {
   upvotes?: number // User feedback
   downvotes?: number
   contextLinks?: string[] // Links to other branches for context sharing
+  linkedBranches?: {
+    incoming: string[] // Branch IDs that link TO this branch
+    outgoing: string[] // Branch IDs this branch links TO
+  }
+  contextIntegrity?: {
+    lastChecked: number
+    issues: string[]
+    score: number // 0-100
+  }
 }
 
 const BranchSchema = new Schema<IBranch>({
@@ -137,7 +146,16 @@ const BranchSchema = new Schema<IBranch>({
   isPromoted: { type: Boolean, default: false },
   upvotes: { type: Number, default: 0 },
   downvotes: { type: Number, default: 0 },
-  contextLinks: { type: [String], default: [] }
+  contextLinks: { type: [String], default: [] },
+  linkedBranches: {
+    incoming: { type: [String], default: [] },
+    outgoing: { type: [String], default: [] }
+  },
+  contextIntegrity: {
+    lastChecked: { type: Number },
+    issues: { type: [String], default: [] },
+    score: { type: Number, min: 0, max: 100 }
+  }
 })
 
 // Main Conversation Schema - Refactored structure

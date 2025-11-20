@@ -14,6 +14,8 @@ import {
 } from '@/components/flow-canvas/layout-engine'
 import { createEdge } from '@/components/flow-canvas/edge-management'
 
+const MAX_DUPLICATE_BRANCHES = 6
+
 interface UseBranchManagementParams {
   nodesRef: React.MutableRefObject<Node[]>
   edgesRef: React.MutableRefObject<Edge[]>
@@ -25,8 +27,11 @@ interface UseBranchManagementParams {
 	onBranchWarning?: (data: {
 		messageId: string
 		messageText?: string
-		existingBranchId: string
+		existingBranchId?: string
 		isMultiBranch: boolean
+		existingBranchesCount?: number
+		parentNodeId: string
+		limitReached?: boolean
 	}) => void
   onNodeDoubleClick?: (nodeId: string) => void
   handleBranchAddAI: (nodeId: string, ai: AI) => void
@@ -38,7 +43,7 @@ interface UseBranchManagementParams {
 		nodes: any[]
 		edges: Edge[]
 	}
-  fitViewportToNodes: (nodeIds: string[], padding?: number) => void
+  fitViewportToNodes: (nodeIds: string[], padding?: number, useZoomAnimation?: boolean) => void
 	handleSendMessageRef: React.MutableRefObject<
 		((nodeId: string, message: string) => Promise<void>) | undefined
 	>
@@ -86,7 +91,12 @@ export function useBranchManagement({
 	const branchCreationLockRef = useRef<Map<string, boolean>>(new Map())
 	const branchIdCounterRef = useRef<number>(0)
 	const handleBranchRef = useRef<
-		(parentNodeId: string, messageId?: string, isMultiBranch?: boolean) => void
+		(
+			parentNodeId: string,
+			messageId?: string,
+			isMultiBranch?: boolean,
+			options?: { allowDuplicate?: boolean }
+		) => void
 	>(() => {})
 
 	/**
@@ -245,7 +255,48 @@ export function useBranchManagement({
 				timestamp: Date.now()
 			}
 
-			// 6. Create branch context with proper snapshot
+			// 6. Determine which AI should be selected for this branch
+			// If branching from an AI response, use only the AI that generated that response
+			let branchSelectedAIs: AI[] = []
+			if (aiResponse) {
+				// Find the AI that matches the response's ai or aiModel
+				const responseAIId = aiResponse.ai || aiResponse.aiModel
+				const matchingAI = selectedAIs.find(ai => {
+					// Match by ID (exact match)
+					if (ai.id === responseAIId) return true
+					// Match by normalized ID (handle variations like 'mistral-large' -> 'mistral')
+					const normalizedAIId = ai.id.toLowerCase()
+					const normalizedResponseId = responseAIId?.toLowerCase() || ''
+					if (normalizedAIId === normalizedResponseId) return true
+					// Match by name (fallback)
+					if (ai.name && responseAIId && ai.name.toLowerCase().includes(responseAIId.toLowerCase())) return true
+					return false
+				})
+				
+				if (matchingAI) {
+					branchSelectedAIs = [matchingAI]
+					console.log('✅ Matched AI for branch:', { 
+						branchId, 
+						responseAIId, 
+						matchedAI: matchingAI.id,
+						selectedAIsCount: selectedAIs.length
+					})
+				} else {
+					// Fallback: use first AI or round-robin if no match found
+					branchSelectedAIs = [selectedAIs[0] || selectedAIs[branchIndex % selectedAIs.length]]
+					console.warn('⚠️ Could not match AI for branch, using fallback:', {
+						branchId,
+						responseAIId,
+						fallbackAI: branchSelectedAIs[0]?.id,
+						availableAIs: selectedAIs.map(ai => ({ id: ai.id, name: ai.name }))
+					})
+				}
+			} else {
+				// No AI response (shouldn't happen, but fallback)
+				branchSelectedAIs = [selectedAIs[0] || selectedAIs[branchIndex % selectedAIs.length]]
+			}
+
+			// 7. Create branch context with proper snapshot
 			// When branching from AI message, the AI response is in inheritedMessageIds, not branchMessageIds
 			// branchMessageIds should be empty initially (will be populated when user sends messages in branch)
 			const branchContext: BranchContext = {
@@ -254,19 +305,19 @@ export function useBranchManagement({
 				contextSnapshot: snapshot,
 				branchMessageIds: [], // Empty initially - messages created in this branch will be added here
 				metadata: {
-					selectedAIs: [selectedAIs[0] || selectedAIs[branchIndex % selectedAIs.length]]
+					selectedAIs: branchSelectedAIs
 				}
 			}
 
-			// 7. Store branch context
+			// 8. Store branch context
 			branchStore.set(branchContext)
 
-			// 8. Create React Flow node with lightweight snapshot
+			// 9. Create React Flow node with lightweight snapshot
 			// Use the branch point message ID (AI response) for parentMessageId
 			const branchNode = createBranchNode(
 				parentNodeId,
 				snapshot, // Pass lightweight snapshot
-				branchContext.metadata?.selectedAIs || selectedAIs,
+				branchSelectedAIs, // Use only the matched AI for this branch
 				branchPointMessageId, // Use AI response ID as parent message
 				branchIndex,
 				totalBranches,
@@ -313,38 +364,60 @@ export function useBranchManagement({
 	 * Main branch creation handler - simplified using ContextManager
 	 */
 	handleBranchRef.current = useCallback(
-		(parentNodeId: string, messageId?: string, isMultiBranch: boolean = false) => {
+		(
+			parentNodeId: string,
+			messageId?: string,
+			isMultiBranch: boolean = false,
+			options?: { allowDuplicate?: boolean }
+		) => {
 			if (!messageId) return
+			const allowDuplicate = options?.allowDuplicate ?? false
     
-			// Check if branch already exists FIRST (before lock)
-			const existingBranch = nodesRef.current.find(
+			const existingBranches = nodesRef.current.filter(
 				(node) =>
-      node.id !== 'main' && 
-      node.id !== parentNodeId &&
-      node.data?.parentId === parentNodeId &&
-      node.data?.parentMessageId === messageId
-    )
-    
-			if (existingBranch) {
-				const targetMessage =
-					parentNodeId === 'main'
-						? mainMessages.find((m) => m.id === messageId)
-						: contextManager
-								.getContextForDisplay(parentNodeId)
-								.find((m) => m.id === messageId)
-      
-      if (onBranchWarning) {
-        onBranchWarning({
-          messageId,
-          messageText: targetMessage?.text?.substring(0, 100),
-          existingBranchId: existingBranch.id,
-          isMultiBranch
-        })
-				} else if (onNodeDoubleClick) {
-          onNodeDoubleClick(existingBranch.id)
-        }
-      return
-      }
+					node.id !== 'main' &&
+					node.id !== parentNodeId &&
+					node.data?.parentId === parentNodeId &&
+					node.data?.parentMessageId === messageId
+			)
+			const existingCount = existingBranches.length
+
+			let targetMessage =
+				parentNodeId === 'main'
+					? mainMessages.find((m) => m.id === messageId)
+					: contextManager.getContextForDisplay(parentNodeId).find((m) => m.id === messageId)
+
+			if (!isMultiBranch) {
+				if (existingCount >= MAX_DUPLICATE_BRANCHES) {
+					onBranchWarning?.({
+						messageId,
+						messageText: targetMessage?.text?.substring(0, 100),
+						existingBranchId: existingBranches[0]?.id,
+						isMultiBranch,
+						existingBranchesCount: existingCount,
+						parentNodeId,
+						limitReached: true
+					})
+					return
+				}
+
+				if (existingCount > 0 && !allowDuplicate) {
+					const existingBranch = existingBranches[0]
+					if (onBranchWarning) {
+						onBranchWarning({
+							messageId,
+							messageText: targetMessage?.text?.substring(0, 100),
+							existingBranchId: existingBranch?.id,
+							isMultiBranch,
+							existingBranchesCount: existingCount,
+							parentNodeId
+						})
+					} else if (existingBranch?.id && onNodeDoubleClick) {
+						onNodeDoubleClick(existingBranch.id)
+					}
+					return
+				}
+			}
     
 			// Lock check - prevent duplicate branch creation (after checking if exists)
 			// Check if this specific messageId is already locked (prevents rapid double-clicks)
@@ -403,8 +476,10 @@ export function useBranchManagement({
 				mainMessageIds: parentNodeId === 'main' ? mainMessages.map(m => ({ id: m.id, isUser: m.isUser, text: m.text?.substring(0, 30) })) : []
     })
     
-			// Find target message
-			let targetMessage = parentMessages.find((m) => m.id === messageId)
+			// Find target message in parent messages (update if not already found)
+			if (!targetMessage) {
+				targetMessage = parentMessages.find((m) => m.id === messageId)
+			}
 			
 			// If still not found, try messageStore directly
 			if (!targetMessage) {
@@ -442,69 +517,41 @@ export function useBranchManagement({
 			let branchGroupId: string | undefined = undefined
 
 			if (targetMessage.isUser && isMultiBranch) {
-				// Multi-branch: create one branch per selected AI
+				// Multi-branch: create one branch per AI response generated for this user message
 				const userIndex = parentMessages.findIndex((m) => m.id === messageId)
 				userMessageForContext = targetMessage
-				
-				// Find all AI responses (including streaming ones) after the user message
-				const allAIResponses = parentMessages
-					.slice(userIndex + 1)
-					.filter((m) => {
-						// Include AI messages that have either aiModel or ai property
-						// Include both completed (has text) and streaming (has streamingText) messages
-						return !m.isUser && (m.aiModel || m.ai) && (m.text || m.streamingText)
-					})
-				
-				console.log('🔍 Multi-branch: Finding AI responses for selected AIs', {
-					selectedAIs: selectedAIs.map(ai => ({ id: ai.id, name: ai.name })),
-					allAIResponses: allAIResponses.map(r => ({ id: r.id, aiModel: r.aiModel || r.ai, hasText: !!r.text, hasStreamingText: !!r.streamingText }))
-				})
-				
-				// Create one branch per selected AI - match each selected AI to its response
-				// This ensures we create branches for ALL selected AIs, even if some responses are missing
-				aiResponses = selectedAIs
-					.map(ai => {
-						// Try to find a response that matches this AI's ID
-						const matchingResponse = allAIResponses.find(r => {
-							const responseAIId = r.aiModel || r.ai
-							return responseAIId === ai.id
-						})
-						
-						if (matchingResponse) {
-							return matchingResponse
-						}
-						
-						// If no matching response found, try to use any available response
-						// This handles cases where responses might not have the exact AI ID match
-						return null
-					})
-					.filter((r): r is Message => r !== null)
-				
-				// If we still don't have enough responses, use all available responses
-				// This ensures we create branches for all selected AIs if we have enough responses
-				if (aiResponses.length < selectedAIs.length && allAIResponses.length >= selectedAIs.length) {
-					// We have enough responses, just use them all (up to selectedAIs.length)
-					aiResponses = allAIResponses.slice(0, selectedAIs.length)
-					console.log('⚠️ Using all available responses (matching may have failed):', aiResponses.map(r => ({ id: r.id, aiModel: r.aiModel || r.ai })))
-				} else if (aiResponses.length < selectedAIs.length && allAIResponses.length > 0) {
-					// We don't have enough responses, but use what we have
-					const additionalResponses = allAIResponses
-						.filter(r => !aiResponses.some(ar => ar.id === r.id))
-						.slice(0, selectedAIs.length - aiResponses.length)
-					aiResponses = [...aiResponses, ...additionalResponses]
-					console.log('⚠️ Using partial responses (not enough for all selected AIs):', aiResponses.map(r => ({ id: r.id, aiModel: r.aiModel || r.ai })))
+
+				// Collect AI responses until the next user message appears
+				const allAIResponses: Message[] = []
+				for (let i = userIndex + 1; i < parentMessages.length; i++) {
+					const candidate = parentMessages[i]
+					if (!candidate) continue
+
+					if (candidate.isUser) {
+						break // Stop at the next user prompt (different turn)
+					}
+
+					if (!candidate.isUser && (candidate.aiModel || candidate.ai) && (candidate.text || candidate.streamingText)) {
+						allAIResponses.push(candidate)
+					}
 				}
-				
-				console.log('🔍 Multi-branch AI responses determined:', {
-					selectedAIsCount: selectedAIs.length,
-					allAIResponsesCount: allAIResponses.length,
-					matchedResponsesCount: aiResponses.length,
-					matchedResponses: aiResponses.map(r => ({ id: r.id, aiModel: r.aiModel || r.ai }))
+
+				console.log('🔍 Multi-branch: Found AI responses following user message', {
+					selectedAIs: selectedAIs.map(ai => ({ id: ai.id, name: ai.name })),
+					allAIResponses: allAIResponses.map(r => ({
+						id: r.id,
+						aiModel: r.aiModel || r.ai,
+						groupId: r.groupId,
+						hasText: !!r.text,
+						hasStreamingText: !!r.streamingText
+					}))
 				})
-				
-				// Generate group ID for branches created from same user message
-				branchGroupId = `group-${messageId}`
-    } else if (targetMessage.isUser && !isMultiBranch) {
+
+				aiResponses = allAIResponses
+
+				// Use existing groupId from responses when available for visual grouping
+				branchGroupId = aiResponses[0]?.groupId || `group-${messageId}`
+			} else if (targetMessage.isUser && !isMultiBranch) {
 				// Single branch: find first AI response
 				const userIndex = parentMessages.findIndex((m) => m.id === messageId)
 				userMessageForContext = targetMessage
@@ -681,20 +728,28 @@ export function useBranchManagement({
 							onNodesUpdate(validatedNodes)
 						}
 
-						// Focus on LAST new branch (latest created) AFTER nodes are fully rendered and in DOM
-						// This centers the viewport on the most recently created/active branch
-        setTimeout(() => {
-							if (newNodes.length > 0) {
-								// Use the LAST branch created (most recent) - this is the latest active branch
-								const lastBranchId = newNodes[newNodes.length - 1].id
-								// Center viewport on the latest branch
-								requestAnimationFrame(() => {
-          setTimeout(() => {
-										fitViewportToNodes([lastBranchId], 0.3)
-									}, 200)
-								})
+						// Focus on LAST new branch (latest created) AFTER nodes are fully rendered and positioned
+						// Use validatedNodes to ensure we're focusing on the correctly positioned branch
+						if (newNodes.length > 0) {
+							const lastBranchId = newNodes[newNodes.length - 1].id
+							// Find the branch in validated nodes to ensure it exists with correct position
+							const branchInValidatedNodes = validatedNodes.find(n => n.id === lastBranchId)
+							
+							if (branchInValidatedNodes) {
+								// Wait for React state update and DOM render, then focus with zoom animation
+								// Use multiple requestAnimationFrame to ensure layout is complete and viewport can pan
+								setTimeout(() => {
+									requestAnimationFrame(() => {
+										requestAnimationFrame(() => {
+											// Double-check nodes are in state before focusing
+											setTimeout(() => {
+												fitViewportToNodes([lastBranchId], 0.25, true) // Use zoom animation for branch focus
+											}, 150)
+										})
+									})
+								}, 200) // Initial delay to ensure setNodes has updated state
 							}
-						}, 400) // Delay to ensure branch is fully created and rendered
+						}
 					} catch (error) {
 						console.error('Layout error:', error)
 					}
@@ -729,8 +784,13 @@ export function useBranchManagement({
 	)
 
 	const handleBranch = useCallback(
-		(parentNodeId: string, messageId?: string, isMultiBranch?: boolean) => {
-      handleBranchRef.current(parentNodeId, messageId, isMultiBranch)
+		(
+			parentNodeId: string,
+			messageId?: string,
+			isMultiBranch?: boolean,
+			options?: { allowDuplicate?: boolean }
+		) => {
+			handleBranchRef.current(parentNodeId, messageId, isMultiBranch, options)
 		},
 		[]
 	)

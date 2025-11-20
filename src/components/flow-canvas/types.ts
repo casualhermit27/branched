@@ -59,6 +59,8 @@ export interface ChatNodeData {
 	inheritedMessages?: Message[]
 	branchMessages?: Message[]
 	onDeleteBranch?: (nodeId: string) => void
+	onLinkBranch?: (nodeId: string) => void
+	onCompareBranch?: (nodeId: string) => void
 	parentId?: string
 	messageIds?: string[]
 	contextSnapshot?: {
@@ -82,6 +84,10 @@ export interface FlowCanvasProps {
 		messageId: string
 		isMultiBranch: boolean
 		messageText?: string
+		parentNodeId?: string
+		allowDuplicate?: boolean
+		existingBranchesCount?: number
+		limitReached?: boolean
 	} | null
 	onPendingBranchProcessed?: () => void
 	onNodesUpdate?: (nodes: any[]) => void
@@ -95,11 +101,15 @@ export interface FlowCanvasProps {
 	onBranchWarning?: (data: {
 		messageId: string
 		messageText?: string
-		existingBranchId: string
+		existingBranchId?: string
 		isMultiBranch: boolean
+		existingBranchesCount?: number
+		parentNodeId: string
+		limitReached?: boolean
 	}) => void
 	onMinimizeAllRef?: (fn: (() => void) | null) => void
 	onAllNodesMinimizedChange?: (minimized: boolean) => void
+	conversationId?: string | null
 }
 
 export interface LayoutConfig {
