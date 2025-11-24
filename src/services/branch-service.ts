@@ -140,7 +140,7 @@ class BranchService {
 			groupId: nodeData.groupId, // For multi-model branches
 			metadata: {
 				isMinimized: nodeData.isMinimized || false,
-				lastActivity: Date.now()
+				lastActivity: nodeData.metadata?.lastActivity || nodeData.lastActivity || Date.now()
 			},
 			createdAt: nodeData.createdAt || node.createdAt || new Date().toISOString()
 		}

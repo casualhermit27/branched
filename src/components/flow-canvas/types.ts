@@ -54,6 +54,8 @@ export interface ChatNodeData {
 	existingBranchesCount?: number
 	height?: number
 	isHighlighted?: boolean
+	isSelected?: boolean
+	onToggleSelection?: (nodeId: string, multi: boolean) => void
 	nodeId?: string
 	parentMessageId?: string
 	inheritedMessages?: Message[]
@@ -69,6 +71,11 @@ export interface ChatNodeData {
 		timestamp: number
 	}
 	branchGroupId?: string // ID to group branches created from same multi-AI response
+	metadata?: {
+		isMinimized?: boolean
+		lastActivity?: number
+		[key: string]: any
+	}
 }
 
 export interface FlowCanvasProps {
@@ -88,6 +95,7 @@ export interface FlowCanvasProps {
 		allowDuplicate?: boolean
 		existingBranchesCount?: number
 		limitReached?: boolean
+		branchGroupId?: string
 	} | null
 	onPendingBranchProcessed?: () => void
 	onNodesUpdate?: (nodes: any[]) => void
@@ -108,7 +116,9 @@ export interface FlowCanvasProps {
 		limitReached?: boolean
 	}) => void
 	onMinimizeAllRef?: (fn: (() => void) | null) => void
+	onMaximizeAllRef?: (fn: (() => void) | null) => void
 	onAllNodesMinimizedChange?: (minimized: boolean) => void
+	onSelectionChange?: (selectedIds: string[]) => void
 	conversationId?: string | null
 }
 
@@ -150,4 +160,5 @@ export interface NodeState {
 
 export type CustomNode = Node<ChatNodeData>
 export type CustomEdge = Edge
+export type ReactFlowNode = CustomNode
 
