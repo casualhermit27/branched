@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { List, X, ArrowsOut, ArrowsIn, Clock, GitBranch, Trash, Gear } from '@phosphor-icons/react'
+import { List, X, ArrowsOut, ArrowsIn, Clock, GitBranch, Trash, Gear, Sparkle as SparklesIcon } from '@phosphor-icons/react'
 import ConversationHistory from './conversation-history'
 
 interface Message {
@@ -55,19 +55,23 @@ interface SidebarProps {
   currentConversationId?: string | null
   onSelectConversation?: (conversationId: string) => void
   onCreateNewConversation?: () => void
+  messageCount?: number
+  onUpgrade?: () => void
 }
 
-export default function Sidebar({ 
-  branches, 
-  currentBranchId, 
-  onSelectBranch, 
-  onDeleteBranch, 
-  onDeleteConversation, 
+export default function Sidebar({
+  branches,
+  currentBranchId,
+  onSelectBranch,
+  onDeleteBranch,
+  onDeleteConversation,
   conversationNodes = [],
   conversations = [],
   currentConversationId = null,
-  onSelectConversation = () => {},
-  onCreateNewConversation = () => {}
+  onSelectConversation = () => { },
+  onCreateNewConversation = () => { },
+  messageCount = 0,
+  onUpgrade = () => { }
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'history' | 'settings'>('history')
@@ -77,14 +81,14 @@ export default function Sidebar({
   // Build conversation tree from nodes with proper hierarchy
   const buildConversationTree = (nodes: ConversationNode[]): ConversationNode[] => {
     if (nodes.length === 0) return []
-    
+
     const nodeMap = new Map<string, ConversationNode>()
     const rootNodes: ConversationNode[] = []
 
     // Create a map of all nodes with empty children arrays
     nodes.forEach(node => {
-      nodeMap.set(node.id, { 
-        ...node, 
+      nodeMap.set(node.id, {
+        ...node,
         children: [],
         isActive: node.id === currentBranchId
       })
@@ -93,21 +97,21 @@ export default function Sidebar({
     // Build the tree structure based on parent-child relationships
     nodes.forEach(node => {
       const treeNode = nodeMap.get(node.id)!
-      
+
       // Find parent based on edges or parentId
       let parentId = node.parentId
-      
+
       // If no direct parentId, try to find parent through message relationships
       if (!parentId && node.type === 'branch') {
         // Look for a parent node that this branch was created from
-        const parentNode = nodes.find(n => 
-          n.id !== node.id && 
-          n.type === 'main' && 
+        const parentNode = nodes.find(n =>
+          n.id !== node.id &&
+          n.type === 'main' &&
           n.messages.some(m => m.children.includes(node.messages[0]?.id || ''))
         )
         parentId = parentNode?.id
       }
-      
+
       if (parentId && nodeMap.has(parentId)) {
         const parent = nodeMap.get(parentId)!
         parent.children.push(treeNode)
@@ -122,7 +126,7 @@ export default function Sidebar({
       node.children.sort((a, b) => b.timestamp - a.timestamp)
       node.children.forEach(sortChildren)
     }
-    
+
     rootNodes.forEach(sortChildren)
     rootNodes.sort((a, b) => b.timestamp - a.timestamp)
 
@@ -138,16 +142,16 @@ export default function Sidebar({
   // Group branches by date
   const groupedBranches = sortedBranches.reduce((groups: Record<string, Branch[]>, branch) => {
     const date = new Date(branch.timestamp)
-    const dateKey = date.toLocaleDateString('en-US', { 
-      month: 'short', 
+    const dateKey = date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
       year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
     })
-    
+
     if (!groups[dateKey]) {
       groups[dateKey] = []
     }
-    
+
     groups[dateKey].push(branch)
     return groups
   }, {})
@@ -157,8 +161,8 @@ export default function Sidebar({
     const userMessage = branch.messages.find(m => m.isUser)
     if (userMessage) {
       // Truncate to reasonable length
-      return userMessage.text.length > 40 
-        ? userMessage.text.substring(0, 40) + '...' 
+      return userMessage.text.length > 40
+        ? userMessage.text.substring(0, 40) + '...'
         : userMessage.text
     }
     return 'Untitled branch'
@@ -168,8 +172,8 @@ export default function Sidebar({
   const getNodeTitle = (node: ConversationNode) => {
     const userMessage = node.messages.find(m => m.isUser)
     if (userMessage) {
-      return userMessage.text.length > 30 
-        ? userMessage.text.substring(0, 30) + '...' 
+      return userMessage.text.length > 30
+        ? userMessage.text.substring(0, 30) + '...'
         : userMessage.text
     }
     return node.type === 'main' ? 'Main Conversation' : 'Branch'
@@ -212,24 +216,22 @@ export default function Sidebar({
           ) : (
             <div className="w-7 flex-shrink-0"></div>
           )}
-          
+
           {/* Node Content */}
           <motion.button
             onClick={() => onSelectBranch(node.id)}
-            className={`flex-1 text-left p-3 rounded-lg text-sm transition-all duration-200 min-w-0 ${
-              isActive
-                ? 'bg-purple-50 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-200/60 dark:border-purple-500/50 shadow-sm dark:shadow-purple-500/10'
-                : 'hover:bg-muted dark:hover:bg-muted/80 text-foreground border border-transparent hover:border-border/60 dark:hover:border-border/40'
-            }`}
+            className={`flex-1 text-left p-3 rounded-lg text-sm transition-all duration-200 min-w-0 ${isActive
+              ? 'bg-purple-50 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-200/60 dark:border-purple-500/50 shadow-sm dark:shadow-purple-500/10'
+              : 'hover:bg-muted dark:hover:bg-muted/80 text-foreground border border-transparent hover:border-border/60 dark:hover:border-border/40'
+              }`}
             whileHover={{ x: 2 }}
             whileTap={{ scale: 0.98 }}
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
           >
             <div className="flex items-center min-w-0 gap-2.5">
-              <div 
-                className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                  node.type === 'main' ? 'bg-blue-500 dark:bg-blue-400' : 'bg-emerald-500 dark:bg-emerald-400'
-                }`}
+              <div
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${node.type === 'main' ? 'bg-blue-500 dark:bg-blue-400' : 'bg-emerald-500 dark:bg-emerald-400'
+                  }`}
               />
               <span className="font-medium truncate min-w-0 flex-1 text-sm leading-snug" title={getNodeTitle(node)}>
                 {getNodeTitle(node)}
@@ -251,7 +253,7 @@ export default function Sidebar({
             </div>
           </motion.button>
         </div>
-        
+
         {/* Children with proper indentation */}
         <AnimatePresence>
           {hasChildren && isExpanded && (
@@ -290,7 +292,7 @@ export default function Sidebar({
           </motion.button>
         )}
       </AnimatePresence>
-      
+
       {/* Sidebar */}
       <AnimatePresence>
         {isOpen && (
@@ -304,7 +306,7 @@ export default function Sidebar({
               className="fixed inset-0 bg-black/5 dark:bg-black/40 backdrop-blur-sm z-30"
               onClick={() => setIsOpen(false)}
             />
-            
+
             {/* Sidebar Panel */}
             <motion.div
               initial={{ x: -320, opacity: 0 }}
@@ -326,16 +328,15 @@ export default function Sidebar({
                   <X size={18} weight="bold" />
                 </motion.button>
               </div>
-              
+
               {/* Tabs */}
               <div className="flex border-b border-border/80 dark:border-border/60 bg-card">
                 <motion.button
                   onClick={() => setActiveTab('history')}
-                  className={`flex-1 py-3.5 text-sm font-medium relative transition-colors duration-200 ${
-                    activeTab === 'history' 
-                      ? 'text-purple-600 dark:text-purple-400' 
-                      : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground'
-                  }`}
+                  className={`flex-1 py-3.5 text-sm font-medium relative transition-colors duration-200 ${activeTab === 'history'
+                    ? 'text-purple-600 dark:text-purple-400'
+                    : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground'
+                    }`}
                   whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)' }}
                   whileTap={{ scale: 0.98 }}
                 >
@@ -354,11 +355,10 @@ export default function Sidebar({
                 </motion.button>
                 <motion.button
                   onClick={() => setActiveTab('settings')}
-                  className={`flex-1 py-3.5 text-sm font-medium relative transition-colors duration-200 ${
-                    activeTab === 'settings' 
-                      ? 'text-purple-600 dark:text-purple-400' 
-                      : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground'
-                  }`}
+                  className={`flex-1 py-3.5 text-sm font-medium relative transition-colors duration-200 ${activeTab === 'settings'
+                    ? 'text-purple-600 dark:text-purple-400'
+                    : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground'
+                    }`}
                   whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)' }}
                   whileTap={{ scale: 0.98 }}
                 >
@@ -376,7 +376,7 @@ export default function Sidebar({
                   )}
                 </motion.button>
               </div>
-              
+
               {/* Content */}
               <div className="flex-1 overflow-y-auto">
                 {activeTab === 'history' ? (
@@ -412,7 +412,7 @@ export default function Sidebar({
                         </div>
                       </div>
                     </div>
-                    
+
                     <div>
                       <h3 className="text-sm font-semibold text-foreground dark:text-foreground mb-4">Appearance</h3>
                       <div className="space-y-3">
@@ -439,13 +439,43 @@ export default function Sidebar({
                   </div>
                 )}
               </div>
-              
+
               {/* Footer */}
               {activeTab !== 'settings' && (
-                <div className="px-6 py-4 border-t border-border/80 dark:border-border/60 bg-muted/30 dark:bg-muted/20 text-xs text-muted-foreground dark:text-muted-foreground/70">
-                  <span className="font-medium text-foreground dark:text-foreground">
-                    {conversations.length} {conversations.length === 1 ? 'conversation' : 'conversations'}
-                  </span>
+                <div className="px-6 py-4 border-t border-border/80 dark:border-border/60 bg-muted/30 dark:bg-muted/20">
+                  {/* Usage Bar */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <span className="font-medium text-foreground dark:text-foreground">Free Plan</span>
+                      <span className="text-muted-foreground dark:text-muted-foreground/70">{messageCount}/50 msgs</span>
+                    </div>
+                    <div className="h-2 bg-muted dark:bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${messageCount >= 50 ? 'bg-destructive' : 'bg-gradient-to-r from-indigo-500 to-purple-500'
+                          }`}
+                        style={{ width: `${Math.min((messageCount / 50) * 100, 100)}%` }}
+                      />
+                    </div>
+                    {messageCount >= 40 && (
+                      <p className="text-[10px] text-destructive mt-1 font-medium">
+                        {messageCount >= 50 ? 'Limit reached' : 'Approaching limit'}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={onUpgrade}
+                    className="w-full py-2 px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold uppercase tracking-wide rounded-lg shadow-md hover:shadow-lg transition-all duration-200 mb-3 flex items-center justify-center gap-2"
+                  >
+                    <SparklesIcon className="w-3.5 h-3.5" />
+                    Upgrade to Pro
+                  </button>
+
+                  <div className="text-xs text-muted-foreground dark:text-muted-foreground/70 flex justify-between items-center">
+                    <span className="font-medium text-foreground dark:text-foreground">
+                      {conversations.length} {conversations.length === 1 ? 'conversation' : 'conversations'}
+                    </span>
+                  </div>
                 </div>
               )}
             </motion.div>

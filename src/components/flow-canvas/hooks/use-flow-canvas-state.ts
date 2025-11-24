@@ -12,11 +12,11 @@ export function useFlowCanvasState() {
 	const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null)
 	const [generatingNodeIds, setGeneratingNodeIds] = useState<Set<string>>(new Set())
 	const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null)
-	
+
 	// Branch-level state
 	const [branchMultiModelMode, setBranchMultiModelMode] = useState<Map<string, boolean>>(new Map())
 	const [branchSelectedAIs, setBranchSelectedAIs] = useState<Map<string, AI[]>>(new Map())
-	
+
 	// Refs
 	const nodesRef = useRef<Node<ChatNodeData>[]>([])
 	const edgesRef = useRef<Edge[]>([])
@@ -81,6 +81,25 @@ export function useFlowCanvasState() {
 		})
 	}, [])
 
+	// Selection state management
+	const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set())
+
+	const toggleNodeSelection = useCallback((nodeId: string, multi: boolean) => {
+		setSelectedNodeIds((prev) => {
+			const updated = new Set(multi ? prev : [])
+			if (updated.has(nodeId)) {
+				updated.delete(nodeId)
+			} else {
+				updated.add(nodeId)
+			}
+			return updated
+		})
+	}, [])
+
+	const clearSelection = useCallback(() => {
+		setSelectedNodeIds(new Set())
+	}, [])
+
 	// Branch-level state management
 	const setBranchMultiModel = useCallback((nodeId: string, enabled: boolean) => {
 		setBranchMultiModelMode((prev) => {
@@ -139,18 +158,18 @@ export function useFlowCanvasState() {
 		reactFlowInstance,
 		branchMultiModelMode,
 		branchSelectedAIs,
-		
+
 		// Refs
 		nodesRef,
 		edgesRef,
 		nodeIdCounterRef,
 		abortControllersRef,
-		
+
 		// Setters
 		setNodes: updateNodes,
 		setEdges: updateEdges,
 		setReactFlowInstance,
-		
+
 		// Node state
 		toggleNodeMinimize,
 		minimizeAllNodes,
@@ -158,17 +177,22 @@ export function useFlowCanvasState() {
 		setNodeActive,
 		setNodeHighlighted,
 		setNodeGenerating,
-		
+
 		// Branch state
 		setBranchMultiModel,
 		getBranchMultiModel,
 		setBranchAIs,
 		getBranchAIs,
-		
+
 		// Abort controllers
 		setAbortController,
 		getAbortController,
-		abortGeneration
+		abortGeneration,
+
+		// Selection
+		selectedNodeIds,
+		toggleNodeSelection,
+		clearSelection
 	}
 }
 
