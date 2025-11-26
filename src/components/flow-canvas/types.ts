@@ -76,6 +76,8 @@ export interface ChatNodeData {
 		lastActivity?: number
 		[key: string]: any
 	}
+	onMessageSelect?: (messageId: string, isMultiSelect: boolean) => void
+	selectedMessageIds?: Set<string>
 }
 
 export interface FlowCanvasProps {
@@ -119,6 +121,7 @@ export interface FlowCanvasProps {
 	onMaximizeAllRef?: (fn: (() => void) | null) => void
 	onAllNodesMinimizedChange?: (minimized: boolean) => void
 	onSelectionChange?: (selectedIds: string[]) => void
+	onMessageSelectionChange?: (selectedMessageIds: string[]) => void
 	conversationId?: string | null
 }
 

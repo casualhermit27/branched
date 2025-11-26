@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import { ArrowsOut, ArrowsIn } from '@phosphor-icons/react'
-import TransformButton from './transform-button'
-import AIPills from './ai-pills'
+import { ArrowsOut, ArrowsIn, GitBranch, PaperPlaneRight, Stop, Plus } from '@phosphor-icons/react'
+import AIPills, { allAIOptions } from './ai-pills'
 import { SideBySideComparison } from './side-by-side-comparison'
 
 interface Message {
@@ -21,6 +20,7 @@ interface Message {
   groupId?: string    // Link related multi-model responses
   isStreaming?: boolean  // Whether this message is currently streaming
   streamingText?: string // Current streaming text content
+  role?: string // Added to satisfy linter, though we use isUser
 }
 
 interface AI {
@@ -47,12 +47,15 @@ interface ChatInterfaceProps {
   isMain?: boolean
   nodeId?: string
   onExportImport?: () => void
+  readOnly?: boolean
+  onMessageSelect?: (messageId: string, isMultiSelect: boolean) => void
+  selectedMessageIds?: Set<string>
 }
 
-export default function ChatInterface({ 
-  messages, 
-  onSendMessage, 
-  selectedAIs, 
+export default function ChatInterface({
+  messages,
+  onSendMessage,
+  selectedAIs,
   onBranchFromMessage,
   currentBranch,
   isGenerating = false,
@@ -65,7 +68,10 @@ export default function ChatInterface({
   getBestAvailableModel,
   isMain = false,
   nodeId,
-  onExportImport
+  onExportImport,
+  readOnly = false,
+  onMessageSelect,
+  selectedMessageIds
 }: ChatInterfaceProps) {
   const [message, setMessage] = useState('')
   const [isUserScrolling, setIsUserScrolling] = useState(false)
@@ -75,9 +81,6 @@ export default function ChatInterface({
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const branchLockRef = useRef<Record<string, boolean>>({})
-  const branchingInProgress = useRef<Record<string, boolean>>({})
-  const branchCache = useRef<Record<string, string>>({}) // Cache of messageId -> branchId
   const lastBranchIdRef = useRef<string | null | undefined>(currentBranch)
   const hasScrolledRef = useRef<boolean>(false)
 
@@ -89,15 +92,20 @@ export default function ChatInterface({
     setMessage('')
     // Enable auto-scroll when user sends a message
     setShouldAutoScroll(true)
+
+    // Reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+    }
   }
 
   // Handle scroll events to detect user scrolling
   const handleScroll = useCallback(() => {
     if (!messagesContainerRef.current) return
-    
+
     const container = messagesContainerRef.current
-    const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 10
-    
+    const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50
+
     if (isAtBottom) {
       setIsUserScrolling(false)
       setShouldAutoScroll(true)
@@ -114,7 +122,7 @@ export default function ChatInterface({
       setShouldAutoScroll(true)
       hasScrolledRef.current = false
       lastBranchIdRef.current = currentBranch
-      
+
       // Don't auto-focus textarea on branch change - let user decide
       // Use scrollTop instead of scrollIntoView to avoid layout shifts
       setTimeout(() => {
@@ -128,17 +136,11 @@ export default function ChatInterface({
 
   // Auto-scroll to bottom when new messages arrive (only if should auto-scroll)
   useEffect(() => {
-    // Only auto-scroll if:
-    // 1. Should auto-scroll is enabled
-    // 2. We haven't already scrolled for this branch
-    // 3. There are messages to scroll to
     if (shouldAutoScroll && messagesContainerRef.current && messages.length > 0) {
-      // Use scrollTop instead of scrollIntoView to avoid layout shifts
       const container = messagesContainerRef.current
       const isNewMessage = !hasScrolledRef.current
-      
+
       if (isNewMessage) {
-        // Smooth scroll for new messages
         requestAnimationFrame(() => {
           container.scrollTo({
             top: container.scrollHeight,
@@ -146,10 +148,9 @@ export default function ChatInterface({
           })
         })
       } else {
-        // Instant scroll for branch changes
         container.scrollTop = container.scrollHeight
       }
-      
+
       hasScrolledRef.current = true
     }
   }, [messages, shouldAutoScroll])
@@ -160,108 +161,47 @@ export default function ChatInterface({
     setShouldAutoScroll(true)
   }
 
-  // ✅ NEW SIMPLIFIED: Handle multi-branch creation
+  // Handle multi-branch creation
   const handleCreateBranches = () => {
-    // Find the last user message that has AI responses
     const lastUserMessage = [...messages].reverse().find(m => m.isUser)
-    
-    if (!lastUserMessage) {
-      console.warn('⚠️ No user message found for branch creation')
-      return
-    }
-    
-    console.log('✅ Creating branches for all AI models from user message:', lastUserMessage.id)
-    
-    // Call onBranchFromMessage with isMultiBranch=true
-    // The flow-canvas will handle creating one branch per AI model
+    if (!lastUserMessage) return
     onBranchFromMessage(lastUserMessage.id, true)
   }
 
   const getAIColor = (aiId: string) => {
+    const freshAI = allAIOptions.find(a => a.id === aiId)
+    if (freshAI) return freshAI.color
+
     const ai = selectedAIs.find(a => a.id === aiId)
     return ai?.color || 'bg-muted text-foreground border-border'
   }
 
   const getAILogo = (aiId: string) => {
+    const freshAI = allAIOptions.find(a => a.id === aiId)
+    if (freshAI) return freshAI.logo
+
     const ai = selectedAIs.find(a => a.id === aiId)
     return ai?.logo || null
   }
 
-  console.log('💬 ChatInterface rendering with messages:', messages.length, messages)
-  
-  // CRITICAL: Validate and fix isUser flags before processing
-  // This is the FINAL validation - ensure ALL messages have correct isUser flag
-  const validatedMessages = messages.map((msg, index) => {
-    // If message has aiModel OR ai property, it MUST be isUser: false
+  // Normalize messages
+  const validatedMessages = messages.map((msg) => {
     const hasAIModel = !!(msg.aiModel || msg.ai)
-    
-    if (hasAIModel) {
-      // This is an AI message - force isUser to false
-      if (msg.isUser !== false) {
-        console.error('❌ CRITICAL: AI message has isUser=true! Fixing:', {
-          messageId: msg.id,
-          aiModel: msg.aiModel || msg.ai,
-          isUser: msg.isUser,
-          text: msg.text?.substring(0, 50),
-          index
-        })
-        return { ...msg, isUser: false }
-      }
-      return msg
-    }
-    
-    // If message doesn't have aiModel or ai, it should be isUser: true
-    if (!hasAIModel) {
-      if (msg.isUser !== true && !msg.text?.startsWith('[Branched from:')) {
-        console.warn('⚠️ User message has isUser=false! Fixing:', {
-          messageId: msg.id,
-          isUser: msg.isUser,
-          text: msg.text?.substring(0, 50),
-          index
-        })
-        return { ...msg, isUser: true }
-      }
-      return msg
-    }
-    
+    if (hasAIModel && msg.isUser !== false) return { ...msg, isUser: false }
+    if (!hasAIModel && msg.isUser !== true && !msg.text?.startsWith('[Branched from:')) return { ...msg, isUser: true }
     return msg
   })
-  
-  // Normalize all messages before rendering to fix alignment issues
-  // This ensures AI replies always appear on left, user messages on right
-  // CRITICAL: Force isUser flag based on AI indicators - ignore existing isUser value
+
   const normalizedMessages = validatedMessages.map(msg => {
-    // Determine if this is an AI message based on properties
     const isAI = Boolean(msg.aiModel || msg.ai || msg.role === 'assistant')
-    
-    // FORCE isUser to be the opposite of isAI - this is the source of truth
     const forcedIsUser = !isAI
-    
-    // Log if we're fixing a misaligned message
-    if (msg.isUser !== forcedIsUser) {
-      console.warn('🔧 FORCING isUser flag:', {
-        messageId: msg.id,
-        oldIsUser: msg.isUser,
-        newIsUser: forcedIsUser,
-        hasAiModel: !!msg.aiModel,
-        hasAi: !!msg.ai,
-        role: msg.role,
-        text: msg.text?.substring(0, 30)
-      })
-    }
-    
-    return {
-      ...msg,
-      isUser: forcedIsUser, // FORCE the correct value
-    }
+    return { ...msg, isUser: forcedIsUser }
   })
-  
-  // Group messages by groupId for multi-model responses
+
+  // Group messages
   const groupedMessages = normalizedMessages.reduce((groups, msg) => {
     if (msg.groupId) {
-      if (!groups[msg.groupId]) {
-        groups[msg.groupId] = []
-      }
+      if (!groups[msg.groupId]) groups[msg.groupId] = []
       groups[msg.groupId].push(msg)
     } else {
       groups[`single-${msg.id}`] = [msg]
@@ -269,659 +209,324 @@ export default function ChatInterface({
     return groups
   }, {} as Record<string, Message[]>)
 
-  // Get unique AI models from a group
   const getAIModelsFromGroup = (groupMessages: Message[]) => {
-    const aiModels = groupMessages
+    return groupMessages
       .filter(msg => msg.aiModel)
       .map(msg => selectedAIs.find(ai => ai.id === msg.aiModel))
       .filter(Boolean) as AI[]
-    return aiModels
   }
 
-  // Handle model pill click
   const handlePillClick = (aiId: string, groupId?: string) => {
     if (groupId) {
-      // Find the message with this AI model in the group
       const targetMessage = messages.find(msg => msg.groupId === groupId && msg.aiModel === aiId)
       if (targetMessage) {
-        // Scroll to the message
         const element = document.getElementById(`message-${targetMessage.id}`)
         if (element) {
           element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          // Add highlight effect
-          element.classList.add('ring-2', 'ring-blue-400', 'ring-opacity-50')
-          setTimeout(() => {
-            element.classList.remove('ring-2', 'ring-blue-400', 'ring-opacity-50')
-          }, 2000)
+          element.classList.add('ring-2', 'ring-primary', 'ring-opacity-50')
+          setTimeout(() => element.classList.remove('ring-2', 'ring-primary', 'ring-opacity-50'), 2000)
         }
       }
     }
   }
-  
+
   return (
-    <div 
-      className="w-full h-full flex flex-col overflow-hidden min-h-0"
+    <div
+      className="w-full h-full flex flex-col relative overflow-hidden nodrag"
       data-scrollable
-      onMouseDown={(e) => {
-        // Prevent canvas panning when clicking inside chat interface
-        e.stopPropagation()
-      }}
-      onWheel={(e) => {
-        // Allow scrolling within chat interface, prevent canvas zoom
-        e.stopPropagation()
-      }}
+      onWheel={(e) => e.stopPropagation()}
     >
-      {/* Multi-Model Controls - For both main and branch nodes */}
-      {onAddAI && onRemoveAI && (
-        <div className="mb-4" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-foreground">{isMain ? 'AIs:' : 'Branch AIs:'}</span>
-              <AIPills
-                selectedAIs={selectedAIs}
-                onAddAI={onAddAI}
-                onRemoveAI={onRemoveAI}
-                onSelectSingle={onSelectSingle ? (ai: AI) => onSelectSingle(ai.id) : undefined}
-                showAddButton={true}
-                getBestAvailableModel={getBestAvailableModel}
-              />
+
+
+      {/* Messages Area */}
+      <div
+        className="flex-1 overflow-y-auto overflow-x-hidden space-y-8 px-4 pb-4 pt-4"
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        data-scrollable
+        style={{
+          scrollBehavior: 'smooth',
+        }}
+      >
+        {Object.entries(groupedMessages).map(([groupId, groupMessages], index, array) => {
+          const isMultiModel = groupMessages.length > 1
+          const aiModels = getAIModelsFromGroup(groupMessages)
+          const isComparisonView = comparisonViewGroupId === groupId
+
+          return (
+            <div key={groupId} className="space-y-4">
+              {/* Multi-model Group Header */}
+              {isMultiModel && (
+                <div className="flex items-center justify-center gap-3 py-2 opacity-80 hover:opacity-100 transition-opacity">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-muted/50 backdrop-blur-sm rounded-full text-[10px] text-muted-foreground font-medium border border-border/30">
+                    <span>{groupMessages.length} Responses</span>
+                  </div>
+                  <button
+                    onClick={() => setComparisonViewGroupId(isComparisonView ? null : groupId)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-background/50 hover:bg-muted border border-border/30 rounded-full text-[10px] font-medium text-foreground transition-all shadow-sm"
+                  >
+                    {isComparisonView ? (
+                      <>
+                        <ArrowsIn className="w-3 h-3" />
+                        <span>Stack View</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowsOut className="w-3 h-3" />
+                        <span>Compare View</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Comparison View */}
+              {isMultiModel && isComparisonView ? (
+                <SideBySideComparison
+                  messages={normalizedMessages}
+                  selectedAIs={selectedAIs}
+                  groupId={groupId}
+                  onClose={() => setComparisonViewGroupId(null)}
+                  getAIColor={getAIColor}
+                  getAILogo={getAILogo}
+                />
+              ) : (
+                /* Standard Stack View */
+                <div className={`${isMultiModel ? 'bg-muted/10 rounded-3xl p-4 space-y-8 border border-border/10' : 'space-y-8'}`}>
+                  {groupMessages.map((msg) => (
+                    <motion.div
+                      key={msg.id}
+                      id={`message-${msg.id}`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'} relative`}
+                    >
+                      {/* User Message */}
+                      {msg.isUser ? (
+                        <div className="flex flex-col items-end max-w-[85%] relative group/message">
+                          <div
+                            onClick={(e) => {
+                              if (e.ctrlKey || e.metaKey || e.altKey) {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                onMessageSelect?.(msg.id, true)
+                              }
+                            }}
+                            className={`bg-primary/10 text-foreground px-5 py-3 rounded-[1.5rem] rounded-tr-sm transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
+                              ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
+                              : 'hover:bg-primary/15'
+                              }`}
+                            title="Ctrl + Click to select"
+                          >
+                            <div className="prose prose-sm dark:prose-invert max-w-none break-words leading-relaxed">
+                              <ReactMarkdown>{msg.text}</ReactMarkdown>
+                            </div>
+                          </div>
+                          {/* Branch Button for User (Hover) - Left side */}
+                          <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 opacity-0 group-hover/message:opacity-100 transition-opacity duration-200">
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                onBranchFromMessage(msg.id, true)
+                              }}
+                              className="p-1.5 rounded-full bg-background border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/50 shadow-sm transition-all"
+                              title="Branch all models"
+                            >
+                              <GitBranch className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* AI Message */
+                        <div className="flex gap-4 max-w-[95%] relative pr-10 group/message">
+                          {/* AI Logo */}
+                          <div className="flex-shrink-0 mt-1">
+                            {msg.aiModel && (
+                              <div className="w-8 h-8 flex items-center justify-center bg-background rounded-full border border-border/10 shadow-sm">
+                                {getAILogo(msg.aiModel)}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex flex-col flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-semibold text-foreground">
+                                {msg.aiModel ? selectedAIs.find(ai => ai.id === msg.aiModel)?.name || msg.aiModel : 'AI'}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground/60">
+                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+
+                            <div
+                              onClick={(e) => {
+                                if (e.ctrlKey || e.metaKey || e.altKey) {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  onMessageSelect?.(msg.id, true)
+                                }
+                              }}
+                              className={`text-foreground/90 leading-relaxed bg-muted/30 rounded-2xl p-4 border border-border/10 transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
+                                ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
+                                : 'hover:bg-muted/40'
+                                }`}
+                              title="Ctrl + Click to select"
+                            >
+                              {msg.isStreaming ? (
+                                <div className="space-y-2">
+                                  <div className="prose prose-sm dark:prose-invert max-w-none">
+                                    <ReactMarkdown>{msg.streamingText || msg.text}</ReactMarkdown>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-muted-foreground/70 pt-1">
+                                    <div className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-pulse" />
+                                    <span className="text-xs font-medium">Generating...</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="prose prose-sm dark:prose-invert max-w-none">
+                                  <ReactMarkdown
+                                    components={{
+                                      code: ({ children }) => <code className="bg-muted/50 px-1.5 py-0.5 rounded text-sm font-mono text-foreground/90 border border-border/30">{children}</code>,
+                                      pre: ({ children }) => <pre className="bg-muted/50 p-4 rounded-xl overflow-x-auto text-sm font-mono text-foreground/90 border border-border/30 my-3">{children}</pre>,
+                                    }}
+                                  >
+                                    {msg.text}
+                                  </ReactMarkdown>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Branch Button (Hover) - Right side */}
+                          <div className="absolute right-0 top-2 opacity-0 group-hover/message:opacity-100 transition-opacity duration-200">
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                onBranchFromMessage(msg.id, false)
+                              }}
+                              className="p-1.5 rounded-full bg-background border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/50 shadow-sm transition-all"
+                              title="Branch from here"
+                            >
+                              <GitBranch className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+
+                  {/* Multi-model Actions */}
+                  {/* Multi-model Actions - Only show for the last group */}
+                  {isMultiModel && aiModels.length > 1 && index === array.length - 1 && (
+                    <div className="flex justify-center pt-2 pb-4">
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleCreateBranches}
+                        className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium rounded-full transition-colors"
+                      >
+                        <GitBranch className="w-3.5 h-3.5" />
+                        Create Branches for All
+                      </motion.button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            
-            {/* Export/Import Button - Only for main conversation */}
-            {isMain && onExportImport && (
+          )
+        })}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Fixed Footer Input Area */}
+      {!readOnly && (
+        <div className="flex-shrink-0 z-30 bg-card/80 backdrop-blur-md border-t border-border/40 p-4">
+          <div className="max-w-5xl mx-auto relative">
+            <form
+              onSubmit={handleSubmit}
+              className="relative flex items-center gap-2 bg-card border border-border shadow-sm rounded-2xl p-2 ring-1 ring-black/5 dark:ring-white/5"
+            >
+              {/* Attachment Button */}
               <button
-                onClick={onExportImport}
-                className="px-3 py-1 bg-card/80 backdrop-blur-sm hover:bg-accent text-foreground rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
+                type="button"
+                onClick={() => alert('Attachments coming soon!')}
+                className="w-9 h-9 flex-shrink-0 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title="Add attachment"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                </svg>
-                Export/Import
+                <Plus weight="bold" className="w-4 h-4" />
               </button>
+
+              <textarea
+                ref={textareaRef}
+                value={message}
+                onChange={handleInputChange}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSubmit(e)
+                  }
+                }}
+                onFocus={() => {
+                  setShouldAutoScroll(true)
+                  setTimeout(() => {
+                    if (messagesContainerRef.current) {
+                      messagesContainerRef.current.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior: 'smooth' })
+                    }
+                  }, 100)
+                }}
+                placeholder={selectedAIs.length > 1 ? `Message ${selectedAIs.length} models...` : "Type a message..."}
+                className="flex-1 bg-transparent border-none focus:ring-0 resize-none py-2.5 px-2 max-h-32 min-h-[40px] text-sm placeholder:text-muted-foreground/50 leading-relaxed"
+                style={{ height: 'auto' }}
+                onInput={(e) => {
+                  const target = e.target as HTMLTextAreaElement
+                  target.style.height = 'auto'
+                  target.style.height = Math.min(target.scrollHeight, 128) + 'px'
+                }}
+              />
+
+              <div className="flex-shrink-0">
+                {isGenerating ? (
+                  <button
+                    type="button"
+                    onClick={onStopGeneration}
+                    className="w-10 h-10 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors"
+                    title="Stop generation"
+                  >
+                    <Stop weight="fill" className="w-5 h-5" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!message.trim()}
+                    className="w-12 h-10 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center shadow-sm hover:shadow hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    <PaperPlaneRight weight="fill" className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+            </form>
+
+            {/* Branch Context Indicator (Floating above input) */}
+            {currentBranch && (
+              <div className="absolute -top-10 left-4 flex items-center gap-2 px-3 py-1.5 bg-background/90 backdrop-blur-md border border-border/50 rounded-full shadow-sm text-xs text-muted-foreground">
+                <GitBranch className="w-3.5 h-3.5" />
+                <span className="max-w-[200px] truncate">
+                  Branch from: {messages.find(m => m.id === currentBranch)?.text || '...'}
+                </span>
+                <button
+                  onClick={() => onBranchFromMessage('')}
+                  className="ml-1 hover:text-foreground"
+                >
+                  ×
+                </button>
+              </div>
             )}
           </div>
         </div>
       )}
-      
-      {/* Messages Area - Flexible height with scroll */}
-      <div 
-        className="flex-1 overflow-y-auto overflow-x-auto space-y-4 touch-pan-y pr-2 min-h-0 messages-container" 
-        ref={messagesContainerRef}
-        onScroll={handleScroll}
-        data-scrollable
-        onMouseDown={(e) => {
-          // Prevent canvas panning when clicking in scrollable area
-          e.stopPropagation()
-        }}
-        onWheel={(e) => {
-          // Allow scrolling, prevent canvas zoom
-          e.stopPropagation()
-        }}
-        style={{ 
-          minHeight: 0, // Critical for flex children to scroll properly
-          WebkitOverflowScrolling: 'touch',
-          overscrollBehavior: 'contain',
-          scrollbarWidth: 'thin',
-          scrollbarColor: 'hsl(var(--muted-foreground) / 0.3) hsl(var(--muted))',
-          scrollBehavior: 'smooth'
-        }}
-      >
-          {Object.entries(groupedMessages).map(([groupId, groupMessages]) => {
-            const isMultiModel = groupMessages.length > 1
-            const aiModels = getAIModelsFromGroup(groupMessages)
-            const isComparisonView = comparisonViewGroupId === groupId
-            
-            return (
-              <div key={groupId} className="space-y-2">
-                {/* Multi-model group header */}
-                {isMultiModel && (
-                  <div className="flex items-center justify-center gap-3 py-2">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-muted/80 backdrop-blur-sm rounded-full text-xs text-muted-foreground font-medium border border-border/50">
-                      <span>Responses from {groupMessages.length} AIs</span>
-                    </div>
-                    <button
-                      onClick={() => setComparisonViewGroupId(isComparisonView ? null : groupId)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-card dark:bg-card hover:bg-muted dark:hover:bg-muted/80 border border-border/60 dark:border-border/40 rounded-full text-xs font-medium text-foreground transition-all duration-200 shadow-sm hover:shadow"
-                      title={isComparisonView ? "Switch to normal view" : "Compare side-by-side"}
-                    >
-                      {isComparisonView ? (
-                        <>
-                          <ArrowsIn className="w-3.5 h-3.5" />
-                          <span>Normal View</span>
-                        </>
-                      ) : (
-                        <>
-                          <ArrowsOut className="w-3.5 h-3.5" />
-                          <span>Compare</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
-                
-                {/* Side-by-Side Comparison View */}
-                {isMultiModel && isComparisonView ? (
-                  <SideBySideComparison
-                    messages={normalizedMessages}
-                    selectedAIs={selectedAIs}
-                    groupId={groupId}
-                    onClose={() => setComparisonViewGroupId(null)}
-                    getAIColor={getAIColor}
-                    getAILogo={getAILogo}
-                  />
-                ) : (
-                  /* Group container */
-                  <div className={`${isMultiModel ? 'bg-muted/60 rounded-xl p-4 space-y-3 border border-border break-words' : 'space-y-3'}`}>
-                  {groupMessages.map((msg, index) => (
-            <motion.div
-              key={msg.id}
-              id={`message-${msg.id}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ 
-                duration: 0.3, 
-                ease: [0.25, 0.46, 0.45, 0.94]
-              }}
-              className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'} items-start gap-3`}
-            >
-              {/* Branch Button - Show on user messages when multiple AIs selected (to create all branches), always show on AI messages */}
-              {msg.isUser ? (
-                // User message - branch button when multiple AIs selected (creates branches for all AI responses)
-                selectedAIs.length > 1 && (
-                <div className="flex items-center gap-2">
-                  {/* Branch count indicator */}
-                  {existingBranchesCount > 0 && (
-                    <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-muted text-xs text-muted-foreground">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="text-muted-foreground">
-                        <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      <span>{existingBranchesCount}</span>
-                    </div>
-                  )}
-                  
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                        console.log('🌿 Branch clicked for user message (multi-mode):', msg.id)
-                      console.log('🌿 onBranchFromMessage function:', onBranchFromMessage)
-                      // Blur any focused input to ensure proper event handling
-                      if (document.activeElement && document.activeElement instanceof HTMLElement) {
-                        document.activeElement.blur()
-                      }
-                      onBranchFromMessage(msg.id, true) // Multi-branch: create branches for all AI models
-                    }}
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                    }}
-                    className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-all duration-200 mt-1 z-10 relative shadow-sm hover:shadow"
-                      title="Create branches for all AI responses"
-                  >
-                    {branchingInProgress.current[msg.id] ? (
-                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    )}
-                  </button>
-                </div>
-                )
-              ) : (
-                // AI message - branch button on right
-                <div className="flex items-start gap-3">
-                  {/* Simple message bubble */}
-                  <div className="max-w-[70%] bg-card rounded-2xl border border-border/80 shadow-sm hover:shadow-md transition-shadow duration-200 px-6 py-4 break-words overflow-wrap-anywhere">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      {/* Model pill for AI messages */}
-                      {msg.aiModel && (
-                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border flex-shrink-0 ${getAIColor(msg.aiModel)}`}>
-                          {getAILogo(msg.aiModel)}
-                          <span>{selectedAIs.find(ai => ai.id === msg.aiModel)?.name || msg.aiModel}</span>
-                        </div>
-                      )}
-                      <span className="text-xs text-muted-foreground flex-shrink-0">
-                        {new Date(msg.timestamp).toLocaleTimeString([], { 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        })}
-                      </span>
-                    </div>
-                    <div className="text-base text-foreground leading-relaxed prose prose-sm max-w-none break-words overflow-wrap-anywhere">
-                      {msg.isStreaming ? (
-                        <div className="space-y-2">
-                          <ReactMarkdown
-                            components={{
-                              p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                              strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-                              em: ({ children }) => <em className="italic text-foreground/90">{children}</em>,
-                              ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
-                              ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
-                              li: ({ children }) => <li className="text-foreground/90">{children}</li>,
-                              h1: ({ children }) => <h1 className="text-xl font-bold text-foreground mb-3">{children}</h1>,
-                              h2: ({ children }) => <h2 className="text-lg font-semibold text-foreground mb-2">{children}</h2>,
-                              h3: ({ children }) => <h3 className="text-base font-semibold text-foreground mb-2">{children}</h3>,
-                              code: ({ children }) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-foreground break-words">{children}</code>,
-                              pre: ({ children }) => <pre className="bg-muted p-3 rounded-lg overflow-x-auto text-sm font-mono text-foreground mb-3 break-words whitespace-pre-wrap">{children}</pre>,
-                              blockquote: ({ children }) => <blockquote className="border-l-4 border-border pl-4 italic text-muted-foreground mb-3">{children}</blockquote>,
-                            }}
-                          >
-                            {msg.streamingText || msg.text}
-                          </ReactMarkdown>
-                          {/* Typing indicator */}
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <div className="flex space-x-1">
-                              <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                              <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                              <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                            </div>
-                            <span className="text-xs ml-2">
-                              {msg.aiModel ? selectedAIs.find(ai => ai.id === msg.aiModel)?.name || msg.aiModel : 'AI'} is thinking...
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <ReactMarkdown
-                          components={{
-                            p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                            strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-                            em: ({ children }) => <em className="italic text-foreground/90">{children}</em>,
-                            ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
-                            ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
-                            li: ({ children }) => <li className="text-foreground/90">{children}</li>,
-                            h1: ({ children }) => <h1 className="text-xl font-bold text-foreground mb-3">{children}</h1>,
-                            h2: ({ children }) => <h2 className="text-lg font-semibold text-foreground mb-2">{children}</h2>,
-                            h3: ({ children }) => <h3 className="text-base font-semibold text-foreground mb-2">{children}</h3>,
-                            code: ({ children }) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-foreground">{children}</code>,
-                            pre: ({ children }) => <pre className="bg-muted p-3 rounded-lg overflow-x-auto text-sm font-mono text-foreground mb-3">{children}</pre>,
-                            blockquote: ({ children }) => <blockquote className="border-l-4 border-border pl-4 italic text-muted-foreground mb-3">{children}</blockquote>,
-                          }}
-                        >
-                          {msg.text}
-                        </ReactMarkdown>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    {/* Branch count indicator */}
-                    {existingBranchesCount > 0 && (
-                      <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-muted text-xs text-muted-foreground">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="text-muted-foreground">
-                          <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                        <span>{existingBranchesCount}</span>
-                      </div>
-                    )}
-                    
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      
-                      // Prevent duplicate clicks
-                      if (branchingInProgress.current[msg.id]) {
-                        console.log('⚠️ Branch creation already in progress for:', msg.id)
-                        return
-                      }
-                      
-                      // Check cache first
-                      if (branchCache.current[msg.id]) {
-                        console.log('📦 Branch already exists in cache:', branchCache.current[msg.id])
-                        // Show warning modal instead of creating duplicate
-                        return
-                      }
-                      
-                      // Set branching in progress
-                      branchingInProgress.current[msg.id] = true
-                      
-                      console.log('🌿 Branch clicked for message:', msg.id)
-                      console.log('🌿 onBranchFromMessage function:', onBranchFromMessage)
-                      
-                      // Blur any focused input to ensure proper event handling
-                      if (document.activeElement && document.activeElement instanceof HTMLElement) {
-                        document.activeElement.blur()
-                      }
-                      
-                      // Call branch creation
-                      onBranchFromMessage(msg.id, false) // Single branch: create branch from this AI message
-                      
-                      // Reset after delay
-                      setTimeout(() => {
-                        branchingInProgress.current[msg.id] = false
-                      }, 2000)
-                    }}
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                    }}
-                    disabled={branchingInProgress.current[msg.id]}
-                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 mt-1 z-10 relative shadow-sm ${
-                      branchingInProgress.current[msg.id]
-                        ? 'bg-muted text-muted-foreground cursor-not-allowed opacity-50'
-                        : 'bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:shadow'
-                    }`}
-                    title={branchingInProgress.current[msg.id] ? 'Creating branch...' : 'Branch from this message'}
-                  >
-                    {branchingInProgress.current[msg.id] ? (
-                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    )}
-                  </button>
-                  </div>
-                </div>
-              )}
-
-               {/* Simple message bubble for user messages */}
-               {msg.isUser && (
-                 <div className="max-w-[85%] bg-card rounded-2xl border border-border shadow-sm px-6 py-4 break-words overflow-wrap-anywhere">
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <span className="text-xs text-muted-foreground flex-shrink-0">
-                      {new Date(msg.timestamp).toLocaleTimeString([], { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      })}
-                    </span>
-                  </div>
-                  <div className="text-base text-foreground leading-relaxed prose prose-sm max-w-none break-words overflow-wrap-anywhere">
-                    <ReactMarkdown
-                      components={{
-                        p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-                        em: ({ children }) => <em className="italic text-foreground/90">{children}</em>,
-                        ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
-                        ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
-                        li: ({ children }) => <li className="text-foreground/90">{children}</li>,
-                        h1: ({ children }) => <h1 className="text-xl font-bold text-foreground mb-3">{children}</h1>,
-                        h2: ({ children }) => <h2 className="text-lg font-semibold text-foreground mb-2">{children}</h2>,
-                        h3: ({ children }) => <h3 className="text-base font-semibold text-foreground mb-2">{children}</h3>,
-                        code: ({ children }) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-foreground">{children}</code>,
-                        pre: ({ children }) => <pre className="bg-muted p-3 rounded-lg overflow-x-auto text-sm font-mono text-foreground mb-3">{children}</pre>,
-                        blockquote: ({ children }) => <blockquote className="border-l-4 border-border pl-4 italic text-muted-foreground mb-3">{children}</blockquote>,
-                      }}
-                    >
-                      {msg.text}
-                    </ReactMarkdown>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          ))}
-                  
-                  {/* Navigation pills and Create Branches button for multi-model groups */}
-                  {isMultiModel && aiModels.length > 1 && (
-                    <div className="space-y-3">
-                      {/* Navigation pills */}
-                      <div className="flex gap-2 items-center justify-center py-3 px-4 bg-muted rounded-lg">
-                        <span className="text-xs text-muted-foreground font-medium">Jump to:</span>
-                        {aiModels.map(ai => (
-                          <motion.button
-                            key={ai.id}
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => handlePillClick(ai.id, groupId)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${ai.color}`}
-                          >
-                            {ai.logo}
-                            <span>{ai.name}</span>
-                          </motion.button>
-                        ))}
-                      </div>
-                      
-                      {/* Create Branches button */}
-                      <div className="flex justify-center">
-                        <motion.button
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={handleCreateBranches}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95"
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M6 3V15M18 9V21M18 9C19.6569 9 21 7.65685 21 6C21 4.34315 19.6569 3 18 3C16.3431 3 15 4.34315 15 6C15 7.65685 16.3431 9 18 9ZM6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15ZM6 15C6 12 6 10 12 10C18 10 18 8 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                          Create Branches for All Models
-                        </motion.button>
-                      </div>
-                    </div>
-                  )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-          {/* Scroll target for auto-scroll */}
-          <div ref={messagesEndRef} />
-          {messages.length === 0 && (
-            <div className="flex items-center justify-center py-12 text-muted-foreground/50">
-              <div className="text-center">
-                <p className="text-sm font-medium">No messages yet</p>
-                <p className="text-xs mt-1">Start a conversation below</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-      {/* Branch Warning Message */}
-      {showBranchWarning && (
-        <motion.div
-          initial={{ opacity: 0, y: 10, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 10, scale: 0.95 }}
-          className="fixed top-4 right-4 z-50 max-w-sm"
-        >
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 shadow-lg">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0">
-                <svg className="w-5 h-5 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <h3 className="text-sm font-medium text-amber-800">
-                  Too Many Branches
-                </h3>
-                <p className="mt-1 text-sm text-amber-700">
-                  {(() => {
-                    const userMessage = messages.find(msg => 
-                      msg.isUser && messages.some(m => m.parentId === msg.id)
-                    )
-                    const aiResponsesCount = userMessage 
-                      ? messages.filter(m => !m.isUser && m.parentId === userMessage.id && m.aiModel).length
-                      : 0
-                    return `You already have ${existingBranchesCount} branches. Creating ${aiResponsesCount} more will clutter the visual space. Consider organizing your conversation first.`
-                  })()}
-                </p>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={() => setShowBranchWarning(false)}
-                    className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 px-3 py-1 rounded-md transition-colors"
-                  >
-                    Got it
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowBranchWarning(false)
-                      // Force create branches anyway
-                      const userMessage = messages.find(msg => 
-                        msg.isUser && messages.some(m => m.parentId === msg.id)
-                      )
-                      if (userMessage) {
-                        onBranchFromMessage(userMessage.id)
-                      }
-                    }}
-                    className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded-md transition-colors"
-                  >
-                    Create Anyway
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Subtle Thinking Indicator with Shine */}
-      {isGenerating && (
-        <motion.div
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          className="flex justify-start mb-4"
-        >
-          <div className="relative flex items-center gap-2 px-4 py-3 rounded-xl bg-muted/80 border border-border/60 shadow-sm focus-within:shadow-md focus-within:border-primary transition-all duration-200">
-            {/* Animated dots */}
-            <div className="flex space-x-1">
-              <motion.div
-                className="w-1.5 h-1.5 bg-muted-foreground rounded-full"
-                animate={{
-                  scale: [1, 1.2, 1],
-                  opacity: [0.5, 1, 0.5]
-                }}
-                transition={{
-                  duration: 1.5,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-              />
-              <motion.div
-                className="w-1.5 h-1.5 bg-muted-foreground rounded-full"
-                animate={{
-                  scale: [1, 1.2, 1],
-                  opacity: [0.5, 1, 0.5]
-                }}
-                transition={{
-                  duration: 1.5,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                  delay: 0.2
-                }}
-              />
-              <motion.div
-                className="w-1.5 h-1.5 bg-muted-foreground rounded-full"
-                animate={{
-                  scale: [1, 1.2, 1],
-                  opacity: [0.5, 1, 0.5]
-                }}
-                transition={{
-                  duration: 1.5,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                  delay: 0.4
-                }}
-              />
-            </div>
-            
-            {/* Thinking text with subtle shine */}
-            <div className="relative overflow-hidden">
-              <span className="text-xs text-muted-foreground font-medium">thinking</span>
-              <motion.div
-                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent"
-                animate={{
-                  x: ['-100%', '200%']
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-              />
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Current Branch Context - Simple */}
-      {currentBranch && (
-        <motion.div 
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              <span className="text-sm text-blue-700">
-                Branching from: {messages.find(m => m.id === currentBranch)?.text.substring(0, 40)}...
-              </span>
-            </div>
-            <button
-              onClick={() => onBranchFromMessage('')}
-              className="w-6 h-6 rounded-full bg-blue-100 hover:bg-blue-200 flex items-center justify-center text-blue-600 hover:text-blue-800 transition-colors duration-150"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Adaptive Input Area - Minimal, Clean Design */}
-      <div className="flex-shrink-0 w-full pt-4 border-t border-border/30">
-        <form onSubmit={handleSubmit} className="w-full">
-          <div className="flex items-end gap-2 bg-card border border-border/40 rounded-lg shadow-sm hover:shadow focus-within:shadow focus-within:border-primary/40 transition-all duration-200 p-3">
-            <textarea
-              ref={textareaRef}
-              value={message}
-              onChange={handleInputChange}
-              placeholder={
-                selectedAIs.length > 1
-                  ? `Ask ${selectedAIs.length} AIs...` 
-                  : "Ask anything..."
-              }
-              className="flex-1 px-3 py-2.5 rounded-md focus:outline-none focus:ring-0 text-sm placeholder-muted-foreground/60 resize-none min-h-[44px] max-h-[160px] bg-transparent w-full transition-all duration-200"
-              style={{ 
-                height: 'auto',
-                minHeight: '44px',
-                maxHeight: '160px',
-                fontSize: '14px',
-                lineHeight: '1.5'
-              }}
-              onInput={(e) => {
-                const target = e.target as HTMLTextAreaElement
-                target.style.height = 'auto'
-                target.style.height = Math.min(target.scrollHeight, 160) + 'px'
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSubmit(e)
-                }
-              }}
-              onFocus={() => {
-                setShouldAutoScroll(true)
-                requestAnimationFrame(() => {
-                  if (messagesContainerRef.current && messages.length > 0) {
-                    const container = messagesContainerRef.current
-                    container.scrollTo({
-                      top: container.scrollHeight,
-                      behavior: 'smooth'
-                    })
-                  }
-                })
-              }}
-            />
-            <div className="flex-shrink-0">
-              <TransformButton 
-                onSend={() => {
-                  if (message.trim()) {
-                    onSendMessage(message)
-                    setMessage('')
-                  }
-                }}
-                onStop={onStopGeneration}
-                isDisabled={!message.trim()}
-                isGenerating={isGenerating}
-              />
-            </div>
-          </div>
-        </form>
-      </div>
     </div>
   )
 }

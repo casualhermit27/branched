@@ -16,139 +16,118 @@ interface AIPillsProps {
   selectedAIs: AI[]
   onAddAI: (ai: AI) => void
   onRemoveAI: (aiId: string) => void
+  onSelectSingle?: (ai: AI) => void
+  showAddButton?: boolean
   getBestAvailableModel?: () => string
 }
 
-const availableAIs: AI[] = [
+export const availableAIs: AI[] = [
   // Functional AIs (with API integration)
-  { 
-    id: 'mistral-large', 
-    name: 'Mistral Large', 
-    color: 'bg-purple-100 text-purple-800 border-purple-200', 
+  {
+    id: 'mistral-large',
+    name: 'Mistral Large',
+    color: 'bg-purple-100 text-purple-800 border-purple-200',
     logo: <img src="/logos/mistral-ai_logo.svg" alt="Mistral" width="16" height="16" />,
     functional: true
   },
-  { 
-    id: 'gemini-2.5-pro', 
-    name: 'Gemini 2.5 Pro', 
-    color: 'bg-blue-100 text-blue-800 border-blue-200', 
+  {
+    id: 'gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro',
+    color: 'bg-blue-100 text-blue-800 border-blue-200',
     logo: <img src="/logos/gemini.svg" alt="Gemini" width="16" height="16" />,
     functional: true
   },
-  
+
   // Non-functional AIs (greyed out but visible)
-  { 
-    id: 'gpt-4', 
-    name: 'GPT-4', 
-    color: 'bg-gray-100 text-gray-500 border-gray-200', 
+  {
+    id: 'gpt-4',
+    name: 'GPT-4',
+    color: 'bg-gray-100 text-gray-500 border-gray-200',
     logo: <img src="/logos/openai.svg" alt="OpenAI" width="16" height="16" />,
     functional: false
   },
-  { 
-    id: 'gpt-4o', 
-    name: 'GPT-4o', 
-    color: 'bg-gray-100 text-gray-500 border-gray-200', 
+  {
+    id: 'gpt-4o',
+    name: 'GPT-4o',
+    color: 'bg-gray-100 text-gray-500 border-gray-200',
     logo: <img src="/logos/openai.svg" alt="OpenAI" width="16" height="16" />,
     functional: false
   },
-  { 
-    id: 'claude-3-5-sonnet', 
-    name: 'Claude 3.5 Sonnet', 
-    color: 'bg-gray-100 text-gray-500 border-gray-200', 
+  {
+    id: 'claude-3-5-sonnet',
+    name: 'Claude 3.5 Sonnet',
+    color: 'bg-gray-100 text-gray-500 border-gray-200',
     logo: <img src="/logos/claude-ai-icon.svg" alt="Claude" width="16" height="16" />,
     functional: false
   },
-  { 
-    id: 'claude-3-opus', 
-    name: 'Claude 3 Opus', 
-    color: 'bg-gray-100 text-gray-500 border-gray-200', 
+  {
+    id: 'claude-3-opus',
+    name: 'Claude 3 Opus',
+    color: 'bg-gray-100 text-gray-500 border-gray-200',
     logo: <img src="/logos/claude-ai-icon.svg" alt="Claude" width="16" height="16" />,
     functional: false
   },
-  { 
-    id: 'grok-2', 
-    name: 'Grok-2', 
-    color: 'bg-gray-100 text-gray-500 border-gray-200', 
+  {
+    id: 'grok-2',
+    name: 'Grok-2',
+    color: 'bg-gray-100 text-gray-500 border-gray-200',
     logo: <img src="/logos/xai_light.svg" alt="Grok" width="16" height="16" />,
     functional: false
   },
-  { 
-    id: 'perplexity-pro', 
-    name: 'Perplexity Pro', 
-    color: 'bg-gray-100 text-gray-500 border-gray-200', 
-    logo: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>,
+  {
+    id: 'perplexity-pro',
+    name: 'Perplexity Pro',
+    color: 'bg-gray-100 text-gray-500 border-gray-200',
+    logo: <img src="/logos/perplexity.svg" alt="Perplexity" width="16" height="16" />,
     functional: false
   },
-  { 
-    id: 'llama-3-1', 
-    name: 'LLaMA 3.1', 
-    color: 'bg-gray-100 text-gray-500 border-gray-200', 
+  {
+    id: 'llama-3-1',
+    name: 'LLaMA 3.1',
+    color: 'bg-gray-100 text-gray-500 border-gray-200',
     logo: <img src="/logos/ollama_light.svg" alt="LLaMA" width="16" height="16" />,
     functional: false
   },
-  { 
-    id: 'cohere-command', 
-    name: 'Cohere Command', 
-    color: 'bg-gray-100 text-gray-500 border-gray-200', 
-    logo: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>,
+  {
+    id: 'cohere-command',
+    name: 'Cohere Command',
+    color: 'bg-gray-100 text-gray-500 border-gray-200',
+    logo: <img src="/logos/cohere.svg" alt="Cohere" width="16" height="16" />,
     functional: false
   },
-  { 
-    id: 'pi', 
-    name: 'Pi', 
-    color: 'bg-teal-100 text-teal-800 border-teal-200', 
-    logo: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><text x="12" y="16" textAnchor="middle" fontSize="12" fontWeight="bold">π</text></svg>
+  {
+    id: 'pi',
+    name: 'Pi',
+    color: 'bg-teal-100 text-teal-800 border-teal-200',
+    logo: <img src="/logos/pi.svg" alt="Pi" width="16" height="16" />
   },
-  { 
-    id: 'o1-preview', 
-    name: 'o1 Preview', 
-    color: 'bg-violet-100 text-violet-800 border-violet-200', 
+  {
+    id: 'o1-preview',
+    name: 'o1 Preview',
+    color: 'bg-violet-100 text-violet-800 border-violet-200',
     logo: <img src="/logos/openai.svg" alt="OpenAI" width="16" height="16" />
   },
-  { 
-    id: 'deepseek-v2', 
-    name: 'DeepSeek V2', 
-    color: 'bg-slate-100 text-slate-800 border-slate-200', 
-    logo: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+  {
+    id: 'deepseek-v2',
+    name: 'DeepSeek V2',
+    color: 'bg-slate-100 text-slate-800 border-slate-200',
+    logo: <img src="/logos/deepseek.svg" alt="DeepSeek" width="16" height="16" />
   },
-  { 
-    id: 'qwen-max', 
-    name: 'Qwen Max', 
-    color: 'bg-rose-100 text-rose-800 border-rose-200', 
-    logo: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+  {
+    id: 'qwen-max',
+    name: 'Qwen Max',
+    color: 'bg-rose-100 text-rose-800 border-rose-200',
+    logo: <img src="/logos/qwen.svg" alt="Qwen" width="16" height="16" />
   },
 ]
 
 // Add "Best" as the first option
-const allAIOptions: AI[] = [
+export const allAIOptions: AI[] = [
   {
     id: 'best',
     name: 'Best',
-    color: 'bg-gradient-to-r from-purple-100 via-indigo-100 to-blue-100 text-purple-800 border-purple-300 dark:from-purple-900/30 dark:via-indigo-900/30 dark:to-blue-900/30 dark:text-purple-300 dark:border-purple-700',
-    logo: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-sm">
-        <defs>
-          <linearGradient id="bestGradientPill" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#8B5CF6" />
-            <stop offset="50%" stopColor="#6366F1" />
-            <stop offset="100%" stopColor="#3B82F6" />
-          </linearGradient>
-        </defs>
-        {/* Star shape - represents "best" */}
-        <path 
-          d="M12 2L14.5 8.5L21 9.5L16 14L17.5 20.5L12 17L6.5 20.5L8 14L3 9.5L9.5 8.5L12 2Z" 
-          fill="url(#bestGradientPill)" 
-          opacity="0.9"
-          className="drop-shadow-sm"
-        />
-        {/* Inner highlight */}
-        <path 
-          d="M12 5L13.5 9L17 9.5L14 12L14.5 15.5L12 13.5L9.5 15.5L10 12L7 9.5L10.5 9L12 5Z" 
-          fill="white" 
-          opacity="0.3"
-        />
-      </svg>
-    )
+    color: 'bg-purple-100 text-purple-800 border-purple-200',
+    logo: <img src="/logos/best-ai-simple.svg" alt="Best" width="16" height="16" />
   },
   ...availableAIs
 ]
@@ -185,7 +164,7 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
     if (!ai.functional) {
       return
     }
-    
+
     // Edge case: Maximum AI limit reached
     if (selectedAIs.length >= MAX_AIS) {
       console.warn(`⚠️ Maximum ${MAX_AIS} AI models allowed`)
@@ -194,13 +173,13 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
     onAddAI(ai)
     setShowDropdown(false)
   }
-  
+
   const selectAI = (ai: AI) => {
     // Only allow selection of functional AIs
     if (!ai.functional) {
       return
     }
-    
+
     if (onSelectSingle) {
       onSelectSingle(ai)
     }
@@ -213,27 +192,29 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
       {/* Selected AI Pills - Top Left */}
       <div className="flex flex-wrap gap-2 justify-start">
         <AnimatePresence>
-          {selectedAIs.map((ai) => (
-            <motion.div
-              key={ai.id}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-2 border transition-all duration-200 shadow-sm hover:shadow-md ${ai.color}`}
-              style={{ borderRadius: '16px' }}
-            >
-              {ai.logo}
-              <span className="font-medium">{getAIDisplayName(ai)}</span>
-              <button
-                onClick={() => onRemoveAI(ai.id)}
-                className="hover:bg-black/10 rounded-full p-1 transition-all duration-150 active:scale-90 ml-1"
+          {selectedAIs.map((ai) => {
+            const freshAI = allAIOptions.find(option => option.id === ai.id) || ai
+            return (
+              <motion.div
+                key={ai.id}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 border transition-all duration-200 shadow-sm hover:shadow-md ${freshAI.color}`}
               >
-                <X size={12} />
-              </button>
-            </motion.div>
-          ))}
+                {freshAI.logo}
+                <span className="font-medium">{getAIDisplayName(ai)}</span>
+                <button
+                  onClick={() => onRemoveAI(ai.id)}
+                  className="hover:bg-black/10 rounded-full p-1 transition-all duration-150 active:scale-90 ml-1"
+                >
+                  <X size={12} />
+                </button>
+              </motion.div>
+            )
+          })}
         </AnimatePresence>
-        
+
         {/* Add AI Button - Inline with pills (only show if showAddButton is true) */}
         {showAddButton && (
           <div className="flex items-center gap-2">
@@ -242,24 +223,23 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
               whileTap={{ scale: selectedAIs.length < MAX_AIS ? 0.98 : 1 }}
               onClick={() => selectedAIs.length < MAX_AIS && setShowDropdown(!showDropdown)}
               disabled={selectedAIs.length >= MAX_AIS}
-              className={`px-3 py-1.5 bg-card border rounded-lg flex items-center gap-2 transition-all duration-200 ${
-                selectedAIs.length >= MAX_AIS
-                  ? 'border-border/30 text-muted-foreground/40 cursor-not-allowed'
-                  : 'border-border/40 text-foreground hover:bg-muted/50 hover:border-border/60 active:scale-95 shadow-sm hover:shadow'
-              }`}
+              className={`px-3 py-1.5 bg-card border rounded-full flex items-center gap-2 transition-all duration-200 ${selectedAIs.length >= MAX_AIS
+                ? 'border-border/30 text-muted-foreground/40 cursor-not-allowed'
+                : 'border-border/40 text-foreground hover:bg-muted/50 hover:border-border/60 active:scale-95 shadow-sm hover:shadow'
+                }`}
             >
               <Plus size={13} />
               <span className="text-xs font-medium">Add AI</span>
-              <motion.svg 
-                width="11" 
-                height="11" 
-                viewBox="0 0 24 24" 
-                fill="none" 
+              <motion.svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
                 className="ml-0.5 text-muted-foreground"
                 animate={{ rotate: showDropdown ? 180 : 0 }}
                 transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
               >
-                <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </motion.svg>
             </motion.button>
             {selectedAIs.length >= MAX_AIS && (
@@ -287,12 +267,12 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
               initial={{ opacity: 0, scale: 0.96, y: -4 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: -4 }}
-              transition={{ 
+              transition={{
                 duration: 0.2,
                 ease: [0.4, 0, 0.2, 1]
               }}
               className="absolute top-full left-0 mt-1.5 bg-card border border-border/50 shadow-[0_4px_16px_rgba(0,0,0,0.08)] z-50 min-w-[220px] max-h-[360px] overflow-y-auto rounded-lg backdrop-blur-xl"
-              style={{ 
+              style={{
                 scrollbarWidth: 'thin',
                 scrollbarColor: 'hsl(var(--muted-foreground) / 0.3) hsl(var(--muted))'
               }}
@@ -308,20 +288,18 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
                       transition={{ delay: index * 0.02, duration: 0.15 }}
                       onClick={() => addAI(ai)}
                       disabled={!ai.functional}
-                      className={`w-full text-left px-3 py-2.5 transition-all duration-150 flex items-center gap-3 rounded-md ${
-                        !ai.functional 
-                          ? 'opacity-40 cursor-not-allowed' 
-                          : 'hover:bg-muted/60 cursor-pointer active:scale-[0.98]'
-                      }`}
+                      className={`w-full text-left px-3 py-2.5 transition-all duration-150 flex items-center gap-3 rounded-md ${!ai.functional
+                        ? 'opacity-40 cursor-not-allowed'
+                        : 'hover:bg-muted/60 cursor-pointer active:scale-[0.98]'
+                        }`}
                     >
                       <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 opacity-90">
                         {ai.logo}
                       </span>
-                      <span className={`text-sm font-medium ${
-                        !ai.functional 
-                          ? 'text-muted-foreground/50' 
-                          : 'text-foreground/90'
-                      }`}>
+                      <span className={`text-sm font-medium ${!ai.functional
+                        ? 'text-muted-foreground/50'
+                        : 'text-foreground/90'
+                        }`}>
                         {getAIDisplayName(ai)}
                         {!ai.functional && (
                           <span className="ml-1.5 text-xs text-muted-foreground/60">(Coming Soon)</span>
