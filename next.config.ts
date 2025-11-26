@@ -7,11 +7,16 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  turbopack: {
+    root: __dirname,
+  },
   // Remove console.log statements in production builds (keeps console.error and console.warn)
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production' ? {
-      exclude: ['error', 'warn'], // Keep console.error and console.warn for debugging
-    } : false,
+    removeConsole: process.env.NODE_ENV === 'production'
+      ? {
+          exclude: ['error', 'warn'], // Keep console.error and console.warn for debugging
+        }
+      : false,
   },
 };
 

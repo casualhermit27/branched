@@ -61,7 +61,7 @@ export function SideBySideComparison({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-muted dark:hover:bg-muted/80 transition-colors"
+            className="p-1.5 rounded-full hover:bg-muted dark:hover:bg-muted/80 transition-colors"
             title="Close comparison view"
           >
             <X className="w-4 h-4 text-muted-foreground" />
@@ -70,9 +70,9 @@ export function SideBySideComparison({
 
         {/* User Message */}
         {userMessage && (
-          <div className="mb-4 px-2">
-            <div className="inline-block max-w-3xl px-4 py-3 rounded-xl bg-primary/10 dark:bg-primary/20 border border-primary/20 dark:border-primary/30">
-              <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+          <div className="mb-6 flex justify-center">
+            <div className="inline-block max-w-3xl px-6 py-3 rounded-[1.5rem] bg-primary/10 text-foreground shadow-sm">
+              <p className="text-sm font-medium whitespace-pre-wrap break-words leading-relaxed">
                 {userMessage.text}
               </p>
             </div>
@@ -80,13 +80,12 @@ export function SideBySideComparison({
         )}
 
         {/* Side-by-Side Comparison Grid */}
-        <div className={`grid gap-4 ${
-          groupMessages.length === 2 
-            ? 'grid-cols-1 md:grid-cols-2' 
+        <div className={`grid gap-4 ${groupMessages.length === 2
+            ? 'grid-cols-1 md:grid-cols-2'
             : groupMessages.length === 3
-            ? 'grid-cols-1 md:grid-cols-3'
-            : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-        }`}>
+              ? 'grid-cols-1 md:grid-cols-3'
+              : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+          }`}>
           {groupMessages.map((msg, index) => {
             const ai = selectedAIs.find(a => a.id === msg.aiModel)
             const aiColor = getAIColor(msg.aiModel || '')
@@ -100,74 +99,74 @@ export function SideBySideComparison({
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: index * 0.1 }}
-                className="flex flex-col border rounded-xl bg-card dark:bg-card shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+                className="flex flex-col border border-border/20 rounded-2xl bg-card/30 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
               >
                 {/* AI Header */}
-                <div className={`px-4 py-3 border-b ${aiColor} flex items-center gap-2`}>
+                <div className={`px-4 py-3 border-b border-border/10 ${aiColor.replace('border', '')} bg-opacity-5 flex items-center gap-2`}>
                   {aiLogo && (
-                    <div className="flex-shrink-0">
+                    <div className="flex-shrink-0 scale-90">
                       {aiLogo}
                     </div>
                   )}
-                  <span className="font-semibold text-sm flex-1 truncate">
+                  <span className="font-semibold text-sm flex-1 truncate opacity-90">
                     {ai?.name || msg.aiModel || 'AI'}
                   </span>
                   {msg.isStreaming && (
                     <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-                      <span className="text-xs text-muted-foreground">Streaming...</span>
+                      <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse" />
+                      <span className="text-[10px] uppercase font-medium text-muted-foreground tracking-wide">Streaming</span>
                     </div>
                   )}
                 </div>
 
                 {/* Message Content */}
-                <div className="flex-1 p-4 min-h-[200px] max-h-[600px] overflow-y-auto">
+                <div className="flex-1 p-5 min-h-[200px] max-h-[600px] overflow-y-auto">
                   {displayText ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                    <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed">
                       <ReactMarkdown
                         components={{
-                          p: ({ children }) => <p className="mb-3 last:mb-0 text-foreground leading-relaxed">{children}</p>,
+                          p: ({ children }) => <p className="mb-3 last:mb-0 text-foreground/90">{children}</p>,
                           ul: ({ children }) => <ul className="mb-3 last:mb-0 space-y-1 ml-4">{children}</ul>,
                           ol: ({ children }) => <ol className="mb-3 last:mb-0 space-y-1 ml-4">{children}</ol>,
-                          li: ({ children }) => <li className="text-foreground">{children}</li>,
+                          li: ({ children }) => <li className="text-foreground/90">{children}</li>,
                           code: ({ children }) => (
-                            <code className="px-1.5 py-0.5 rounded bg-muted dark:bg-muted/80 text-foreground text-xs font-mono">
+                            <code className="px-1.5 py-0.5 rounded bg-muted/50 text-foreground text-xs font-mono border border-border/30">
                               {children}
                             </code>
                           ),
                           pre: ({ children }) => (
-                            <pre className="p-3 rounded-lg bg-muted dark:bg-muted/80 overflow-x-auto mb-3 last:mb-0">
+                            <pre className="p-3 rounded-xl bg-muted/50 overflow-x-auto mb-3 last:mb-0 border border-border/30">
                               {children}
                             </pre>
                           ),
                           blockquote: ({ children }) => (
-                            <blockquote className="border-l-4 border-primary/30 pl-4 italic text-muted-foreground mb-3 last:mb-0">
+                            <blockquote className="border-l-2 border-primary/30 pl-4 italic text-muted-foreground mb-3 last:mb-0">
                               {children}
                             </blockquote>
                           ),
-                          h1: ({ children }) => <h1 className="text-xl font-bold mb-2 text-foreground">{children}</h1>,
-                          h2: ({ children }) => <h2 className="text-lg font-semibold mb-2 text-foreground">{children}</h2>,
-                          h3: ({ children }) => <h3 className="text-base font-semibold mb-2 text-foreground">{children}</h3>,
+                          h1: ({ children }) => <h1 className="text-lg font-bold mb-2 text-foreground">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-semibold mb-2 text-foreground">{children}</h3>,
                         }}
                       >
                         {displayText}
                       </ReactMarkdown>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                    <div className="flex items-center justify-center h-full text-muted-foreground/50 text-sm italic">
                       {msg.isStreaming ? 'Waiting for response...' : 'No response yet'}
                     </div>
                   )}
                 </div>
 
                 {/* Footer */}
-                <div className="px-4 py-2 border-t bg-muted/30 dark:bg-muted/20 flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(msg.timestamp).toLocaleTimeString()}
+                <div className="px-4 py-2 border-t border-border/10 bg-muted/10 flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground/60 font-medium">
+                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                   {isComplete && (
-                    <span className="text-xs text-muted-foreground">
-                      {displayText.length} characters
+                    <span className="text-[10px] text-muted-foreground/60 font-medium">
+                      {displayText.length} chars
                     </span>
                   )}
                 </div>
@@ -179,4 +178,3 @@ export function SideBySideComparison({
     </AnimatePresence>
   )
 }
-

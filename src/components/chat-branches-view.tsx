@@ -46,7 +46,7 @@ interface ChatBranchesViewProps {
   onAddAI: (ai: AI) => void
   onRemoveAI: (aiId: string) => void
   onSelectSingle: (ai: AI) => void
-  getBestAvailableModel: () => AI
+  getBestAvailableModel: () => string
   onSendMessage: (text: string, branchId?: string) => void
   onBranchFromMessage: (messageId: string, isMultiBranch?: boolean) => void
   isGenerating: boolean

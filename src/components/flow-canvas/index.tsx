@@ -11,7 +11,9 @@ import ReactFlow, {
 	OnEdgesChange,
 	type Node as ReactFlowNode,
 	type Edge as ReactFlowEdge,
-	type BackgroundVariant
+	type BackgroundVariant,
+	applyNodeChanges,
+	applyEdgeChanges
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import ChatNode from '../chat-node'
@@ -35,6 +37,7 @@ import { GroupedBranchesContainer } from './grouped-branches-container'
 import { BranchLinkModal, type LinkType } from '../branch-link-modal'
 import { BranchCompareViewer } from '../branch-compare-viewer'
 import type { ComparisonResult } from '@/services/branch-comparator'
+
 
 const nodeTypes: NodeTypes = {
 	chatNode: ChatNode
@@ -65,6 +68,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		onMaximizeAllRef,
 		onAllNodesMinimizedChange,
 		onSelectionChange,
+		onMessageSelectionChange,
 		conversationId
 	} = props
 
@@ -93,7 +97,10 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		getBranchAIs,
 		branchSelectedAIs,
 		setAbortController,
-		abortGeneration
+		abortGeneration,
+		selectedMessageIds,
+		toggleMessageSelection,
+		clearMessageSelection
 	} = state
 
 	// Track initialization to prevent multiple triggers
@@ -103,11 +110,220 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	const restoreFocusBranchIdRef = useRef<string | null>(null)
 
 	// Branch link and compare state
+	const [isReady, setIsReady] = useState(false)
 	const [linkModalOpen, setLinkModalOpen] = useState(false)
 	const [linkSourceBranchId, setLinkSourceBranchId] = useState<string | null>(null)
 	const [compareModalOpen, setCompareModalOpen] = useState(false)
 	const [compareBranchId, setCompareBranchId] = useState<string | null>(null)
 	const [comparisonResult, setComparisonResult] = useState<ComparisonResult | null>(null)
+
+
+	// ============================================
+	// BRANCH MANAGEMENT HOOKS & HANDLERS
+	// ============================================
+
+	const handleSendMessageRef = useRef<
+		((nodeId: string, message: string) => Promise<void>) | undefined
+	>(undefined)
+
+	const handleBranchAddAI = useCallback(
+		(nodeId: string, ai: AI) => {
+			const currentAIs = getBranchAIs(nodeId, selectedAIs)
+			if (!currentAIs.some((a) => a.id === ai.id)) {
+				setBranchAIs(nodeId, [...currentAIs, ai])
+			}
+		},
+		[getBranchAIs, selectedAIs, setBranchAIs]
+	)
+
+	const handleBranchRemoveAI = useCallback(
+		(nodeId: string, aiId: string) => {
+			const currentAIs = getBranchAIs(nodeId, selectedAIs)
+			setBranchAIs(
+				nodeId,
+				currentAIs.filter((a) => a.id !== aiId)
+			)
+		},
+		[getBranchAIs, selectedAIs, setBranchAIs]
+	)
+
+	const handleBranchSelectSingle = useCallback(
+		(nodeId: string, aiId: string) => {
+			const ai = selectedAIs.find((a) => a.id === aiId)
+			if (ai) {
+				setBranchAIs(nodeId, [ai])
+			}
+		},
+		[selectedAIs, setBranchAIs]
+	)
+
+	const fitViewportToNodes = useCallback(
+		(nodeIds: string[], padding = 0.2, useZoomAnimation = true) => {
+			if (!reactFlowInstance) return
+
+			// If focusing on a single node with animation, use our smooth custom transition
+			// This prevents the "zoom out then zoom in" bounce effect of fitView
+			if (nodeIds.length === 1 && useZoomAnimation) {
+				focusOnBranchWithZoom(reactFlowInstance, nodeIds[0], nodes, padding, 1.1)
+				return
+			}
+
+			reactFlowInstance.fitView({
+				nodes: nodeIds.map((id) => ({ id })),
+				padding,
+				duration: useZoomAnimation ? 800 : 0
+			})
+		},
+		[reactFlowInstance, nodes]
+	)
+
+	const getLayoutedElementsWrapper = useCallback(
+		(nodes: any[], edges: any[], direction?: string) => {
+			return getLayoutedElements(nodes, edges, { direction: direction as 'TB' | 'LR' })
+		},
+		[]
+	)
+
+	const handleDeleteBranch = useCallback(
+		(branchId: string) => {
+			if (branchId === 'main') return
+
+			setNodes((prevNodes) => {
+				const nodeToDelete = prevNodes.find((n) => n.id === branchId)
+				if (!nodeToDelete) return prevNodes
+
+				// Recursively find all children
+				const findChildren = (parentId: string): string[] => {
+					const children = prevNodes.filter((n) => n.data?.parentId === parentId)
+					return [
+						...children.map((c) => c.id),
+						...children.flatMap((c) => findChildren(c.id))
+					]
+				}
+
+				const childrenIds = findChildren(branchId)
+				const idsToDelete = new Set([branchId, ...childrenIds])
+
+				const updatedNodes = prevNodes.filter((n) => !idsToDelete.has(n.id))
+
+				if (onNodesUpdate) {
+					onNodesUpdate(updatedNodes)
+				}
+
+				return updatedNodes
+			})
+
+			setEdges((prevEdges) => {
+				const updatedEdges = prevEdges.filter(
+					(e) => e.source !== branchId && e.target !== branchId
+				)
+				return updatedEdges
+			})
+
+			// Remove from stores
+			branchStore.delete(branchId)
+		},
+		[setNodes, setEdges, onNodesUpdate]
+	)
+
+	const handleLinkBranch = useCallback((branchId: string) => {
+		setLinkSourceBranchId(branchId)
+		setLinkModalOpen(true)
+	}, [])
+
+	const handleCreateLink = useCallback(
+		(params: {
+			sourceBranchId: string
+			targetBranchId: string
+			linkType: LinkType
+			description?: string
+			weight?: number
+		}) => {
+			const { targetBranchId, linkType } = params
+			if (!linkSourceBranchId || !targetBranchId) return
+
+			const newEdge = createEdge(linkSourceBranchId, targetBranchId, {
+				animated: true,
+				style: { stroke: '#f59e0b', strokeWidth: 2, strokeDasharray: '5 5' }
+			})
+
+			const labelMap: Record<LinkType, string> = {
+				merge: 'Merge',
+				reference: 'Reference',
+				continuation: 'Continuation',
+				alternative: 'Alternative'
+			}
+
+			const edgeWithData = {
+				...newEdge,
+				label: labelMap[linkType],
+				data: { linkType }
+			}
+
+			setEdges((prev) => [...prev, edgeWithData])
+			setLinkModalOpen(false)
+			setLinkSourceBranchId(null)
+		},
+		[linkSourceBranchId, setEdges]
+	)
+
+	const handleCompareBranch = useCallback(
+		async (branchId: string) => {
+			if (!conversationId) {
+				console.error('No conversation ID available')
+				return
+			}
+
+			try {
+				const response = await fetch('/api/branches/compare', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						branchIds: ['main', branchId],
+						conversationId,
+						includeSummary: true
+					})
+				})
+
+				if (!response.ok) {
+					const error = await response.json()
+					throw new Error(error.error || 'Failed to compare branches')
+				}
+
+				const data = await response.json()
+				setComparisonResult(data.comparison)
+				setCompareModalOpen(true)
+			} catch (error) {
+				console.error('Error comparing branches:', error)
+				alert(error instanceof Error ? error.message : 'Failed to compare branches')
+			}
+		},
+		[conversationId]
+	)
+
+	const { handleBranch } = useBranchManagement({
+		nodesRef,
+		edgesRef,
+		setNodes,
+		setEdges,
+		selectedAIs,
+		mainMessages,
+		onNodesUpdate,
+		onBranchWarning,
+		onNodeDoubleClick,
+		handleBranchAddAI,
+		handleBranchRemoveAI,
+		handleBranchSelectSingle,
+		getBestAvailableModel,
+		validateNodePositions,
+		getLayoutedElements: getLayoutedElementsWrapper,
+		fitViewportToNodes,
+		handleSendMessageRef,
+		minimizedNodes,
+		activeNodeId,
+		toggleNodeMinimize,
+		onDeleteBranch: handleDeleteBranch
+	})
 
 	// ============================================
 	// HANDLERS (Stable References with useCallback)
@@ -261,13 +477,18 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 						setNodes((prev) => {
 							const updated = prev.map((n) => {
 								if (n.id === nodeId) {
+									const currentMessages = n.data.messages || []
+									const messageExists = currentMessages.some((msg: Message) => msg.id === streamingMessageId)
+
+									const newMessages = messageExists
+										? currentMessages.map((msg: Message) => msg.id === streamingMessageId ? finalizedMessage : msg)
+										: [...currentMessages, finalizedMessage]
+
 									return {
 										...n,
 										data: {
 											...n.data,
-											messages: (n.data.messages || []).map((msg: Message) =>
-												msg.id === streamingMessageId ? finalizedMessage : msg
-											)
+											messages: newMessages
 										}
 									}
 								}
@@ -373,207 +594,10 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		]
 	)
 
-	const handleDeleteBranch = useCallback(
-		(nodeId: string) => {
-			abortGeneration(nodeId)
-
-			setNodes((prev) => prev.filter((n) => n.id !== nodeId))
-			setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId))
-
-			setBranchAIs(nodeId, [])
-
-			if (onNodesUpdate) {
-				const updatedNodes = nodes.filter((n) => n.id !== nodeId)
-				onNodesUpdate(updatedNodes)
-			}
-		},
-		[abortGeneration, setNodes, setEdges, setBranchAIs, nodes, onNodesUpdate]
-	)
-
-	// ============================================
-	// BRANCH MANAGEMENT
-	// ============================================
-
-	const handleSendMessageRef = useRef<
-		((nodeId: string, message: string) => Promise<void>) | undefined
-	>(undefined)
-	handleSendMessageRef.current = handleSendBranchMessage
-
-	const branchManagement = useBranchManagement({
-		nodesRef,
-		edgesRef,
-		setNodes,
-		setEdges,
-		selectedAIs,
-		mainMessages,
-		onNodesUpdate,
-		onBranchWarning,
-		onNodeDoubleClick,
-		handleBranchAddAI: (nodeId, ai) => {
-			const currentAIs = getBranchAIs(nodeId, selectedAIs)
-			if (!currentAIs.find((a) => a.id === ai.id)) {
-				setBranchAIs(nodeId, [...currentAIs, ai])
-			}
-		},
-		handleBranchRemoveAI: (nodeId, aiId) => {
-			const currentAIs = getBranchAIs(nodeId, selectedAIs)
-			setBranchAIs(nodeId, currentAIs.filter((a) => a.id !== aiId))
-		},
-		handleBranchSelectSingle: (nodeId, aiId) => {
-			const ai = selectedAIs.find((a) => a.id === aiId)
-			if (ai) {
-				setBranchAIs(nodeId, [ai])
-			}
-		},
-		getBestAvailableModel,
-		validateNodePositions,
-		getLayoutedElements: (nodes: any[], edges: any[]) => {
-			return getLayoutedElements(nodes, edges)
-		},
-		fitViewportToNodes: (nodeIds, padding, useZoomAnimation = false) => {
-			if (reactFlowInstance && nodeIds.length > 0) {
-				// Use getNodes() to ensure we have the latest nodes state
-				// This is critical when called immediately after adding nodes (like in branch creation)
-				const currentNodes = reactFlowInstance.getNodes()
-				const existingNodes = currentNodes.filter(n => nodeIds.includes(n.id))
-
-				if (existingNodes.length === nodeIds.length) {
-					// Use enhanced zoom animation for branch creation
-					if (useZoomAnimation && nodeIds.length === 1 && nodeIds[0] !== 'main') {
-						// Use 0.8x zoom as requested for "little zoomed out" view
-						focusOnBranchWithZoom(reactFlowInstance, nodeIds[0], currentNodes, padding, 0.8)
-					} else {
-						const viewport = calculateViewportFit(currentNodes, nodeIds, padding)
-						reactFlowInstance.setViewport(viewport, { duration: 500 })
-					}
-
-					// Set active node to the LAST node (most recent/latest active branch)
-					// This ensures the latest branch is centered and active
-					if (nodeIds.length > 0) {
-						const lastNodeId = nodeIds[nodeIds.length - 1]
-						if (lastNodeId !== 'main') {
-							setTimeout(() => {
-								setNodeActive(lastNodeId)
-							}, 200)
-						}
-					}
-				} else {
-					// If nodes don't exist yet, wait a bit and try again
-					setTimeout(() => {
-						const freshNodes = reactFlowInstance.getNodes()
-						const retryNodes = freshNodes.filter(n => nodeIds.includes(n.id))
-						if (retryNodes.length === nodeIds.length) {
-							// Use enhanced zoom animation for branch creation
-							if (useZoomAnimation && nodeIds.length === 1 && nodeIds[0] !== 'main') {
-								focusOnBranchWithZoom(reactFlowInstance, nodeIds[0], nodes, padding, 1.15)
-							} else {
-								const viewport = calculateViewportFit(nodes, nodeIds, padding)
-								reactFlowInstance.setViewport(viewport, { duration: 500 })
-							}
-							// Set active node to the LAST node (most recent/latest active branch)
-							if (nodeIds.length > 0) {
-								const lastNodeId = nodeIds[nodeIds.length - 1]
-								if (lastNodeId !== 'main') {
-									setTimeout(() => {
-										setNodeActive(lastNodeId)
-									}, 200)
-								}
-							}
-						}
-					}, 200)
-				}
-			}
-		},
-		handleSendMessageRef,
-		minimizedNodes,
-		activeNodeId,
-		toggleNodeMinimize,
-		onDeleteBranch: handleDeleteBranch
-	})
-
-	const { handleBranch } = branchManagement
-
-	// ============================================
-	// BRANCH LINK & COMPARE HANDLERS
-	// ============================================
-
-	const handleLinkBranch = useCallback((branchId: string) => {
-		setLinkSourceBranchId(branchId)
-		setLinkModalOpen(true)
-	}, [])
-
-	const handleCreateLink = useCallback(async (params: {
-		sourceBranchId: string
-		targetBranchId: string
-		linkType: LinkType
-		description?: string
-		weight?: number
-	}) => {
-		if (!conversationId) {
-			console.error('No conversation ID available')
-			return
-		}
-
-		try {
-			const response = await fetch('/api/branches/links/create', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					...params,
-					conversationId
-				})
-			})
-
-			if (!response.ok) {
-				const error = await response.json()
-				throw new Error(error.error || 'Failed to create link')
-			}
-
-			const link = await response.json()
-			console.log('✅ Branch link created:', link)
-			setLinkModalOpen(false)
-			setLinkSourceBranchId(null)
-
-			// Refresh nodes to show the link
-			// TODO: Update nodes to show link visualization
-		} catch (error) {
-			console.error('Error creating branch link:', error)
-			alert(error instanceof Error ? error.message : 'Failed to create link')
-		}
-	}, [conversationId])
-
-	const handleCompareBranch = useCallback(async (branchId: string) => {
-		if (!conversationId) {
-			console.error('No conversation ID available')
-			return
-		}
-
-		// For now, compare with main branch
-		// TODO: Add UI to select which branch to compare with
-		try {
-			const response = await fetch('/api/branches/compare', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					branchIds: ['main', branchId],
-					conversationId,
-					includeSummary: true
-				})
-			})
-
-			if (!response.ok) {
-				const error = await response.json()
-				throw new Error(error.error || 'Failed to compare branches')
-			}
-
-			const data = await response.json()
-			setComparisonResult(data.comparison)
-			setCompareModalOpen(true)
-		} catch (error) {
-			console.error('Error comparing branches:', error)
-			alert(error instanceof Error ? error.message : 'Failed to compare branches')
-		}
-	}, [conversationId])
+	// Update ref for hook usage
+	useEffect(() => {
+		handleSendMessageRef.current = handleSendBranchMessage
+	}, [handleSendBranchMessage])
 
 	const handleGenerateSummary = useCallback(async (): Promise<string> => {
 		if (!comparisonResult || !conversationId) {
@@ -602,6 +626,35 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			return 'Failed to generate summary'
 		}
 	}, [comparisonResult, conversationId])
+
+	// ============================================
+	// MESSAGE SELECTION HANDLER
+	// ============================================
+
+	const handleMessageSelect = useCallback((messageId: string, isMulti: boolean) => {
+		// If multi-select (Ctrl/Cmd click)
+		if (isMulti) {
+			const currentSelected = Array.from(state.selectedMessageIds)
+
+			// If already selected, toggle it off (remove it)
+			if (state.selectedMessageIds.has(messageId)) {
+				state.toggleMessageSelection(messageId, true)
+				return
+			}
+
+			// If trying to select more messages
+			if (currentSelected.length >= 4) {
+				console.warn("Maximum 4 messages can be selected for comparison")
+				return
+			}
+
+			// Add to selection
+			state.toggleMessageSelection(messageId, true)
+		} else {
+			// Single click - just select this one (clear others)
+			state.toggleMessageSelection(messageId, false)
+		}
+	}, [state.selectedMessageIds, state.toggleMessageSelection])
 
 	// ============================================
 	// MEMOIZED NODE DATA (Prevent Unnecessary Updates)
@@ -635,7 +688,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					isSelected: selectedNodeIds.has(node.id),
 					onToggleSelection: toggleNodeSelection,
 					isActive: activeNodeId === node.id,
-					isGenerating: generatingNodeIds.has(node.id)
+					isGenerating: generatingNodeIds.has(node.id),
+					onMessageSelect: handleMessageSelect,
+					selectedMessageIds: state.selectedMessageIds
 				}
 			}
 		})
@@ -654,7 +709,10 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		handleDeleteBranch,
 		handleLinkBranch,
 		handleCompareBranch,
-		abortGeneration
+		abortGeneration,
+		handleMessageSelect,
+		state.selectedMessageIds,
+		selectedNodeIds
 	])
 
 	// ============================================
@@ -901,7 +959,12 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 
 			setTimeout(() => {
 				isRestoringRef.current = false
-			}, 100)
+				// Fade in the canvas after restoration is complete
+				setIsReady(true)
+			}, 300) // Slight delay to allow layout to settle
+		} else if (nodes.length === 0 && !restoredConversationNodes) {
+			// If no nodes to restore (new conversation), just show it
+			setIsReady(true)
 		}
 	}, [restoredConversationNodes, selectedBranchId, reactFlowInstance])
 
@@ -946,13 +1009,11 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 
 						// Calculate viewport to center the node with 0.8x zoom
 						// We can use fitView with specific node ID and maxZoom
-						reactFlowInstance.fitView({
-							nodes: [{ id: focusBranchId }],
-							padding: 0.25,
-							maxZoom: 0.8,
-							minZoom: 0.8, // Force 0.8 zoom
-							duration: 800 // Smooth but simple animation
-						})
+						// Use focusOnBranchWithZoom for consistent animation
+						focusOnBranchWithZoom(reactFlowInstance, focusBranchId, currentNodes, 0.25, 1.1)
+
+						// Mark that we just performed a programmatic focus
+						lastProgrammaticFocusRef.current = Date.now()
 
 						setNodeActive(focusBranchId)
 						setFocusBranchId(null) // Clear after focusing
@@ -1148,11 +1209,16 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			// Only center if the active node exists in the nodes array and is a branch
 			const activeNode = nodes.find(n => n.id === activeNodeId && n.id !== 'main')
 			if (activeNode) {
-				// Use a small delay to ensure layout is complete, then focus with zoom
-				const timeoutId = setTimeout(() => {
-					focusOnBranchWithZoom(reactFlowInstance, activeNodeId, nodes, 0.25, 1.1)
-				}, 300)
-				return () => clearTimeout(timeoutId)
+				// Only auto-focus if we haven't just done a programmatic focus (within last 1s)
+				const timeSinceProgrammaticFocus = Date.now() - (lastProgrammaticFocusRef.current || 0)
+
+				if (timeSinceProgrammaticFocus > 1000) {
+					// Use a small delay to ensure layout is complete, then focus with zoom
+					const timeoutId = setTimeout(() => {
+						focusOnBranchWithZoom(reactFlowInstance, activeNodeId, nodes, 0.25, 1.1)
+					}, 300)
+					return () => clearTimeout(timeoutId)
+				}
 			}
 		}
 	}, [activeNodeId, reactFlowInstance, nodes.length])
@@ -1162,6 +1228,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	// ============================================
 
 	const previousNodesRef = useRef<ReactFlowNode[]>([])
+	const lastProgrammaticFocusRef = useRef<number>(0)
 
 	// Helper to determine if layout should be applied
 	const shouldApplyLayout = useCallback(
@@ -1251,6 +1318,12 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		}
 	}, [selectedNodeIds, onSelectionChange])
 
+	useEffect(() => {
+		if (onMessageSelectionChange) {
+			onMessageSelectionChange(Array.from(selectedMessageIds))
+		}
+	}, [selectedMessageIds, onMessageSelectionChange])
+
 	// ============================================
 	// EVENT HANDLERS
 	// ============================================
@@ -1290,8 +1363,10 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 				)
 			}
 		},
-		[setNodeActive, setNodes]
+		[toggleNodeSelection, selectedNodeIds, clearSelection, setNodeActive, setNodes]
 	)
+
+
 
 	const onNodeDoubleClickHandler = useCallback(
 		(_event: React.MouseEvent, node: any) => {
@@ -1308,22 +1383,19 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	const onNodesChangeHandler: OnNodesChange = useCallback(
 		(changes) => {
 			// DON'T trigger layout here - it causes infinite loop
-			// Layout is handled separately in useEffect
+			// ============================================
+			setNodes((nds) => applyNodeChanges(changes, nds))
 		},
-		[]
+		[setNodes]
 	)
 
 	const onEdgesChangeHandler: OnEdgesChange = useCallback((changes) => {
-		// Handle edge changes if needed
-	}, [])
-
-	// ============================================
-	// RENDER
-	// ============================================
+		setEdges((eds) => applyEdgeChanges(changes, eds))
+	}, [setEdges])
 
 	return (
 		<ReactFlowProvider>
-			<div className="w-full h-screen">
+			<div className={`w-full h-screen transition-opacity duration-700 ${isReady ? 'opacity-100' : 'opacity-0'}`}>
 				<ReactFlow
 					nodes={nodesWithHandlers}
 					edges={edges}
@@ -1385,6 +1457,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					comparison={comparisonResult}
 					onGenerateSummary={handleGenerateSummary}
 				/>
+
+				{/* Side-by-Side Compare View */}
+
 			</div>
 		</ReactFlowProvider>
 	)

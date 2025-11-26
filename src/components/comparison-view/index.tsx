@@ -3,15 +3,17 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { XMarkIcon, ArrowDownTrayIcon, ArrowsRightLeftIcon } from '@heroicons/react/24/outline'
 import { ReactFlowNode } from '@/components/flow-canvas/types'
 import { IBranch, IMessage } from '@/models/conversation'
+import { allAIOptions } from '@/components/ai-pills'
 
 interface ComparisonViewProps {
     branches: ReactFlowNode[]
     onClose: () => void
     initialSelectedBranchIds?: string[]
+    initialFocusedMessageIds?: string[]
     className?: string
 }
 
-export function ComparisonView({ branches, onClose, className = '', initialSelectedBranchIds = [] }: ComparisonViewProps) {
+export function ComparisonView({ branches, onClose, className = '', initialSelectedBranchIds = [], initialFocusedMessageIds = [] }: ComparisonViewProps) {
     const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>(initialSelectedBranchIds)
 
     // Initialize with first 2 branches if available
@@ -27,15 +29,34 @@ export function ComparisonView({ branches, onClose, className = '', initialSelec
         }
     }, [branches])
 
+    // Scroll to focused messages
+    useEffect(() => {
+        if (initialFocusedMessageIds && initialFocusedMessageIds.length > 0) {
+            setTimeout(() => {
+                initialFocusedMessageIds.forEach(msgId => {
+                    // We use a class selector because the same message ID might appear in multiple branches (if inherited)
+                    // Actually, inherited messages have same ID.
+                    // So we should scroll all instances.
+                    const elements = document.querySelectorAll(`[data-message-id="${msgId}"]`)
+                    elements.forEach(el => {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        el.classList.add('ring-2', 'ring-primary', 'ring-offset-2')
+                        setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000)
+                    })
+                })
+            }, 500)
+        }
+    }, [initialFocusedMessageIds, selectedBranchIds])
+
     const toggleBranchSelection = (branchId: string) => {
         if (selectedBranchIds.includes(branchId)) {
             setSelectedBranchIds(prev => prev.filter(id => id !== branchId))
         } else {
-            if (selectedBranchIds.length < 3) {
+            if (selectedBranchIds.length < 4) {
                 setSelectedBranchIds(prev => [...prev, branchId])
             } else {
                 // Replace the last one if limit reached
-                setSelectedBranchIds(prev => [...prev.slice(0, 2), branchId])
+                setSelectedBranchIds(prev => [...prev.slice(0, 3), branchId])
             }
         }
     }
@@ -47,21 +68,40 @@ export function ComparisonView({ branches, onClose, className = '', initialSelec
     }
 
     const handleExport = () => {
-        // TODO: Implement export logic
-        console.log('Exporting comparison...')
+        const markdown = selectedBranchIds.map(branchId => {
+            const data = getBranchData(branchId)
+            if (!data) return ''
+
+            const messages = data.messages?.map((msg: IMessage) => {
+                const role = msg.isUser ? 'User' : (msg.aiModel || 'AI')
+                return `**${role}:**\n${msg.text}\n`
+            }).join('\n') || ''
+
+            return `# ${data.label || 'Untitled Branch'}\n\n${messages}`
+        }).join('\n\n---\n\n')
+
+        const blob = new Blob([markdown], { type: 'text/markdown' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `comparison-report-${new Date().toISOString().slice(0, 10)}.md`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
     }
 
     return (
-        <div className={`flex flex-col h-full bg-white dark:bg-neutral-900 ${className}`}>
+        <div className={`flex flex-col h-full bg-background ${className}`}>
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 dark:border-neutral-800 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm z-10">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card/80 backdrop-blur-sm z-10">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400">
+                    <div className="p-2 bg-primary/10 rounded-lg text-primary">
                         <ArrowsRightLeftIcon className="w-5 h-5" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">Model Comparison</h2>
-                        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                        <h2 className="text-lg font-semibold text-foreground">Model Comparison</h2>
+                        <p className="text-sm text-muted-foreground">
                             Compare responses side-by-side ({selectedBranchIds.length}/3 selected)
                         </p>
                     </div>
@@ -70,14 +110,14 @@ export function ComparisonView({ branches, onClose, className = '', initialSelec
                 <div className="flex items-center gap-3">
                     <button
                         onClick={handleExport}
-                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md transition-colors"
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted rounded-md transition-colors"
                     >
                         <ArrowDownTrayIcon className="w-4 h-4" />
                         Export Report
                     </button>
                     <button
                         onClick={onClose}
-                        className="p-2 text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full transition-colors"
+                        className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full transition-colors"
                     >
                         <XMarkIcon className="w-5 h-5" />
                     </button>
@@ -87,8 +127,8 @@ export function ComparisonView({ branches, onClose, className = '', initialSelec
             {/* Main Content */}
             <div className="flex-1 overflow-hidden flex">
                 {/* Sidebar - Branch Selection */}
-                <div className="w-64 border-r border-neutral-200 dark:border-neutral-800 overflow-y-auto p-4 bg-neutral-50 dark:bg-neutral-900/50">
-                    <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Select Branches</h3>
+                <div className="w-64 border-r border-border overflow-y-auto p-4 bg-muted/30">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Select Branches</h3>
                     <div className="space-y-2">
                         {branches.map(branch => {
                             const isSelected = selectedBranchIds.includes(branch.id)
@@ -98,17 +138,17 @@ export function ComparisonView({ branches, onClose, className = '', initialSelec
                                     key={branch.id}
                                     onClick={() => toggleBranchSelection(branch.id)}
                                     className={`w-full text-left p-3 rounded-lg border transition-all ${isSelected
-                                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 ring-1 ring-indigo-500'
-                                        : 'border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 bg-white dark:bg-neutral-800'
+                                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                        : 'border-border hover:border-primary/50 bg-card'
                                         }`}
                                 >
-                                    <div className="font-medium text-sm text-neutral-900 dark:text-white truncate">
+                                    <div className="font-medium text-sm text-foreground truncate">
                                         {data?.label || 'Untitled Branch'}
                                     </div>
-                                    <div className="text-xs text-neutral-500 mt-1 flex items-center gap-2">
+                                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
                                         <span>{data?.messages?.length || 0} msgs</span>
                                         {data?.selectedAIs && data.selectedAIs.length > 0 && (
-                                            <span className="px-1.5 py-0.5 bg-neutral-100 dark:bg-neutral-700 rounded text-[10px]">
+                                            <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">
                                                 {data.selectedAIs[0].name}
                                             </span>
                                         )}
@@ -120,10 +160,10 @@ export function ComparisonView({ branches, onClose, className = '', initialSelec
                 </div>
 
                 {/* Comparison Grid */}
-                <div className="flex-1 overflow-x-auto">
+                <div className="flex-1 overflow-x-auto bg-background">
                     <div className="h-full flex min-w-full">
                         {selectedBranchIds.length === 0 ? (
-                            <div className="flex-1 flex flex-col items-center justify-center text-neutral-400">
+                            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
                                 <ArrowsRightLeftIcon className="w-12 h-12 mb-4 opacity-50" />
                                 <p>Select branches from the sidebar to compare</p>
                             </div>
@@ -135,45 +175,57 @@ export function ComparisonView({ branches, onClose, className = '', initialSelec
                                 return (
                                     <div
                                         key={branchId}
-                                        className="flex-1 min-w-[350px] border-r border-neutral-200 dark:border-neutral-800 flex flex-col h-full bg-white dark:bg-neutral-900"
+                                        className="flex-1 min-w-[400px] border-r border-border flex flex-col h-full bg-card/50"
                                     >
                                         {/* Column Header */}
-                                        <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50">
-                                            <h3 className="font-semibold text-neutral-900 dark:text-white truncate" title={data.label}>
+                                        <div className="p-4 border-b border-border bg-muted/30 sticky top-0 z-10 backdrop-blur-sm">
+                                            <h3 className="font-semibold text-foreground truncate" title={data.label}>
                                                 {data.label}
                                             </h3>
-                                            <div className="flex items-center gap-2 mt-2 text-xs text-neutral-500">
-                                                {data.selectedAIs?.map((ai: any) => (
-                                                    <span key={ai.id} className="flex items-center gap-1 px-2 py-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-full shadow-sm">
-                                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: ai.color?.split(' ')[0]?.replace('text-', '') || '#6366F1' }} />
-                                                        {ai.name}
-                                                    </span>
-                                                ))}
+                                            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                                                {data.selectedAIs?.map((ai: any) => {
+                                                    const freshAI = allAIOptions.find(option => option.id === ai.id) || ai
+                                                    return (
+                                                        <span key={ai.id} className="flex items-center gap-1.5 px-2 py-1 bg-background border border-border rounded-md shadow-sm">
+                                                            <span className="w-3.5 h-3.5 flex items-center justify-center">
+                                                                {freshAI.logo}
+                                                            </span>
+                                                            <span className="font-medium">{freshAI.name}</span>
+                                                        </span>
+                                                    )
+                                                })}
                                             </div>
                                         </div>
 
                                         {/* Messages Scroll Area */}
-                                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                        <div className="flex-1 overflow-y-auto p-4 space-y-6">
                                             {data.messages?.map((msg: IMessage) => (
                                                 <div
                                                     key={msg.id}
-                                                    className={`p-3 rounded-lg text-sm ${msg.isUser
-                                                        ? 'bg-neutral-100 dark:bg-neutral-800 ml-8'
-                                                        : 'bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 mr-8'
-                                                        }`}
+                                                    className={`flex flex-col ${msg.isUser ? 'items-end' : 'items-start'}`}
                                                 >
-                                                    <div className="font-medium text-xs text-neutral-500 mb-1">
-                                                        {msg.isUser ? 'You' : (msg.aiModel || 'AI')}
+                                                    <div
+                                                        data-message-id={msg.id}
+                                                        className={`max-w-[90%] rounded-2xl p-4 shadow-sm transition-all duration-300 ${msg.isUser
+                                                            ? 'bg-primary text-primary-foreground rounded-br-none'
+                                                            : 'bg-card border border-border rounded-bl-none'
+                                                            } ${initialFocusedMessageIds.includes(msg.id) ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
+                                                        <div className="text-xs font-medium opacity-70 mb-1">
+                                                            {msg.isUser ? 'You' : (msg.aiModel || 'AI')}
+                                                        </div>
+                                                        <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                                                            {msg.text}
+                                                        </div>
                                                     </div>
-                                                    <div className="whitespace-pre-wrap text-neutral-800 dark:text-neutral-200 leading-relaxed">
-                                                        {msg.text}
-                                                    </div>
+                                                    <span className="text-[10px] text-muted-foreground mt-1 px-1">
+                                                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </span>
                                                 </div>
                                             ))}
                                         </div>
 
-                                        {/* Metrics Footer (Mock) */}
-                                        <div className="p-3 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 text-xs text-neutral-500 flex justify-between">
+                                        {/* Metrics Footer */}
+                                        <div className="p-3 border-t border-border bg-muted/30 text-xs text-muted-foreground flex justify-between font-mono">
                                             <span>{data.messages?.length || 0} messages</span>
                                             <span>~{(data.messages?.reduce((acc: number, m: any) => acc + (m.text?.length || 0), 0) || 0) / 4} tokens</span>
                                         </div>

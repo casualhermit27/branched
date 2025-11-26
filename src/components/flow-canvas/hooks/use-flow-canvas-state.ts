@@ -100,6 +100,24 @@ export function useFlowCanvasState() {
 		setSelectedNodeIds(new Set())
 	}, [])
 
+	const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set())
+
+	const toggleMessageSelection = useCallback((messageId: string, multi: boolean) => {
+		setSelectedMessageIds((prev) => {
+			const updated = new Set(multi ? prev : [])
+			if (updated.has(messageId)) {
+				updated.delete(messageId)
+			} else {
+				updated.add(messageId)
+			}
+			return updated
+		})
+	}, [])
+
+	const clearMessageSelection = useCallback(() => {
+		setSelectedMessageIds(new Set())
+	}, [])
+
 	// Branch-level state management
 	const setBranchMultiModel = useCallback((nodeId: string, enabled: boolean) => {
 		setBranchMultiModelMode((prev) => {
@@ -192,7 +210,10 @@ export function useFlowCanvasState() {
 		// Selection
 		selectedNodeIds,
 		toggleNodeSelection,
-		clearSelection
+		clearSelection,
+		selectedMessageIds,
+		toggleMessageSelection,
+		clearMessageSelection
 	}
 }
 

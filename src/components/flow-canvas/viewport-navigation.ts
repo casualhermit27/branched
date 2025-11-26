@@ -20,7 +20,7 @@ export function focusOnNode(
 	if (!targetNode) return
 
 	const viewport = calculateViewportFit(nodes, [nodeId], padding)
-	
+
 	reactFlowInstance.setViewport(
 		{
 			x: viewport.x,
@@ -46,7 +46,7 @@ export function focusOnNodes(
 	if (!reactFlowInstance || nodeIds.length === 0) return
 
 	const viewport = calculateViewportFit(nodes, nodeIds, padding)
-	
+
 	reactFlowInstance.setViewport(
 		{
 			x: viewport.x,
@@ -68,10 +68,10 @@ export function zoomIn(
 	step: number = 0.2
 ): void {
 	if (!reactFlowInstance) return
-	
+
 	const currentZoom = reactFlowInstance.getZoom()
 	const newZoom = Math.min(currentZoom + step, 3)
-	
+
 	reactFlowInstance.zoomTo(newZoom, {
 		duration: 300
 	})
@@ -85,10 +85,10 @@ export function zoomOut(
 	step: number = 0.2
 ): void {
 	if (!reactFlowInstance) return
-	
+
 	const currentZoom = reactFlowInstance.getZoom()
 	const newZoom = Math.max(currentZoom - step, 0.3)
-	
+
 	reactFlowInstance.zoomTo(newZoom, {
 		duration: 300
 	})
@@ -101,7 +101,7 @@ export function resetViewport(
 	reactFlowInstance: ReactFlowInstance | null
 ): void {
 	if (!reactFlowInstance) return
-	
+
 	reactFlowInstance.setViewport(
 		{ x: 0, y: 0, zoom: 1 },
 		{ duration: 500 }
@@ -144,17 +144,16 @@ export function focusOnBranchWithZoom(
 
 	// Calculate viewport to fit the branch
 	const viewport = calculateViewportFit(nodes, [nodeId], padding)
-	
+
 	// Apply zoom multiplier for slight zoom-in effect
 	// Cap at reasonable max zoom (1.5x) to avoid zooming too much
 	const targetZoom = Math.min(viewport.zoom * zoomMultiplier, 1.5)
-	
-	// Smooth ease-out easing for natural animation
+
+	// Smooth ease-in-out easing for natural animation
 	const easing = (t: number) => {
-		// ease-out-cubic: smooth deceleration
-		return 1 - Math.pow(1 - t, 3)
+		return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
 	}
-	
+
 	reactFlowInstance.setViewport(
 		{
 			x: viewport.x,
@@ -162,7 +161,7 @@ export function focusOnBranchWithZoom(
 			zoom: targetZoom
 		},
 		{
-			duration: 600, // Smooth 600ms animation
+			duration: 1200, // Slower, smoother animation
 			easing
 		}
 	)
@@ -178,15 +177,15 @@ export function highlightPath(
 ): { nodeIds: string[]; edgeIds: string[] } {
 	const pathNodeIds: string[] = []
 	const pathEdgeIds: string[] = []
-	
+
 	// Find path from main to target
 	const findPath = (currentId: string, visited: Set<string>) => {
 		if (visited.has(currentId)) return
 		visited.add(currentId)
 		pathNodeIds.push(currentId)
-		
+
 		if (currentId === 'main') return
-		
+
 		// Find parent edge
 		const parentEdge = edges.find((e) => e.target === currentId)
 		if (parentEdge) {
@@ -194,9 +193,9 @@ export function highlightPath(
 			findPath(parentEdge.source, visited)
 		}
 	}
-	
+
 	findPath(nodeId, new Set())
-	
+
 	return {
 		nodeIds: pathNodeIds.reverse(),
 		edgeIds: pathEdgeIds.reverse()

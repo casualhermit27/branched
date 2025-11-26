@@ -586,6 +586,7 @@ export function useBranchManagement({
 			// Create branch nodes
 			const newNodes: Node[] = []
 			const newEdges: Edge[] = []
+			const skippedExistingIds: string[] = []
 
 			aiResponses.forEach((aiResponse, idx) => {
 				// Check if branch already exists for this AI response
@@ -611,6 +612,7 @@ export function useBranchManagement({
 				// Prevent double-create if branch exists
 				if (branchExists) {
 					console.warn('⚠️ Skipping branch creation - branch already exists')
+					skippedExistingIds.push(aiResponse.id)
 					return
 				}
 
@@ -694,7 +696,25 @@ export function useBranchManagement({
 			})
 
 			if (newNodes.length === 0) {
-				console.error('❌ No branch nodes created - all were skipped or failed')
+				if (skippedExistingIds.length > 0) {
+					console.log('ℹ️ All requested branches already exist. Focusing existing branches...')
+					// Find the existing branch nodes for these messages
+					const existingBranchNodes = nodesRef.current.filter(n =>
+						n.id !== 'main' &&
+						n.data?.parentId === parentNodeId &&
+						skippedExistingIds.includes(n.data?.parentMessageId)
+					)
+
+					if (existingBranchNodes.length > 0) {
+						// Focus the last one (similar to new creation behavior)
+						const lastBranchId = existingBranchNodes[existingBranchNodes.length - 1].id
+						setTimeout(() => {
+							fitViewportToNodes([lastBranchId], 0.25, true)
+						}, 100)
+					}
+				} else {
+					console.error('❌ No branch nodes created - all were skipped or failed')
+				}
 				branchCreationLockRef.current.delete(messageId)
 				return
 			}
