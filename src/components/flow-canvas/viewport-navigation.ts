@@ -28,7 +28,7 @@ export function focusOnNode(
 			zoom: viewport.zoom
 		},
 		{
-			duration: 800,
+			duration: 500,
 			easing: (t: number) => t * (2 - t) // ease-out
 		}
 	)
@@ -54,7 +54,7 @@ export function focusOnNodes(
 			zoom: viewport.zoom
 		},
 		{
-			duration: 800,
+			duration: 500,
 			easing: (t: number) => t * (2 - t)
 		}
 	)
@@ -161,7 +161,7 @@ export function focusOnBranchWithZoom(
 			zoom: targetZoom
 		},
 		{
-			duration: 1200, // Slower, smoother animation
+			duration: 800, // Slower, smoother animation
 			easing
 		}
 	)

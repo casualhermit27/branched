@@ -137,19 +137,20 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
       }}
       // Handle mouse events to allow scrolling within node but prevent canvas panning
       // We now use 'nodrag' class in child components to prevent dragging while allowing selection
-      className={`bg-card/90 backdrop-blur-xl rounded-2xl border transition-all duration-300 relative ${data.isMinimized ? 'p-3' : 'p-0'} overflow-visible
+      className={`bg-card/90 backdrop-blur-xl rounded-2xl border transition-all duration-300 relative ${data.isMinimized ? 'p-3' : 'p-3 md:p-0'} overflow-visible
         ${data.isSelected
           ? 'ring-2 ring-white border-white shadow-[0_0_0_2px_rgba(255,255,255,0.5)] z-20'
           : data.isActive
-            ? 'border-primary/50 shadow-xl shadow-primary/5 ring-1 ring-primary/20 z-10'
+            ? 'border-primary/50 shadow-md shadow-primary/5 ring-1 ring-primary/20 z-10'
             : 'border-border/40 shadow-sm hover:border-border/80 hover:shadow-md'
         }
         ${data.isHighlighted && !data.isSelected ? 'border-primary/30 shadow-2xl shadow-primary/10 ring-1 ring-primary/20' : ''}
+        ${!data.isMinimized ? 'w-[95vw] md:w-[1200px] min-w-[300px] md:min-w-[1200px] max-w-full md:max-w-[1200px]' : ''}
       `}
       style={{
-        width: data.isMinimized ? '280px' : '1200px',
-        minWidth: data.isMinimized ? '280px' : '1200px',
-        maxWidth: data.isMinimized ? '280px' : '1200px',
+        width: data.isMinimized ? '280px' : undefined,
+        minWidth: data.isMinimized ? '280px' : undefined,
+        maxWidth: data.isMinimized ? '280px' : undefined,
         height: data.isMinimized ? '200px' : 'auto',
         minHeight: data.isMinimized ? '200px' : '400px',
         maxHeight: data.isMinimized ? '200px' : '850px',

@@ -171,7 +171,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			reactFlowInstance.fitView({
 				nodes: nodeIds.map((id) => ({ id })),
 				padding,
-				duration: useZoomAnimation ? 800 : 0
+				duration: useZoomAnimation ? 500 : 0
 			})
 		},
 		[reactFlowInstance, nodes]
