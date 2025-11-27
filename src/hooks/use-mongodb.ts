@@ -7,6 +7,7 @@ export interface UseMongoDBOptions {
   autoSaveDelay?: number
   onSave?: (success: boolean, error?: string) => void
   onLoad?: (conversations: IConversation[]) => void
+  initialConversationId?: string
 }
 
 export interface UseMongoDBReturn {
@@ -33,12 +34,13 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
     autoSave = true,
     autoSaveDelay = 2000,
     onSave,
-    onLoad
+    onLoad,
+    initialConversationId
   } = options
 
   // State
   const [conversations, setConversations] = useState<IConversation[]>([])
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(initialConversationId || null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
@@ -60,12 +62,12 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
 
     try {
       const result = await mongoDBService.saveConversation(data, id)
-      
+
       if (result.success && result.data) {
         setLastSaved(new Date())
-        
+
         const newConversationId = result.data._id
-        
+
         // Update conversations list if this is a new conversation
         // (either no ID was provided, or the original ID didn't exist and a new one was created)
         if (!id && newConversationId) {
@@ -79,7 +81,7 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
           setCurrentConversationId(newConversationId)
         } else if (id) {
           // Update existing conversation in list
-          setConversations(prev => 
+          setConversations(prev =>
             prev.map(conv => conv._id === id ? result.data! : conv)
           )
         }
@@ -108,7 +110,7 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
 
     try {
       const result = await mongoDBService.loadConversations()
-      
+
       if (result.success && result.data) {
         setConversations(result.data)
         onLoad?.(result.data)
@@ -133,7 +135,7 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
 
     try {
       const result = await mongoDBService.loadConversation(id)
-      
+
       if (result.success && result.data) {
         setCurrentConversationId(id)
         return true
@@ -156,14 +158,14 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
 
     try {
       const result = await mongoDBService.deleteConversation(id)
-      
+
       if (result.success) {
         setConversations(prev => prev.filter(conv => conv._id !== id))
-        
+
         if (currentConversationId === id) {
           setCurrentConversationId(null)
         }
-        
+
         return true
       } else {
         setError(result.error || 'Failed to delete conversation')
@@ -179,25 +181,25 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
   // Sanitize data to remove circular references and non-serializable values
   const sanitizeData = useCallback((data: any): any => {
     const seen = new WeakSet()
-    
+
     const sanitize = (obj: any, depth = 0): any => {
       // Handle primitives
       if (obj === null || typeof obj !== 'object') {
         return obj
       }
-      
+
       // Handle circular references
       if (seen.has(obj)) {
         return '[Circular Reference]'
       }
-      
+
       // Check for React elements and components before adding to seen set
       if (obj.$$typeof || obj.type || obj.props) {
         return undefined // Skip React elements entirely
       }
-      
+
       seen.add(obj)
-      
+
       try {
         // Handle arrays
         if (Array.isArray(obj)) {
@@ -209,30 +211,30 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
           }).filter(item => item !== undefined)
           return sanitizedArray
         }
-        
+
         // Handle Date objects
         if (obj instanceof Date) {
           return obj.toISOString()
         }
-        
+
         // Handle regular objects
         const sanitized: any = {}
         for (const key in obj) {
           if (obj.hasOwnProperty(key)) {
             const value = obj[key]
-            
+
             // Skip functions and symbols
             if (typeof value === 'function' || typeof value === 'symbol') {
               continue
             }
-            
+
             // Skip React elements
             if (value && typeof value === 'object') {
               if (value.$$typeof || value.type || value.props) {
                 continue
               }
             }
-            
+
             // Recursively sanitize the value
             const sanitizedValue = sanitize(value, depth + 1)
             if (sanitizedValue !== undefined) {
@@ -240,14 +242,14 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
             }
           }
         }
-        
+
         return sanitized
       } finally {
         // Remove from seen set after processing
         seen.delete(obj)
       }
     }
-    
+
     try {
       return sanitize(data)
     } catch (error) {
@@ -281,9 +283,9 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
       branchesLength: data.branches?.length || 0,
       branchIds: data.branches?.map((b: any) => b.id) || []
     })
-    
+
     const sanitizedData = sanitizeData(data)
-    
+
     console.log('📦 Sanitized data for MongoDB:', {
       hasMainMessages: !!sanitizedData.mainMessages,
       mainMessagesLength: sanitizedData.mainMessages?.length || 0,
@@ -303,7 +305,7 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
     // Check if data has changed
     const dataString = JSON.stringify(sanitizedData)
     const lastDataString = lastSavedDataRef.current ? JSON.stringify(lastSavedDataRef.current) : null
-    
+
     if (dataString === lastDataString) {
       console.log('⏭️ Skipping save - data unchanged')
       return // No changes, skip auto-save
@@ -316,7 +318,7 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
       const lastBranchesCount = lastSavedDataRef.current.branches?.length || 0
       const currentMessagesCount = sanitizedData.mainMessages?.length || 0
       const currentBranchesCount = sanitizedData.branches?.length || 0
-      
+
       // If new data has significantly less content, it might be incomplete - skip save
       // Allow if messages increased or branches increased (data is getting better)
       // But prevent if both decreased significantly (likely incomplete state)

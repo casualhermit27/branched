@@ -443,7 +443,7 @@ export default function ChatInterface({
 
       {/* Fixed Footer Input Area */}
       {!readOnly && (
-        <div className="flex-shrink-0 z-30 bg-card/80 backdrop-blur-md border-t border-border/40 p-4">
+        <div className="flex-shrink-0 z-30 bg-card/80 backdrop-blur-md border-t border-border/40 p-3 md:p-4">
           <div className="max-w-5xl mx-auto relative">
             <form
               onSubmit={handleSubmit}
