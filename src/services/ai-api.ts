@@ -1,4 +1,4 @@
-// AI API Service for Mistral and Gemini integration
+// AI API Service for Mistral, Gemini, OpenAI, Claude, and Grok integration
 
 export interface Message {
   id: string
@@ -24,88 +24,83 @@ export interface ConversationContext {
   memoryContext?: string // Aggregated memory context string
 }
 
+// Helper to get key from storage or env
+const getApiKey = (provider: string, envKey: string): string => {
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem(`api_key_${provider}`)
+    if (stored) return stored
+  }
+  return process.env[envKey] || ''
+}
+
+// Base API Class
+abstract class BaseAIAPI {
+  protected apiKey: string
+  protected abstract provider: string
+  protected abstract envKey: string
+
+  constructor() {
+    this.apiKey = ''
+  }
+
+  protected initKey() {
+    this.apiKey = getApiKey(this.provider, this.envKey)
+  }
+
+  public setApiKey(key: string) {
+    this.apiKey = key
+    if (typeof window !== 'undefined') {
+      if (key) {
+        localStorage.setItem(`api_key_${this.provider}`, key)
+      } else {
+        localStorage.removeItem(`api_key_${this.provider}`)
+      }
+    }
+  }
+
+  public hasKey(): boolean {
+    return !!this.apiKey
+  }
+
+  abstract generateResponse(
+    message: string,
+    context: ConversationContext,
+    onChunk?: (chunk: string) => void,
+    signal?: AbortSignal
+  ): Promise<AIResponse>
+}
+
 // Mistral API Integration
-export class MistralAPI {
-  private apiKey: string
+export class MistralAPI extends BaseAIAPI {
+  protected provider = 'mistral'
+  protected envKey = 'NEXT_PUBLIC_MISTRAL_API_KEY'
   private apiUrl: string
   private model: string
 
   constructor() {
-    this.apiKey = process.env.NEXT_PUBLIC_MISTRAL_API_KEY || ''
+    super()
+    this.initKey()
     this.apiUrl = process.env.NEXT_PUBLIC_MISTRAL_API_URL || 'https://api.mistral.ai/v1/chat/completions'
     this.model = process.env.NEXT_PUBLIC_MISTRAL_MODEL || 'mistral-large-latest'
-    
-    // Test API connection on initialization
-    this.testConnection()
-  }
-  
-  private async testConnection() {
-    if (!this.apiKey) {
-      console.warn('⚠️ Mistral API key not configured')
-      return
-    }
-    
-    try {
-      console.log('🔍 Testing Mistral API connection...')
-      const response = await fetch('https://api.mistral.ai/v1/models', {
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`
-        }
-      })
-      
-      console.log('📡 Mistral Models API Response:', response.status, response.statusText)
-      
-      if (response.ok) {
-        const models = await response.json()
-        console.log('✅ Mistral API connection successful. Available models:', models.data?.map((m: any) => m.id) || 'Unknown')
-        
-        // Check if our model is available
-        const availableModels = models.data?.map((m: any) => m.id) || []
-        if (availableModels.includes(this.model)) {
-          console.log('✅ Using model is available:', this.model)
-        } else {
-          console.warn('⚠️ Using model not found in available models:', this.model)
-          console.log('💡 Available models:', availableModels)
-        }
-      } else {
-        const errorText = await response.text().catch(() => 'Could not read error')
-        console.warn('⚠️ Mistral API connection test failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText
-        })
-      }
-    } catch (error) {
-      console.warn('⚠️ Mistral API connection test error:', error)
-    }
   }
 
   async generateResponse(
-    message: string, 
+    message: string,
     context: ConversationContext,
     onChunk?: (chunk: string) => void,
     signal?: AbortSignal
   ): Promise<AIResponse> {
     if (!this.apiKey) {
-      console.warn('⚠️ Mistral API key not configured, using fallback response')
-      return {
-        text: `Mistral response to: "${message}" (API key not configured)`,
-        model: 'mistral',
-        timestamp: Date.now()
-      }
+      throw new Error('Mistral API key not configured')
     }
 
-    // Build conversation history for context
     const conversationHistory = this.buildConversationHistory(context)
-    
+
     const requestBody = {
       model: this.model,
       messages: [
         ...conversationHistory,
-        {
-          role: 'user',
-          content: message
-        }
+        { role: 'user', content: message }
       ],
       stream: !!onChunk,
       temperature: 0.7,
@@ -113,19 +108,6 @@ export class MistralAPI {
     }
 
     try {
-      console.log('🚀 Mistral API Request:', {
-        url: this.apiUrl,
-        model: this.model,
-        messageLength: message.length,
-        historyLength: conversationHistory.length,
-        hasApiKey: !!this.apiKey,
-        apiKeyPrefix: this.apiKey ? this.apiKey.substring(0, 10) + '...' : 'MISSING'
-      })
-      
-      // Log request body but hide sensitive data
-      const safeRequestBody = { ...requestBody }
-      console.log('📝 Mistral Request Body:', JSON.stringify(safeRequestBody, null, 2))
-      
       const response = await fetch(this.apiUrl, {
         method: 'POST',
         headers: {
@@ -135,65 +117,15 @@ export class MistralAPI {
         body: JSON.stringify(requestBody),
         signal: signal
       })
-      
-      console.log('📡 Mistral API Response Status:', response.status, response.statusText)
 
       if (!response.ok) {
-        let errorData = {}
-        let errorText = ''
-        
-        try {
-          errorData = await response.json()
-        } catch (jsonError) {
-          try {
-            errorText = await response.text()
-            console.log('📄 Raw error response text:', errorText)
-          } catch (textError) {
-            console.log('❌ Could not read error response')
-          }
-        }
-        
-        console.error('🚨 Mistral API Error Details:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorData: errorData || 'No JSON error data',
-          errorText: errorText || 'No text error data',
-          url: this.apiUrl,
-          hasApiKey: !!this.apiKey,
-          apiKeyPrefix: this.apiKey ? this.apiKey.substring(0, 10) + '...' : 'MISSING',
-          model: this.model,
-          headers: Object.fromEntries(response.headers.entries())
-        })
-        
-        // Provide specific error messages based on status codes
-        let errorMessage = `Mistral API error: ${response.status} ${response.statusText}`
-        
-        if (response.status === 401) {
-          errorMessage += ' - API key is invalid or expired'
-        } else if (response.status === 403) {
-          errorMessage += ' - API key does not have permission for this model'
-        } else if (response.status === 429) {
-          errorMessage += ' - Rate limit exceeded'
-        } else if (response.status === 400) {
-          errorMessage += ' - Bad request (check model name and parameters)'
-        } else if (response.status === 404) {
-          errorMessage += ' - Model not found'
-        }
-        
-        if (errorData && typeof errorData === 'object') {
-          errorMessage += ` - ${JSON.stringify(errorData)}`
-        } else if (errorText) {
-          errorMessage += ` - ${errorText}`
-        }
-        
-        throw new Error(errorMessage)
+        const errorText = await response.text()
+        throw new Error(`Mistral API error: ${response.status} - ${errorText}`)
       }
 
       if (onChunk) {
-        // Handle streaming response
         return await this.handleStreamingResponse(response, onChunk, signal)
       } else {
-        // Handle regular response
         const data = await response.json()
         return {
           text: data.choices[0].message.content,
@@ -202,45 +134,13 @@ export class MistralAPI {
         }
       }
     } catch (error) {
-      console.error('🚨 Mistral API error:', error)
-      
-      // If it's a network error or API failure, return a fallback response
-      if (error instanceof Error) {
-        if (error.message.includes('fetch')) {
-          console.warn('⚠️ Network error, using fallback response')
-          return {
-            text: `Mistral response to: "${message}" (Network error - ${error.message})`,
-            model: 'mistral',
-            timestamp: Date.now()
-          }
-        }
-        
-        if (error.message.includes('401') || error.message.includes('403')) {
-          console.warn('⚠️ Authentication error, using fallback response')
-          return {
-            text: `Mistral response to: "${message}" (Authentication error - check API key)`,
-            model: 'mistral',
-            timestamp: Date.now()
-          }
-        }
-        
-        if (error.message.includes('429')) {
-          console.warn('⚠️ Rate limit error, using fallback response')
-          return {
-            text: `Mistral response to: "${message}" (Rate limit exceeded - please try again later)`,
-            model: 'mistral',
-            timestamp: Date.now()
-          }
-        }
-      }
-      
-      // For other errors, still throw to maintain existing behavior
+      console.error('Mistral API error:', error)
       throw error
     }
   }
 
   private async handleStreamingResponse(
-    response: Response, 
+    response: Response,
     onChunk: (chunk: string) => void,
     signal?: AbortSignal
   ): Promise<AIResponse> {
@@ -248,26 +148,17 @@ export class MistralAPI {
     const decoder = new TextDecoder()
     let fullResponse = ''
 
-    if (!reader) {
-      throw new Error('No response body')
-    }
+    if (!reader) throw new Error('No response body')
 
     try {
       while (true) {
-        // Check if aborted
         if (signal?.aborted) {
           reader.cancel()
-          throw new Error('Generation aborted by user')
+          throw new Error('Generation aborted')
         }
-        
+
         const { done, value } = await reader.read()
         if (done) break
-
-        // Check again after reading
-        if (signal?.aborted) {
-          reader.cancel()
-          throw new Error('Generation aborted by user')
-        }
 
         const chunk = decoder.decode(value)
         const lines = chunk.split('\n')
@@ -276,123 +167,58 @@ export class MistralAPI {
           if (line.startsWith('data: ')) {
             const data = line.slice(6)
             if (data === '[DONE]') continue
-
             try {
               const parsed = JSON.parse(data)
               const content = parsed.choices?.[0]?.delta?.content
               if (content) {
                 fullResponse += content
-                // Check if aborted before calling onChunk
-                if (!signal?.aborted) {
-                  onChunk(content)
-                }
+                onChunk(content)
               }
-            } catch (e) {
-              // Ignore parsing errors for incomplete chunks
-            }
+            } catch (e) { }
           }
         }
       }
-
-      return {
-        text: fullResponse,
-        model: 'mistral',
-        timestamp: Date.now()
-      }
-    } catch (error) {
-      if (signal?.aborted) {
-        // Return partial response if aborted
-        return {
-          text: fullResponse || '[Generation stopped]',
-          model: 'mistral',
-          timestamp: Date.now()
-        }
-      }
-      throw error
+      return { text: fullResponse, model: 'mistral', timestamp: Date.now() }
     } finally {
       reader.releaseLock()
     }
   }
 
-  private buildConversationHistory(context: ConversationContext): Array<{role: string, content: string}> {
-    const history: Array<{role: string, content: string}> = []
-    
-    // Add memory context if available
+  private buildConversationHistory(context: ConversationContext): Array<{ role: string, content: string }> {
+    const history: Array<{ role: string, content: string }> = []
     if (context.memoryContext) {
       history.push({
         role: 'system',
         content: `Context and memories:\n${context.memoryContext}\n\nUse this context to inform your responses.`
       })
     }
-    
-    // Add recent conversation history (last 10 messages for context)
     const recentMessages = context.messages.slice(-10)
-    
     for (const msg of recentMessages) {
       history.push({
         role: msg.isUser ? 'user' : 'assistant',
         content: msg.text
       })
     }
-
     return history
   }
 }
 
 // Gemini API Integration
-export class GeminiAPI {
-  private apiKey: string
+export class GeminiAPI extends BaseAIAPI {
+  protected provider = 'gemini'
+  protected envKey = 'NEXT_PUBLIC_GEMINI_API_KEY'
   private apiUrl: string
   private model: string
 
   constructor() {
-    this.apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
-    this.model = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'models/gemini-2.0-flash-exp'
-    this.apiUrl = process.env.NEXT_PUBLIC_GEMINI_API_URL || `https://generativelanguage.googleapis.com/v1beta/${this.model}:generateContent`
-    
-    // Test API connection on initialization
-    this.testConnection()
-  }
-  
-  private async testConnection() {
-    if (!this.apiKey) {
-      console.warn('⚠️ Gemini API key not configured')
-      return
-    }
-    
-    try {
-      console.log('🔍 Testing Gemini API connection...')
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${this.apiKey}`)
-      
-      console.log('📡 Gemini Models API Response:', response.status, response.statusText)
-      
-      if (response.ok) {
-        const models = await response.json()
-        console.log('✅ Gemini API connection successful. Available models:', models.models?.map((m: any) => m.name) || 'Unknown')
-        
-        // Check if our model is available
-        const availableModels = models.models?.map((m: any) => m.name) || []
-        if (availableModels.includes(this.model)) {
-          console.log('✅ Using model is available:', this.model)
-        } else {
-          console.warn('⚠️ Using model not found in available models:', this.model)
-          console.log('💡 Available models:', availableModels)
-        }
-      } else {
-        const errorText = await response.text().catch(() => 'Could not read error')
-        console.warn('⚠️ Gemini API connection test failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText
-        })
-      }
-    } catch (error) {
-      console.warn('⚠️ Gemini API connection test error:', error)
-    }
+    super()
+    this.initKey()
+    this.model = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-2.0-flash-exp'
+    this.apiUrl = process.env.NEXT_PUBLIC_GEMINI_API_URL || `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`
   }
 
   async generateResponse(
-    message: string, 
+    message: string,
     context: ConversationContext,
     onChunk?: (chunk: string) => void,
     signal?: AbortSignal
@@ -401,139 +227,44 @@ export class GeminiAPI {
       throw new Error('Gemini API key not configured')
     }
 
-    // Build conversation history for context
     const conversationHistory = this.buildConversationHistory(context)
-    
     const requestBody = {
       contents: [
         ...conversationHistory,
-        {
-          role: 'user',
-          parts: [{ text: message }]
-        }
+        { role: 'user', parts: [{ text: message }] }
       ],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 2000,
-        topP: 0.8,
-        topK: 40
-      },
-      safetySettings: [
-        {
-          category: 'HARM_CATEGORY_HARASSMENT',
-          threshold: 'BLOCK_MEDIUM_AND_ABOVE'
-        },
-        {
-          category: 'HARM_CATEGORY_HATE_SPEECH',
-          threshold: 'BLOCK_MEDIUM_AND_ABOVE'
-        },
-        {
-          category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-          threshold: 'BLOCK_MEDIUM_AND_ABOVE'
-        },
-        {
-          category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-          threshold: 'BLOCK_MEDIUM_AND_ABOVE'
-        }
-      ]
+        maxOutputTokens: 2000
+      }
     }
 
     try {
-      console.log('🚀 Gemini API Request:', {
-        url: `${this.apiUrl}?key=${this.apiKey.substring(0, 10)}...`,
-        model: this.model,
-        messageLength: message.length,
-        historyLength: conversationHistory.length
-      })
-      console.log('📝 Gemini Request Body:', JSON.stringify(requestBody, null, 2))
-      
       const response = await fetch(`${this.apiUrl}?key=${this.apiKey}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
         signal: signal
       })
 
       if (!response.ok) {
-        let errorData = {}
-        let errorText = ''
-        
-        try {
-          errorData = await response.json()
-        } catch (jsonError) {
-          try {
-            errorText = await response.text()
-            console.log('📄 Raw Gemini error response text:', errorText)
-          } catch (textError) {
-            console.log('❌ Could not read Gemini error response')
-          }
-        }
-        
-        console.error('🚨 Gemini API Error Details:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorData,
-          errorText,
-          url: this.apiUrl,
-          hasApiKey: !!this.apiKey,
-          apiKeyPrefix: this.apiKey ? this.apiKey.substring(0, 10) + '...' : 'MISSING',
-          model: this.model,
-          headers: Object.fromEntries(response.headers.entries())
-        })
-        
-        // Provide specific error messages based on status codes
-        let errorMessage = `Gemini API error: ${response.status} ${response.statusText}`
-        
-        if (response.status === 401) {
-          errorMessage += ' - API key is invalid or expired'
-        } else if (response.status === 403) {
-          errorMessage += ' - API key does not have permission for this model'
-        } else if (response.status === 429) {
-          errorMessage += ' - Rate limit exceeded'
-        } else if (response.status === 400) {
-          errorMessage += ' - Bad request (check model name and parameters)'
-        } else if (response.status === 404) {
-          errorMessage += ' - Model not found'
-        }
-        
-        if (errorData && typeof errorData === 'object') {
-          errorMessage += ` - ${JSON.stringify(errorData)}`
-        } else if (errorText) {
-          errorMessage += ` - ${errorText}`
-        }
-        
-        throw new Error(errorMessage)
+        const errorText = await response.text()
+        throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
       }
 
       const data = await response.json()
-      
       if (data.candidates && data.candidates[0] && data.candidates[0].content) {
         const text = data.candidates[0].content.parts[0].text
-        
-        // Simulate streaming for Gemini (since it doesn't support streaming in the same way)
         if (onChunk) {
+          // Simulate streaming
           const words = text.split(' ')
           for (let i = 0; i < words.length; i++) {
-            // Check if aborted
-            if (signal?.aborted) {
-              break
-            }
-            
-            const chunk = words[i] + (i < words.length - 1 ? ' ' : '')
-            if (!signal?.aborted) {
-              onChunk(chunk)
-            }
-            await new Promise(resolve => setTimeout(resolve, 50)) // Small delay for streaming effect
+            if (signal?.aborted) break
+            onChunk(words[i] + (i < words.length - 1 ? ' ' : ''))
+            await new Promise(resolve => setTimeout(resolve, 20))
           }
         }
-
-        return {
-          text,
-          model: 'gemini',
-          timestamp: Date.now()
-        }
+        return { text, model: 'gemini', timestamp: Date.now() }
       } else {
         throw new Error('Invalid response format from Gemini API')
       }
@@ -543,28 +274,231 @@ export class GeminiAPI {
     }
   }
 
-  private buildConversationHistory(context: ConversationContext): Array<{role: string, parts: Array<{text: string}>}> {
-    const history: Array<{role: string, parts: Array<{text: string}>}> = []
-    
-    // Add memory context if available
+  private buildConversationHistory(context: ConversationContext): Array<{ role: string, parts: Array<{ text: string }> }> {
+    const history: Array<{ role: string, parts: Array<{ text: string }> }> = []
     if (context.memoryContext) {
       history.push({
         role: 'user',
         parts: [{ text: `Context and memories:\n${context.memoryContext}\n\nUse this context to inform your responses.` }]
       })
     }
-    
-    // Add recent conversation history (last 10 messages for context)
     const recentMessages = context.messages.slice(-10)
-    
     for (const msg of recentMessages) {
       history.push({
         role: msg.isUser ? 'user' : 'model',
         parts: [{ text: msg.text }]
       })
     }
-
     return history
+  }
+}
+
+// OpenAI API Integration
+export class OpenAIAPI extends BaseAIAPI {
+  protected provider = 'openai'
+  protected envKey = 'NEXT_PUBLIC_OPENAI_API_KEY'
+  private apiUrl = 'https://api.openai.com/v1/chat/completions'
+  private model = 'gpt-4o'
+
+  constructor() {
+    super()
+    this.initKey()
+  }
+
+  async generateResponse(
+    message: string,
+    context: ConversationContext,
+    onChunk?: (chunk: string) => void,
+    signal?: AbortSignal
+  ): Promise<AIResponse> {
+    if (!this.apiKey) throw new Error('OpenAI API key not configured')
+
+    const messages = [
+      { role: 'system', content: context.memoryContext || 'You are a helpful assistant.' },
+      ...context.messages.slice(-10).map(m => ({ role: m.isUser ? 'user' : 'assistant', content: m.text })),
+      { role: 'user', content: message }
+    ]
+
+    const response = await fetch(this.apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages,
+        stream: !!onChunk
+      }),
+      signal
+    })
+
+    if (!response.ok) throw new Error(`OpenAI API error: ${response.status}`)
+
+    if (onChunk) {
+      return this.handleStreamingResponse(response, onChunk, signal)
+    } else {
+      const data = await response.json()
+      return { text: data.choices[0].message.content, model: 'openai', timestamp: Date.now() }
+    }
+  }
+
+  private async handleStreamingResponse(response: Response, onChunk: (chunk: string) => void, signal?: AbortSignal): Promise<AIResponse> {
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    let fullResponse = ''
+    if (!reader) throw new Error('No response body')
+
+    try {
+      while (true) {
+        if (signal?.aborted) { reader.cancel(); throw new Error('Aborted'); }
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n')
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            if (data === '[DONE]') continue
+            try {
+              const parsed = JSON.parse(data)
+              const content = parsed.choices?.[0]?.delta?.content
+              if (content) { fullResponse += content; onChunk(content); }
+            } catch (e) { }
+          }
+        }
+      }
+      return { text: fullResponse, model: 'openai', timestamp: Date.now() }
+    } finally { reader.releaseLock() }
+  }
+}
+
+// Claude API Integration (Anthropic)
+export class ClaudeAPI extends BaseAIAPI {
+  protected provider = 'claude'
+  protected envKey = 'NEXT_PUBLIC_ANTHROPIC_API_KEY'
+  private apiUrl = 'https://api.anthropic.com/v1/messages'
+  private model = 'claude-3-5-sonnet-20240620'
+
+  constructor() {
+    super()
+    this.initKey()
+  }
+
+  async generateResponse(
+    message: string,
+    context: ConversationContext,
+    onChunk?: (chunk: string) => void,
+    signal?: AbortSignal
+  ): Promise<AIResponse> {
+    if (!this.apiKey) throw new Error('Anthropic API key not configured')
+
+    const messages = [
+      ...context.messages.slice(-10).map(m => ({ role: m.isUser ? 'user' : 'assistant', content: m.text })),
+      { role: 'user', content: message }
+    ]
+
+    const response = await fetch(this.apiUrl, {
+      method: 'POST',
+      headers: {
+        'x-api-key': this.apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'dangerously-allow-browser': 'true' // Required for client-side calls
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages,
+        system: context.memoryContext || '',
+        stream: !!onChunk,
+        max_tokens: 2000
+      }),
+      signal
+    })
+
+    if (!response.ok) throw new Error(`Anthropic API error: ${response.status}`)
+
+    if (onChunk) {
+      return this.handleStreamingResponse(response, onChunk, signal)
+    } else {
+      const data = await response.json()
+      return { text: data.content[0].text, model: 'claude', timestamp: Date.now() }
+    }
+  }
+
+  private async handleStreamingResponse(response: Response, onChunk: (chunk: string) => void, signal?: AbortSignal): Promise<AIResponse> {
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    let fullResponse = ''
+    if (!reader) throw new Error('No response body')
+
+    try {
+      while (true) {
+        if (signal?.aborted) { reader.cancel(); throw new Error('Aborted'); }
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n')
+        for (const line of lines) {
+          if (line.startsWith('event: content_block_delta')) {
+            // Next line is data
+            continue
+          }
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            try {
+              const parsed = JSON.parse(data)
+              if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+                fullResponse += parsed.delta.text
+                onChunk(parsed.delta.text)
+              }
+            } catch (e) { }
+          }
+        }
+      }
+      return { text: fullResponse, model: 'claude', timestamp: Date.now() }
+    } finally { reader.releaseLock() }
+  }
+}
+
+// Grok API Integration (xAI) - OpenAI Compatible
+export class GrokAPI extends OpenAIAPI {
+  protected provider = 'grok'
+  protected envKey = 'NEXT_PUBLIC_XAI_API_KEY'
+  private xApiUrl = 'https://api.x.ai/v1/chat/completions'
+  private xModel = 'grok-beta'
+
+  constructor() {
+    super()
+    this.initKey()
+  }
+
+  async generateResponse(
+    message: string,
+    context: ConversationContext,
+    onChunk?: (chunk: string) => void,
+    signal?: AbortSignal
+  ): Promise<AIResponse> {
+    if (!this.apiKey) throw new Error('xAI API key not configured')
+
+    // Use OpenAI implementation but override URL and Model
+    const originalUrl = (this as any).apiUrl
+    const originalModel = (this as any).model
+
+    // @ts-ignore
+    this.apiUrl = this.xApiUrl
+    // @ts-ignore
+    this.model = this.xModel
+
+    try {
+      return await super.generateResponse(message, context, onChunk, signal)
+    } finally {
+      // Restore defaults
+      // @ts-ignore
+      this.apiUrl = originalUrl
+      // @ts-ignore
+      this.model = originalModel
+    }
   }
 }
 
@@ -572,10 +506,16 @@ export class GeminiAPI {
 export class AIService {
   private mistralAPI: MistralAPI
   private geminiAPI: GeminiAPI
+  private openaiAPI: OpenAIAPI
+  private claudeAPI: ClaudeAPI
+  private grokAPI: GrokAPI
 
   constructor() {
     this.mistralAPI = new MistralAPI()
     this.geminiAPI = new GeminiAPI()
+    this.openaiAPI = new OpenAIAPI()
+    this.claudeAPI = new ClaudeAPI()
+    this.grokAPI = new GrokAPI()
   }
 
   async generateResponse(
@@ -585,25 +525,39 @@ export class AIService {
     onChunk?: (chunk: string) => void,
     signal?: AbortSignal
   ): Promise<AIResponse> {
-    switch (model.toLowerCase()) {
-      case 'mistral':
-        return await this.mistralAPI.generateResponse(message, context, onChunk, signal)
-      case 'gemini':
-        return await this.geminiAPI.generateResponse(message, context, onChunk, signal)
-      default:
-        throw new Error(`Unsupported model: ${model}`)
-    }
+    const normalizedModel = model.toLowerCase()
+
+    if (normalizedModel.includes('mistral')) return this.mistralAPI.generateResponse(message, context, onChunk, signal)
+    if (normalizedModel.includes('gemini')) return this.geminiAPI.generateResponse(message, context, onChunk, signal)
+    if (normalizedModel.includes('gpt') || normalizedModel.includes('openai')) return this.openaiAPI.generateResponse(message, context, onChunk, signal)
+    if (normalizedModel.includes('claude')) return this.claudeAPI.generateResponse(message, context, onChunk, signal)
+    if (normalizedModel.includes('grok')) return this.grokAPI.generateResponse(message, context, onChunk, signal)
+
+    throw new Error(`Unsupported model: ${model}`)
   }
 
   isModelAvailable(model: string): boolean {
-    switch (model.toLowerCase()) {
-      case 'mistral':
-        return !!process.env.NEXT_PUBLIC_MISTRAL_API_KEY
-      case 'gemini':
-        return !!process.env.NEXT_PUBLIC_GEMINI_API_KEY
-      default:
-        return false
+    const normalizedModel = model.toLowerCase()
+    if (normalizedModel.includes('mistral')) return this.mistralAPI.hasKey()
+    if (normalizedModel.includes('gemini')) return this.geminiAPI.hasKey()
+    if (normalizedModel.includes('gpt') || normalizedModel.includes('openai')) return this.openaiAPI.hasKey()
+    if (normalizedModel.includes('claude')) return this.claudeAPI.hasKey()
+    if (normalizedModel.includes('grok')) return this.grokAPI.hasKey()
+    return false
+  }
+
+  updateKey(provider: string, key: string) {
+    switch (provider.toLowerCase()) {
+      case 'mistral': this.mistralAPI.setApiKey(key); break;
+      case 'gemini': this.geminiAPI.setApiKey(key); break;
+      case 'openai': this.openaiAPI.setApiKey(key); break;
+      case 'claude': this.claudeAPI.setApiKey(key); break;
+      case 'grok': this.grokAPI.setApiKey(key); break;
     }
+  }
+
+  getKey(provider: string): string {
+    return getApiKey(provider.toLowerCase(), '')
   }
 }
 

@@ -9,6 +9,7 @@ interface RestoreConversationParams {
 	setBranches: (branches: { id: string }[]) => void
 	setConversationNodes: (nodes: any[]) => void
 	setCurrentBranch: (branch: string | null) => void
+	setActiveBranchId: (branchId: string | null) => void
 	currentConversationIdRef: React.MutableRefObject<string | null>
 	selectedAIs: AI[]
 	defaultAI: AI
@@ -22,6 +23,7 @@ export function useConversationRestore() {
 		setBranches,
 		setConversationNodes,
 		setCurrentBranch,
+		setActiveBranchId,
 		currentConversationIdRef,
 		selectedAIs,
 		defaultAI
@@ -205,7 +207,20 @@ export function useConversationRestore() {
 			setConversationNodes([mainNode])
 		}
 
-		setCurrentBranch(null)
+		// Restore active node/branch if available
+		if (conversation.activeNodeId) {
+			console.log('🎯 Restoring active node:', conversation.activeNodeId)
+			setActiveBranchId(conversation.activeNodeId)
+			if (conversation.activeNodeId !== 'main') {
+				setCurrentBranch(conversation.activeNodeId)
+			} else {
+				setCurrentBranch(null)
+			}
+		} else {
+			setCurrentBranch(null)
+			setActiveBranchId('main')
+		}
+
 		currentConversationIdRef.current = conversation._id
 	}, [])
 

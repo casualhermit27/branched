@@ -13,10 +13,21 @@ export function GroupedBranchesContainer({ nodes }: GroupedBranchesContainerProp
   // Group nodes by branchGroupId
   const groupedNodes = useMemo(() => {
     const groups = new Map<string, Node[]>()
-    
+
     nodes.forEach((node) => {
-      const groupId = node.data?.branchGroupId
-      if (groupId && !node.data?.isMain) {
+      const groupId = node.data?.branchGroupId || (node as any).branchGroupId
+
+      // Log for debugging
+      if (node.id !== 'main' && (node.data?.branchGroupId || (node as any).branchGroupId)) {
+        console.log('📦 Container found node with group ID:', {
+          id: node.id,
+          groupId,
+          dataGroupId: node.data?.branchGroupId,
+          topLevelGroupId: (node as any).branchGroupId
+        })
+      }
+
+      if (groupId && (!node.data || !node.data.isMain)) {
         if (!groups.has(groupId)) {
           groups.set(groupId, [])
         }
@@ -50,10 +61,10 @@ export function GroupedBranchesContainer({ nodes }: GroupedBranchesContainerProp
           : typeof (node as any).measured?.height === 'number'
             ? (node as any).measured.height
             : (() => {
-                if (node.data?.isMinimized) return fallbackHeight
-                const messageCount = node.data?.messages?.length || 0
-                return Math.max(400, Math.min(900, 220 + messageCount * 68))
-              })()
+              if (node.data?.isMinimized) return fallbackHeight
+              const messageCount = node.data?.messages?.length || 0
+              return Math.max(400, Math.min(900, 220 + messageCount * 68))
+            })()
 
       return { width, height }
     }
@@ -106,16 +117,6 @@ export function GroupedBranchesContainer({ nodes }: GroupedBranchesContainerProp
         height: '100%',
         pointerEvents: 'none',
         zIndex: 1,
-        overflow: 'visible'
-      }}
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        pointerEvents: 'none',
-        zIndex: 1,
         overflow: 'visible',
         transform: `translate(${viewportX}px, ${viewportY}px) scale(${zoom})`,
         transformOrigin: '0 0'
@@ -127,43 +128,66 @@ export function GroupedBranchesContainer({ nodes }: GroupedBranchesContainerProp
 
         return (
           <g key={groupId}>
-            {/* Background rectangle with rounded corners */}
+            {/* Glassmorphic Panel */}
             <rect
               x={bounds.x}
               y={bounds.y}
               width={bounds.width}
               height={bounds.height}
-              rx={cornerRadius}
-              ry={cornerRadius}
-              fill="rgba(59, 130, 246, 0.1)"
-              className="dark:fill-blue-900/25"
-              stroke="rgba(96, 165, 250, 0.6)"
-              strokeWidth="2"
-              className="dark:stroke-blue-500/60"
-              style={{ pointerEvents: 'none' }}
+              rx={32}
+              ry={32}
+              fill="currentColor"
+              className="text-slate-100/50 dark:text-slate-900/20 transition-colors duration-300"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            // Use a secondary class for the stroke color to handle it via CSS variables if needed, 
+            // or just use the text color utility on a wrapper group if this fails. 
+            // For now, explicit classes on elements is safer for SVG in React.
             />
-            {/* Inner border for depth */}
+            {/* Separate rect for stroke to ensure distinct color from fill if needed, 
+                  but here we can use the same element if we manage colors right. 
+                  Actually, let's use a separate rect for the border to have full control over stroke color independent of fill.
+              */}
             <rect
-              x={bounds.x + 1}
-              y={bounds.y + 1}
-              width={bounds.width - 2}
-              height={bounds.height - 2}
-              rx={cornerRadius - 1}
-              ry={cornerRadius - 1}
+              x={bounds.x}
+              y={bounds.y}
+              width={bounds.width}
+              height={bounds.height}
+              rx={32}
+              ry={32}
               fill="none"
-              stroke="rgba(59, 130, 246, 0.15)"
-              strokeWidth="1"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              className="text-slate-300 dark:text-slate-700"
               style={{ pointerEvents: 'none' }}
             />
+
+            {/* Label Badge */}
+            <g transform={`translate(${bounds.x + 24}, ${bounds.y - 14})`}>
+              <rect
+                x="0"
+                y="0"
+                width="140"
+                height="28"
+                rx="14"
+                fill="currentColor"
+                className="text-white dark:text-slate-800 shadow-sm text-slate-200 dark:text-slate-700"
+                stroke="currentColor"
+                strokeWidth="1"
+              />
+              {/* Re-apply the stroke class separately or merge? 
+                     React duplicate props issue. Let's merge.
+                 */}
+            </g>
+
+            {/* Label Text */}
             <text
-              x={bounds.x + 16}
-              y={bounds.y + 28}
-              fill="rgba(59, 130, 246, 0.8)"
-              className="dark:fill-blue-300"
-              fontSize={14}
-              fontWeight={600}
+              x={bounds.x + 40}
+              y={bounds.y + 4}
+              className="fill-slate-600 dark:fill-slate-300 text-[12px] font-semibold tracking-wide uppercase"
+              style={{ pointerEvents: 'none' }}
             >
-              Multi-model · {bounds.branchCount} {bounds.branchCount === 1 ? 'branch' : 'branches'}
+              Compare · {bounds.branchCount} Models
             </text>
           </g>
         )
@@ -171,4 +195,3 @@ export function GroupedBranchesContainer({ nodes }: GroupedBranchesContainerProp
     </svg>
   )
 }
-

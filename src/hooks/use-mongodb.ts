@@ -204,8 +204,12 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
         // Handle arrays
         if (Array.isArray(obj)) {
           const sanitizedArray = obj.map(item => {
-            if (item && typeof item === 'object' && (item.$$typeof || item.type || item.props)) {
-              return undefined
+            // Only skip if it's definitely a React element (has $$typeof)
+            if (item && typeof item === 'object') {
+              if (item.$$typeof) {
+                console.log('⚠️ Stripping React element from array:', { keys: Object.keys(item), typeof: item.$$typeof })
+                return undefined
+              }
             }
             return sanitize(item, depth + 1)
           }).filter(item => item !== undefined)
@@ -230,9 +234,7 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
 
             // Skip React elements
             if (value && typeof value === 'object') {
-              if (value.$$typeof || value.type || value.props) {
-                continue
-              }
+              if (value.$$typeof) continue
             }
 
             // Recursively sanitize the value
@@ -267,39 +269,11 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
       clearTimeout(autoSaveTimeoutRef.current)
     }
 
-    // Sanitize data to remove circular references
-    console.log('🔍 Original data structure:', {
-      hasMainMessages: !!data.mainMessages,
-      mainMessagesLength: data.mainMessages?.length || 0,
-      mainMessages: data.mainMessages?.map((m: any) => ({
-        id: m.id,
-        isUser: m.isUser,
-        textLength: m.text?.length || 0,
-        hasText: !!m.text
-      })) || [],
-      hasSelectedAIs: !!data.selectedAIs,
-      selectedAIsLength: data.selectedAIs?.length || 0,
-      hasBranches: !!data.branches,
-      branchesLength: data.branches?.length || 0,
-      branchIds: data.branches?.map((b: any) => b.id) || []
-    })
-
     const sanitizedData = sanitizeData(data)
 
-    console.log('📦 Sanitized data for MongoDB:', {
-      hasMainMessages: !!sanitizedData.mainMessages,
-      mainMessagesLength: sanitizedData.mainMessages?.length || 0,
-      mainMessages: sanitizedData.mainMessages?.map((m: any) => ({
-        id: m.id,
-        isUser: m.isUser,
-        textLength: m.text?.length || 0,
-        hasText: !!m.text
-      })) || [],
-      hasSelectedAIs: !!sanitizedData.selectedAIs,
-      selectedAIsLength: sanitizedData.selectedAIs?.length || 0,
-      hasBranches: !!sanitizedData.branches,
-      branchesLength: sanitizedData.branches?.length || 0,
-      branchIds: sanitizedData.branches?.map((b: any) => b.id) || []
+    console.log(`📦 Sanitized data: MainMessages=${sanitizedData.mainMessages?.length || 0}, Branches=${sanitizedData.branches?.length || 0}`)
+    sanitizedData.branches?.forEach((b: any) => {
+      if (b.messages?.length > 0) console.log(`   Branch ${b.id}: ${b.messages.length} messages`)
     })
 
     // Check if data has changed

@@ -95,7 +95,7 @@ export function useConversationBranchActions({
 
 		if (branchNode) {
 			setActiveBranchId(branchId)
-		 return
+			return
 		}
 
 		const branch = savedBranches.find(b => b.id === branchId)
@@ -196,7 +196,7 @@ export function useConversationBranchActions({
 		creatingBranchRef.current.clear()
 
 		try {
-			const uniqueTitle = `New Conversation ${new Date().toLocaleString()}`
+			const uniqueTitle = 'New Conversation'
 
 			const response = await fetch('/api/conversations', {
 				method: 'POST',

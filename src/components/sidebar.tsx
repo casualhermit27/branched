@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { List, X, ArrowsOut, ArrowsIn, Clock, GitBranch, Trash, Gear, Sparkle as SparklesIcon } from '@phosphor-icons/react'
+import { List, X, ArrowsOut, ArrowsIn, Clock, GitBranch, Trash, Gear, Sparkle as SparklesIcon, Eye, EyeSlash, Key } from '@phosphor-icons/react'
 import ConversationHistory from './conversation-history'
+import { aiService } from '@/services/ai-api'
 
 interface Message {
   id: string
@@ -57,6 +58,12 @@ interface SidebarProps {
   onCreateNewConversation?: () => void
   messageCount?: number
   onUpgrade?: () => void
+  isOpen?: boolean
+  onOpenChange?: (isOpen: boolean) => void
+  activeTab?: 'history' | 'settings'
+  onTabChange?: (tab: 'history' | 'settings') => void
+  onExportData?: () => void
+  onClearData?: () => void
 }
 
 export default function Sidebar({
@@ -71,12 +78,57 @@ export default function Sidebar({
   onSelectConversation = () => { },
   onCreateNewConversation = () => { },
   messageCount = 0,
-  onUpgrade = () => { }
+  onUpgrade = () => { },
+  isOpen: externalIsOpen,
+  onOpenChange,
+  activeTab: externalActiveTab,
+  onTabChange,
+  onExportData,
+  onClearData
 }: SidebarProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<'history' | 'settings'>('history')
+  const [internalIsOpen, setInternalIsOpen] = useState(false)
+  const [internalActiveTab, setInternalActiveTab] = useState<'history' | 'settings'>('history')
+
+  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen
+  const setIsOpen = onOpenChange || setInternalIsOpen
+
+  const activeTab = externalActiveTab !== undefined ? externalActiveTab : internalActiveTab
+  const setActiveTab = onTabChange || setInternalActiveTab
+
   // Always use fixed width, no expand/collapse functionality
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['main']))
+
+  // API Key State
+  const [apiKeys, setApiKeys] = useState({
+    mistral: '',
+    openai: '',
+    claude: '',
+    gemini: '',
+    grok: ''
+  })
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({})
+
+  // Load keys on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setApiKeys({
+        mistral: aiService.getKey('mistral'),
+        openai: aiService.getKey('openai'),
+        claude: aiService.getKey('claude'),
+        gemini: aiService.getKey('gemini'),
+        grok: aiService.getKey('grok')
+      })
+    }
+  }, [])
+
+  const handleKeyChange = (provider: string, value: string) => {
+    setApiKeys(prev => ({ ...prev, [provider]: value }))
+    aiService.updateKey(provider, value)
+  }
+
+  const toggleKeyVisibility = (provider: string) => {
+    setShowKeys(prev => ({ ...prev, [provider]: !prev[provider] }))
+  }
 
   // Build conversation tree from nodes with proper hierarchy
   const buildConversationTree = (nodes: ConversationNode[]): ConversationNode[] => {
@@ -424,13 +476,61 @@ export default function Sidebar({
                     </div>
 
                     <div>
+                      <h3 className="text-sm font-semibold text-foreground dark:text-foreground mb-4">API Keys (BYOK)</h3>
+                      <div className="space-y-3">
+                        {[
+                          { id: 'mistral', label: 'Mistral AI', placeholder: 'Enter Mistral API Key' },
+                          { id: 'openai', label: 'OpenAI (GPT-4)', placeholder: 'sk-...' },
+                          { id: 'claude', label: 'Anthropic (Claude)', placeholder: 'sk-ant-...' },
+                          { id: 'gemini', label: 'Google Gemini', placeholder: 'Enter Gemini API Key' },
+                          { id: 'grok', label: 'xAI (Grok)', placeholder: 'Enter xAI API Key' }
+                        ].map((provider) => (
+                          <div key={provider.id} className="p-3 rounded-lg border border-border/60 dark:border-border/40 bg-card dark:bg-card">
+                            <div className="flex items-center justify-between mb-2">
+                              <label className="text-sm font-medium text-foreground dark:text-foreground flex items-center gap-2">
+                                <Key size={14} className="text-muted-foreground" />
+                                {provider.label}
+                              </label>
+                              {apiKeys[provider.id as keyof typeof apiKeys] && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-500 rounded font-medium">
+                                  Active
+                                </span>
+                              )}
+                            </div>
+                            <div className="relative">
+                              <input
+                                type={showKeys[provider.id] ? 'text' : 'password'}
+                                value={apiKeys[provider.id as keyof typeof apiKeys]}
+                                onChange={(e) => handleKeyChange(provider.id, e.target.value)}
+                                placeholder={provider.placeholder}
+                                className="w-full bg-muted/50 dark:bg-muted/30 border border-border/50 rounded-md py-1.5 pl-2 pr-8 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                              />
+                              <button
+                                onClick={() => toggleKeyVisibility(provider.id)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                {showKeys[provider.id] ? <EyeSlash size={14} /> : <Eye size={14} />}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
                       <h3 className="text-sm font-semibold text-foreground dark:text-foreground mb-4">Data</h3>
                       <div className="space-y-3">
-                        <button className="w-full p-3 rounded-lg border border-border/60 dark:border-border/40 bg-card dark:bg-card hover:bg-muted dark:hover:bg-muted/80 transition-colors text-left">
+                        <button
+                          onClick={onExportData}
+                          className="w-full p-3 rounded-lg border border-border/60 dark:border-border/40 bg-card dark:bg-card hover:bg-muted dark:hover:bg-muted/80 transition-colors text-left"
+                        >
                           <p className="text-sm font-medium text-foreground dark:text-foreground">Export all conversations</p>
                           <p className="text-xs text-muted-foreground dark:text-muted-foreground/70 mt-0.5">Download your data as JSON</p>
                         </button>
-                        <button className="w-full p-3 rounded-lg border border-destructive/30 dark:border-destructive/30 bg-card dark:bg-card hover:bg-destructive/10 dark:hover:bg-destructive/20 transition-colors text-left">
+                        <button
+                          onClick={onClearData}
+                          className="w-full p-3 rounded-lg border border-destructive/30 dark:border-destructive/30 bg-card dark:bg-card hover:bg-destructive/10 dark:hover:bg-destructive/20 transition-colors text-left"
+                        >
                           <p className="text-sm font-medium text-destructive">Clear all data</p>
                           <p className="text-xs text-muted-foreground dark:text-muted-foreground/70 mt-0.5">Permanently delete all conversations</p>
                         </button>

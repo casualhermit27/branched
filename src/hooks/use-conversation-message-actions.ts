@@ -244,17 +244,17 @@ export function useConversationMessageActions({
 							)
 
 							if (matchingStreamingMessage) {
-							 return {
-								 ...node,
-								 data: {
-									 ...node.data,
-									 messages: branchMessages.map(msg =>
-										 msg.id === matchingStreamingMessage.id
-											 ? { ...msg, streamingText: (msg.streamingText || '') + chunk }
-											 : msg
-									 )
-								 }
-							 }
+								return {
+									...node,
+									data: {
+										...node.data,
+										messages: branchMessages.map(msg =>
+											msg.id === matchingStreamingMessage.id
+												? { ...msg, streamingText: (msg.streamingText || '') + chunk }
+												: msg
+										)
+									}
+								}
 							}
 
 							return node
@@ -286,23 +286,23 @@ export function useConversationMessageActions({
 						)
 
 						if (matchingStreamingMessage) {
-						 return {
-							 ...node,
-							 data: {
-								 ...node.data,
-								 messages: branchMessages.map(msg =>
-									 msg.id === matchingStreamingMessage.id
-										 ? {
-											 ...msg,
-											 text: mockResponse,
-											 isStreaming: false,
-											 streamingText: undefined,
-											 timestamp: Date.now()
-										 }
-										 : msg
-								 )
-							 }
-						 }
+							return {
+								...node,
+								data: {
+									...node.data,
+									messages: branchMessages.map(msg =>
+										msg.id === matchingStreamingMessage.id
+											? {
+												...msg,
+												text: mockResponse,
+												isStreaming: false,
+												streamingText: undefined,
+												timestamp: Date.now()
+											}
+											: msg
+									)
+								}
+							}
 						}
 
 						return node
@@ -334,16 +334,16 @@ export function useConversationMessageActions({
 							return msg
 						}).filter(msg => !(msg.isStreaming && !msg.streamingText && msg.id === streamingMessageId)))
 
-					 return {
-						 id: streamingMessageId,
-						 text: '[Generation stopped]',
-						 isUser: false,
-						 timestamp: Date.now(),
-						 parentId: newMessage.id,
-						 children: [],
+						return {
+							id: streamingMessageId,
+							text: '[Generation stopped]',
+							isUser: false,
+							timestamp: Date.now(),
+							parentId: newMessage.id,
+							children: [],
 							aiModel: ai.id,
 							groupId
-					 }
+						}
 					}
 
 					return {
@@ -531,14 +531,30 @@ export function useConversationMessageActions({
 		if (!messageId) return
 
 		const cachedBranchId = branchCacheRef.current.get(messageId)
-		if (cachedBranchId) {
-			setActiveBranchId(cachedBranchId)
-			addToast({
-				type: 'info',
-				title: 'Branch Exists',
-				message: 'Navigating to existing branch'
-			})
-			return
+		// Only use cache if NOT creating a multi-branch or duplicate (which we can't know yet, but we can check if we're forcing a new one)
+		// Actually, if we are here, we might be creating a duplicate.
+		// If cachedBranchId exists, we usually navigate to it.
+		// BUT if the user wants to create a duplicate, we shouldn't just navigate.
+		// The UI flow is: click -> check cache -> if exists, navigate.
+		// To support duplicates, we need to know if the user explicitly requested a new branch or if we should show the warning.
+
+		// If we are already in the process of creating a duplicate (via warning confirm), we skip cache
+		const isCreatingDuplicate = pendingBranchData?.messageId === messageId && pendingBranchData?.allowDuplicate
+
+		if (cachedBranchId && !isMultiBranch && !isCreatingDuplicate) {
+			// Check if we should show warning instead of navigating
+			const existingBranchCount = getBranchCountForMessage(messageId)
+			if (existingBranchCount > 0) {
+				// Don't auto-navigate, let the logic below handle the warning/duplicate check
+			} else {
+				setActiveBranchId(cachedBranchId)
+				addToast({
+					type: 'info',
+					title: 'Branch Exists',
+					message: 'Navigating to existing branch'
+				})
+				return
+			}
 		}
 
 		const targetMessage = messages.find(m => m.id === messageId) ||
@@ -702,15 +718,15 @@ export function useConversationMessageActions({
 					return [mainNode, ...newConversationNodes]
 				}
 
-			 return newConversationNodes.map(node => {
-				 if (node.id === 'main' || node.isMain) {
-					 return {
-						 ...node,
-						 messages: node.messages && node.messages.length > 0 ? node.messages : (messages || [])
-					 }
-				 }
-				 return node
-			 })
+				return newConversationNodes.map(node => {
+					if (node.id === 'main' || node.isMain) {
+						return {
+							...node,
+							messages: node.messages && node.messages.length > 0 ? node.messages : (messages || [])
+						}
+					}
+					return node
+				})
 			})
 		})
 	}, [

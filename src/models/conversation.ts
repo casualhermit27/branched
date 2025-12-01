@@ -44,8 +44,8 @@ export interface IMessage {
 const MessageSchema = new Schema<IMessage>({
   id: { type: String, required: true },
   text: { type: String, required: true },
-  isUser: { 
-    type: Boolean, 
+  isUser: {
+    type: Boolean,
     required: true,
     default: function () {
       // Auto-compute isUser based on AI indicators
@@ -97,6 +97,7 @@ export interface IBranch {
   updatedAt: Date
   // New fields for advanced features
   depthLevel?: number // Tree depth for layout
+  branchGroupId?: string // Group ID for visual grouping of multi-model branches
   metadata?: {
     temperature?: number
     topP?: number
@@ -140,6 +141,7 @@ const BranchSchema = new Schema<IBranch>({
   updatedAt: { type: Date, default: Date.now },
   // New fields
   depthLevel: { type: Number, default: 0 },
+  branchGroupId: { type: String },
   metadata: { type: Schema.Types.Mixed, default: {} },
   confidenceScore: { type: Number, min: 0, max: 1 },
   reasoningScore: { type: Number, min: 0, max: 1 },
@@ -209,12 +211,12 @@ const ConversationSchema = new Schema<IConversation>({
 })
 
 // Update timestamps
-ConversationSchema.pre('save', function(next) {
+ConversationSchema.pre('save', function (next) {
   this.updatedAt = new Date()
   next()
 })
 
-BranchSchema.pre('save', function(next) {
+BranchSchema.pre('save', function (next) {
   this.updatedAt = new Date()
   next()
 })

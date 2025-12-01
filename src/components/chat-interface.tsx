@@ -123,7 +123,13 @@ export default function ChatInterface({
       hasScrolledRef.current = false
       lastBranchIdRef.current = currentBranch
 
-      // Don't auto-focus textarea on branch change - let user decide
+      // Auto-focus if it's a new empty branch (UX improvement)
+      if (messages.length === 0) {
+        setTimeout(() => {
+          textareaRef.current?.focus()
+        }, 100)
+      }
+
       // Use scrollTop instead of scrollIntoView to avoid layout shifts
       setTimeout(() => {
         if (messagesContainerRef.current) {
@@ -132,7 +138,7 @@ export default function ChatInterface({
         }
       }, 100)
     }
-  }, [currentBranch])
+  }, [currentBranch, messages.length])
 
   // Auto-scroll to bottom when new messages arrive (only if should auto-scroll)
   useEffect(() => {
@@ -323,8 +329,8 @@ export default function ChatInterface({
                               <ReactMarkdown>{msg.text}</ReactMarkdown>
                             </div>
                           </div>
-                          {/* Branch Button for User (Hover) - Left side */}
-                          <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 opacity-0 group-hover/message:opacity-100 transition-opacity duration-200">
+                          {/* Branch Button for User (Hover/Mobile) - Left side */}
+                          <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 opacity-100 md:opacity-0 md:group-hover/message:opacity-100 transition-opacity duration-200">
                             <button
                               onClick={(e) => {
                                 e.preventDefault()
@@ -399,8 +405,8 @@ export default function ChatInterface({
                             </div>
                           </div>
 
-                          {/* Branch Button (Hover) - Right side */}
-                          <div className="absolute right-0 top-2 opacity-0 group-hover/message:opacity-100 transition-opacity duration-200">
+                          {/* Branch Button (Hover/Mobile) - Right side */}
+                          <div className="absolute right-0 top-2 opacity-100 md:opacity-0 md:group-hover/message:opacity-100 transition-opacity duration-200">
                             <button
                               onClick={(e) => {
                                 e.preventDefault()
@@ -447,7 +453,7 @@ export default function ChatInterface({
           <div className="max-w-5xl mx-auto relative">
             <form
               onSubmit={handleSubmit}
-              className="relative flex items-center gap-2 bg-card border border-border shadow-sm rounded-2xl p-2 ring-1 ring-black/5 dark:ring-white/5"
+              className="relative flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/50 shadow-sm rounded-2xl p-2 ring-1 ring-black/5 dark:ring-white/5"
             >
               {/* Attachment Button */}
               <button

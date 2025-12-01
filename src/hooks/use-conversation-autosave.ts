@@ -32,6 +32,12 @@ export function useConversationAutosave({
 		})
 		const hasBranches = branches.length > 0
 
+		console.log(`💾 Autosave check: Messages=${messages.length}, Nodes=${conversationNodes.length}, Branches=${branches.length}`)
+		conversationNodes.forEach(n => {
+			const msgCount = (n.data?.messages || n.messages || []).length
+			if (msgCount > 0) console.log(`   Node ${n.id}: ${msgCount} messages`)
+		})
+
 		const shouldSave = !isInitialLoadRef.current && (hasMessages || hasNodes || hasBranches)
 
 		if (shouldSave) {

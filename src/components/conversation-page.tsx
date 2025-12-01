@@ -36,7 +36,7 @@ export default function ConversationPage({ initialConversationId }: Conversation
 		currentConversationId
 	} = useMongoDB({
 		autoSave: true,
-		autoSaveDelay: 2000,
+		autoSaveDelay: 500,
 		initialConversationId,
 		onSave: (success, error) => {
 			if (!success && error) {
@@ -59,6 +59,7 @@ export default function ConversationPage({ initialConversationId }: Conversation
 			setBranches,
 			setConversationNodes,
 			setCurrentBranch: conversationState.setCurrentBranch,
+			setActiveBranchId: conversationState.setActiveBranchId,
 			currentConversationIdRef: conversationState.currentConversationIdRef,
 			selectedAIs: conversationState.selectedAIs,
 			defaultAI
