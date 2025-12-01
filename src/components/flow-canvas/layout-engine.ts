@@ -1,13 +1,13 @@
 'use client'
 
 import dagre from 'dagre'
-import { Node, Edge } from 'reactflow'
+import { Node, Edge, Position } from 'reactflow'
 import type { LayoutConfig } from './types'
 
 const DEFAULT_CONFIG: LayoutConfig = {
 	direction: 'TB',
-	nodeWidth: 1200,
-	nodeHeight: 400,
+	nodeWidth: 1300,
+	nodeHeight: 450,
 	nodeSpacing: {
 		horizontal: 400,
 		vertical: 200
@@ -33,17 +33,17 @@ export function calculateNodeDimensions(
 	}
 
 	// Base height for header + input
-	const baseHeight = 300
+	const baseHeight = 450
 	// Height per message (approximate)
-	const messageHeight = 60
+	const messageHeight = 100
 	// Maximum height before scrolling
-	const maxHeight = 850
+	const maxHeight = 1200
 
 	const calculatedHeight = baseHeight + messageCount * messageHeight
 	const finalHeight = Math.min(calculatedHeight, maxHeight)
 
 	return {
-		width: 1200,
+		width: 1300,
 		height: finalHeight
 	}
 }
@@ -78,8 +78,8 @@ export function getLayoutedElements(
 					position: { x: 400, y: 50 },
 					width: dims.width,
 					height: dims.height,
-					targetPosition: 'top' as const,
-					sourcePosition: 'bottom' as const
+					targetPosition: Position.Top,
+					sourcePosition: Position.Bottom
 				}
 			],
 			edges
@@ -174,6 +174,22 @@ export function getLayoutedElements(
 				centerY: nodeWithPosition.y, // Dagre's center Y position
 				parentId: node.data?.parentId
 			})
+
+			// Special handling for main node to prevent jumping
+			if (node.id === 'main' || node.data?.isMain) {
+				// Pin main node to a fixed position or its current position if valid
+				// We override the dagre calculated position for the main node to keep it stable
+				const pinnedX = 400
+				const pinnedY = 50
+
+				// Adjust the offset for all other nodes based on how much main moved
+				const offsetX = pinnedX - x
+				const offsetY = pinnedY - y
+
+				// We'll apply this offset after collecting all positions
+				// For now, just mark this as the anchor
+				// (This logic is simplified; a full implementation would shift everything relative to main)
+			}
 		} catch (error) {
 			console.warn('Error processing node:', node.id, error)
 			invalidNodes.push(node)
@@ -188,7 +204,7 @@ export function getLayoutedElements(
 		if (item.node.id === 'main' || item.node.data?.isMain) {
 			return
 		}
-		
+
 		const parentId = item.parentId || 'main'
 		if (!nodesByParent.has(parentId)) {
 			nodesByParent.set(parentId, [])
@@ -301,17 +317,33 @@ export function getLayoutedElements(
 			data: {
 				...node.data,
 				// Ensure parentId is never the node's own ID
-				parentId: node.data?.parentId && node.data.parentId !== node.id 
-					? node.data.parentId 
+				parentId: node.data?.parentId && node.data.parentId !== node.id
+					? node.data.parentId
 					: node.data?.parentId || (node.id === 'main' ? undefined : 'main')
 			},
 			position: { x, y },
 			width: dims.width,
 			height: dims.height,
-			targetPosition: 'top' as const,
-			sourcePosition: 'bottom' as const
+			targetPosition: Position.Top,
+			sourcePosition: Position.Bottom
 		}
 	})
+
+	// Re-center the entire graph around the main node
+	const mainNode = layoutedNodes.find(n => n.id === 'main' || n.data?.isMain)
+	if (mainNode) {
+		const targetMainX = 400
+		const targetMainY = 50
+		const offsetX = targetMainX - mainNode.position.x
+		const offsetY = targetMainY - mainNode.position.y
+
+		if (offsetX !== 0 || offsetY !== 0) {
+			layoutedNodes.forEach(node => {
+				node.position.x += offsetX
+				node.position.y += offsetY
+			})
+		}
+	}
 
 	// Add invalid nodes with fallback positions
 	invalidNodes.forEach((node) => {
@@ -323,15 +355,15 @@ export function getLayoutedElements(
 			...node,
 			data: {
 				...node.data,
-				parentId: node.data?.parentId && node.data.parentId !== node.id 
-					? node.data.parentId 
+				parentId: node.data?.parentId && node.data.parentId !== node.id
+					? node.data.parentId
 					: node.data?.parentId || (node.id === 'main' ? undefined : 'main')
 			},
 			position: node.position || { x: 400, y: 50 },
 			width: dims.width,
 			height: dims.height,
-			targetPosition: 'top' as const,
-			sourcePosition: 'bottom' as const
+			targetPosition: Position.Top,
+			sourcePosition: Position.Bottom
 		})
 	})
 
@@ -367,8 +399,8 @@ export function validateNodePositions(nodes: Node[]): Node[] {
 			data: {
 				...node.data,
 				// Ensure parentId is never the node's own ID
-				parentId: node.data?.parentId && node.data.parentId !== node.id 
-					? node.data.parentId 
+				parentId: node.data?.parentId && node.data.parentId !== node.id
+					? node.data.parentId
 					: node.data?.parentId || (node.id === 'main' ? undefined : 'main')
 			},
 			position: { x, y },
@@ -413,7 +445,9 @@ export function calculateViewportFit(
 	const contentWidth = maxX - minX
 	const contentHeight = maxY - minY
 	const centerX = (minX + maxX) / 2
-	const centerY = (minY + maxY) / 2
+	// Add visual offset to move content up (camera down)
+	// User reported focus was "off little down" (content too low)
+	const centerY = (minY + maxY) / 2 + 50
 
 	// Calculate zoom to fit
 	const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920
@@ -453,7 +487,7 @@ export function calculateMultiBranchPositions(
 	parentNodeHeight: number,
 	branchCount: number
 ): Array<{ x: number; y: number }> {
-	const nodeWidth = 1200
+	const nodeWidth = 1300
 	const spacing = nodeWidth + 150 // Gap between branches
 
 	// Calculate total width needed

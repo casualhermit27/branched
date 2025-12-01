@@ -85,7 +85,7 @@ export function createEdge(
 	}
 
 	// Get color based on level (default to gray if level can't be determined)
-	const strokeColor = edgeLevel !== undefined 
+	const strokeColor = edgeLevel !== undefined
 		? getColorForLevel(edgeLevel)
 		: (style.stroke as string) || '#cbd5e1'
 
@@ -93,19 +93,19 @@ export function createEdge(
 		id: `edge-${sourceId}-${targetId}-${Date.now()}`,
 		source: sourceId,
 		target: targetId,
-		type,
+		type: 'default', // SmoothStep
 		animated,
 		style: {
-			stroke: strokeColor,
+			stroke: strokeColor || '#52525B', // Zinc 600
 			strokeWidth: 2,
-			strokeDasharray: '6 4', // Dotted line
+			strokeDasharray: '0', // Solid line
 			...style
 		},
 		markerEnd: {
 			type: MarkerType.ArrowClosed,
 			width: 20,
 			height: 20,
-			color: strokeColor
+			color: strokeColor || '#52525B'
 		}
 	}
 }
@@ -153,9 +153,9 @@ export function createContextLinkEdge(
 ): Edge {
 	return createEdge(source, target, {
 		animated: false,
-		type: 'bezier',
+		type: 'default',
 		style: {
-			stroke: '#f59e0b', // amber-500
+			stroke: '#3B82F6', // Blue 500
 			strokeWidth: 2.5,
 			strokeDasharray: '8 4'
 		}
@@ -173,7 +173,7 @@ export function createBranchEdges(
 	return branchIds.map((branchId) =>
 		createEdge(parentId, branchId, {
 			animated,
-			type: 'bezier'
+			type: 'default'
 		})
 	)
 }

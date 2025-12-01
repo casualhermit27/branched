@@ -13,7 +13,8 @@ import ReactFlow, {
 	type Edge as ReactFlowEdge,
 	type BackgroundVariant,
 	applyNodeChanges,
-	applyEdgeChanges
+	applyEdgeChanges,
+	SmoothStepEdge
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import ChatNode from '../chat-node'
@@ -43,6 +44,10 @@ const nodeTypes: NodeTypes = {
 	chatNode: ChatNode
 }
 
+const edgeTypes = {
+	default: SmoothStepEdge
+}
+
 export default function FlowCanvas(props: FlowCanvasProps) {
 	const {
 		selectedAIs,
@@ -69,7 +74,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		onAllNodesMinimizedChange,
 		onSelectionChange,
 		onMessageSelectionChange,
-		conversationId
+		conversationId,
+		onActiveNodeChange
 	} = props
 
 	const state = useFlowCanvasState()
@@ -179,7 +185,11 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 
 	const getLayoutedElementsWrapper = useCallback(
 		(nodes: any[], edges: any[], direction?: string) => {
-			return getLayoutedElements(nodes, edges, { direction: direction as 'TB' | 'LR' })
+			return getLayoutedElements(nodes, edges, {
+				direction: direction as 'TB' | 'LR',
+				nodeSpacing: 10,
+				rankSpacing: 80
+			})
 		},
 		[]
 	)
@@ -322,7 +332,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		minimizedNodes,
 		activeNodeId,
 		toggleNodeMinimize,
-		onDeleteBranch: handleDeleteBranch
+		onDeleteBranch: handleDeleteBranch,
+		setNodeActive
 	})
 
 	// ============================================
@@ -342,7 +353,10 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			if (nodeId === 'main') return
 
 			const node = nodes.find((n) => n.id === nodeId)
-			if (!node || !node.data) return
+			if (!node || !node.data) {
+				console.error('❌ Node not found or missing data:', nodeId)
+				return
+			}
 
 			const branchAIs = getBranchAIs(nodeId, selectedAIs)
 			const contextMessages = getParentChainMessages(nodeId, nodes, mainMessages)
@@ -410,6 +424,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 							data: {
 								...n.data,
 								messages: [...(n.data.messages || []), userMessage],
+								branchMessages: [...(n.data.branchMessages || []), userMessage],
 								metadata: {
 									...(n.data.metadata || {}),
 									lastActivity: Date.now()
@@ -488,7 +503,10 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 										...n,
 										data: {
 											...n.data,
-											messages: newMessages
+											messages: newMessages,
+											branchMessages: (n.data.branchMessages || []).some((msg: Message) => msg.id === streamingMessageId)
+												? (n.data.branchMessages || []).map((msg: Message) => msg.id === streamingMessageId ? finalizedMessage : msg)
+												: [...(n.data.branchMessages || []), finalizedMessage]
 										}
 									}
 								}
@@ -507,14 +525,66 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 						}
 					}
 
-					// ENFORCE MOCK MODE: Always use mock responses for development
-					// This prevents calling real AI APIs and incurring costs
-					const isSupported = false // Force mock mode
+					// Check if model is supported
+					const isSupported = false // Force mock mode for development
 
 					if (!isSupported) {
-						finalizeStreamingMessage(
-							buildMockResponse(displayName, message)
+						// Simulate streaming for mock response
+						const mockText = buildMockResponse(displayName, message)
+						let currentText = ''
+						const words = mockText.split(' ')
+
+						// Initial state update
+						setNodes((prev) =>
+							prev.map((n) => {
+								if (n.id === nodeId) {
+									return {
+										...n,
+										data: {
+											...n.data,
+											messages: [...(n.data.messages || []), streamingMessage],
+											branchMessages: [...(n.data.branchMessages || []), streamingMessage]
+										}
+									}
+								}
+								return n
+							})
 						)
+
+						// Simulate streaming word by word
+						for (let i = 0; i < words.length; i++) {
+							currentText += (i > 0 ? ' ' : '') + words[i]
+
+							// Update node with streaming text
+							setNodes((prev) =>
+								prev.map((n) => {
+									if (n.id === nodeId) {
+										return {
+											...n,
+											data: {
+												...n.data,
+												messages: (n.data.messages || []).map((msg: Message) =>
+													msg.id === streamingMessageId
+														? { ...msg, streamingText: currentText }
+														: msg
+												),
+												branchMessages: (n.data.branchMessages || []).map((msg: Message) =>
+													msg.id === streamingMessageId
+														? { ...msg, streamingText: currentText }
+														: msg
+												)
+											}
+										}
+									}
+									return n
+								})
+							)
+
+							// Add delay to simulate network latency
+							await new Promise(resolve => setTimeout(resolve, 50))
+						}
+
+						finalizeStreamingMessage(mockText)
 						continue
 					}
 
@@ -525,7 +595,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 									...n,
 									data: {
 										...n.data,
-										messages: [...(n.data.messages || []), streamingMessage]
+										messages: [...(n.data.messages || []), streamingMessage],
+										branchMessages: [...(n.data.branchMessages || []), streamingMessage]
 									}
 								}
 							}
@@ -534,32 +605,78 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					)
 
 					try {
+						// Buffer for throttling updates
+						let pendingText = ''
+						let lastUpdate = Date.now()
+
 						const response = await aiService.generateResponse(
 							modelName,
 							message,
 							{ messages: responseContext, currentBranch: nodeId, memoryContext: '' },
 							(chunk: string) => {
-								setNodes((prev) =>
-									prev.map((n) => {
-										if (n.id === nodeId) {
-											return {
-												...n,
-												data: {
-													...n.data,
-													messages: (n.data.messages || []).map((msg: Message) =>
-														msg.id === streamingMessageId
-															? { ...msg, streamingText: (msg.streamingText || '') + chunk }
-															: msg
-													)
+								pendingText += chunk
+								const now = Date.now()
+
+								// Throttle updates to every 50ms to prevent UI freezing
+								if (now - lastUpdate > 50) {
+									const textToAppend = pendingText
+									pendingText = ''
+									lastUpdate = now
+
+									setNodes((prev) =>
+										prev.map((n) => {
+											if (n.id === nodeId) {
+												return {
+													...n,
+													data: {
+														...n.data,
+														messages: (n.data.messages || []).map((msg: Message) =>
+															msg.id === streamingMessageId
+																? { ...msg, streamingText: (msg.streamingText || '') + textToAppend }
+																: msg
+														),
+														branchMessages: (n.data.branchMessages || []).map((msg: Message) =>
+															msg.id === streamingMessageId
+																? { ...msg, streamingText: (msg.streamingText || '') + textToAppend }
+																: msg
+														)
+													}
 												}
 											}
-										}
-										return n
-									})
-								)
+											return n
+										})
+									)
+								}
 							},
 							abortController.signal
 						)
+
+						// Flush any remaining text
+						if (pendingText) {
+							setNodes((prev) =>
+								prev.map((n) => {
+									if (n.id === nodeId) {
+										return {
+											...n,
+											data: {
+												...n.data,
+												messages: (n.data.messages || []).map((msg: Message) =>
+													msg.id === streamingMessageId
+														? { ...msg, streamingText: (msg.streamingText || '') + pendingText }
+														: msg
+												),
+												branchMessages: (n.data.branchMessages || []).map((msg: Message) =>
+													msg.id === streamingMessageId
+														? { ...msg, streamingText: (msg.streamingText || '') + pendingText }
+														: msg
+												)
+											}
+										}
+									}
+									return n
+								})
+							)
+						}
 
 						finalizeStreamingMessage(response.text)
 					} catch (error) {
@@ -690,7 +807,17 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					isActive: activeNodeId === node.id,
 					isGenerating: generatingNodeIds.has(node.id),
 					onMessageSelect: handleMessageSelect,
-					selectedMessageIds: state.selectedMessageIds
+					selectedMessageIds: state.selectedMessageIds,
+					onNavigateToMessage: (messageId: string) => {
+						const targetNode = nodes.find(n =>
+							n.data?.messages?.some((m: Message) => m.id === messageId) ||
+							n.data?.inheritedMessages?.some((m: Message) => m.id === messageId)
+						)
+						if (targetNode) {
+							focusOnNode(reactFlowInstance, targetNode.id, nodes)
+							setNodeActive(targetNode.id)
+						}
+					}
 				}
 			}
 		})
@@ -788,7 +915,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 							contextSnapshot: contextSnapshot,
 							branchMessageIds: (node.data?.branchMessages || node.branchMessages || []).map((m: Message) => m.id),
 							metadata: {
-								selectedAIs: node.data?.selectedAIs || node.selectedAIs || selectedAIs
+								selectedAIs: node.data?.selectedAIs || node.selectedAIs || selectedAIs,
+								branchGroupId: node.data?.branchGroupId || node.branchGroupId // Persist branchGroupId
 							}
 						}
 						branchStore.set(branchContext)
@@ -1084,7 +1212,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 
 		// If we already successfully processed this exact messageId, skip
 		// But allow retries if messages weren't ready before
-		if (lastProcessedMessageIdRef.current === pendingBranchMessageId && processingTimeoutRef.current) {
+		// AND allow retry if we are forcing a duplicate
+		if (lastProcessedMessageIdRef.current === pendingBranchMessageId && processingTimeoutRef.current && !pendingBranchData?.allowDuplicate) {
 			console.log('⚠️ Already processing this messageId, skipping duplicate trigger:', pendingBranchMessageId)
 			return
 		}
@@ -1184,7 +1313,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		return () => {
 			if (timeoutId) clearTimeout(timeoutId)
 		}
-	}, [pendingBranchMessageId, mainMessages, handleBranch, onPendingBranchProcessed]) // Removed nodes from dependencies to prevent excessive re-runs
+	}, [pendingBranchMessageId, mainMessages, handleBranch, onPendingBranchProcessed, pendingBranchData]) // Added pendingBranchData to dependencies
 
 	// ============================================
 	// NAVIGATION
@@ -1222,6 +1351,13 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			}
 		}
 	}, [activeNodeId, reactFlowInstance, nodes.length])
+
+	// Notify parent of active node change
+	useEffect(() => {
+		if (onActiveNodeChange) {
+			onActiveNodeChange(activeNodeId)
+		}
+	}, [activeNodeId, onActiveNodeChange])
 
 	// ============================================
 	// LAYOUT ON MINIMIZE CHANGE (Debounced)
@@ -1400,6 +1536,11 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					nodes={nodesWithHandlers}
 					edges={edges}
 					nodeTypes={nodeTypes}
+					edgeTypes={edgeTypes}
+					defaultEdgeOptions={{
+						type: 'default',
+						style: { strokeWidth: 2 }
+					}}
 					onNodesChange={onNodesChangeHandler}
 					onEdgesChange={onEdgesChangeHandler}
 					onNodeClick={onNodeClick}
@@ -1414,6 +1555,10 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					defaultViewport={{ x: 0, y: 0, zoom: 0.8 }} // Default zoom that shows background
 					attributionPosition="bottom-left"
 					proOptions={{ hideAttribution: true }}
+					panOnScroll={true}
+					zoomOnPinch={true}
+					zoomOnScroll={false}
+					panOnDrag={true}
 				>
 					<Background variant={"dots" as BackgroundVariant} gap={20} size={1} />
 					<Controls />

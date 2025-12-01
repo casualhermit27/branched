@@ -78,6 +78,8 @@ export interface ChatNodeData {
 	}
 	onMessageSelect?: (messageId: string, isMultiSelect: boolean) => void
 	selectedMessageIds?: Set<string>
+	depth?: number
+	onNavigateToMessage?: (messageId: string) => void
 }
 
 export interface FlowCanvasProps {
@@ -123,6 +125,7 @@ export interface FlowCanvasProps {
 	onSelectionChange?: (selectedIds: string[]) => void
 	onMessageSelectionChange?: (selectedMessageIds: string[]) => void
 	conversationId?: string | null
+	onActiveNodeChange?: (nodeId: string | null) => void
 }
 
 export interface LayoutConfig {

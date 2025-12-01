@@ -1,9 +1,10 @@
 'use client'
 
+import { useState } from 'react'
+
 import FlowCanvas from '@/components/flow-canvas/index'
 import AIPills from '@/components/ai-pills'
 import ChatInterface from '@/components/chat-interface'
-import ChatBranchesView from '@/components/chat-branches-view'
 import { ComparisonView } from '@/components/comparison-view'
 import { PricingModal } from '@/components/pricing-modal'
 import { OnboardingTour } from '@/components/onboarding-tour'
@@ -13,7 +14,8 @@ import { CommandPalette } from '@/components/command-palette'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { BranchWarningModal } from '@/components/branch-warning-modal'
 import { BranchNavigation } from '@/components/branch-navigation'
-import { ArrowsIn, ArrowsOut, DotsThree, ArrowsLeftRight } from '@phosphor-icons/react'
+import { ArrowsIn, ArrowsOut, DotsThree, ArrowsLeftRight, MagnifyingGlass, Gear } from '@phosphor-icons/react'
+import { GlobalSearch } from '@/components/global-search'
 import type { ConversationState } from '@/hooks/use-conversation-state'
 import type { ConversationActions } from '@/hooks/use-conversation-actions'
 
@@ -78,6 +80,10 @@ export default function ConversationAppShell({
 		setSelectedMessageIds
 	} = state
 
+	const [showGlobalSearch, setShowGlobalSearch] = useState(false)
+	const [sidebarOpen, setSidebarOpen] = useState(false)
+	const [sidebarTab, setSidebarTab] = useState<'history' | 'settings'>('history')
+
 	const {
 		addAI,
 		removeAI,
@@ -99,6 +105,25 @@ export default function ConversationAppShell({
 		getBestAvailableModel
 	} = actions
 
+	// Handle navigation from search
+	const handleNavigateToSearchResult = (nodeId: string, messageId?: string) => {
+		// If it's main node, just switch to main
+		if (nodeId === 'main') {
+			setActiveBranchId('main')
+			setCurrentBranch(null)
+		} else {
+			// For branches, select the branch
+			handleSelectBranch(nodeId)
+		}
+
+		// If messageId is provided, we could potentially highlight it
+		// This would require passing the highlighted message ID down to ChatNode -> ChatInterface
+		if (messageId) {
+			// Optional: Implement message highlighting logic here
+			console.log('Navigating to message:', messageId)
+		}
+	}
+
 	return (
 		<div className="h-screen bg-background overflow-hidden">
 			<div className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-card/95 backdrop-blur-sm">
@@ -110,6 +135,14 @@ export default function ConversationAppShell({
 					)}
 
 					<div className="flex items-center gap-2">
+						<button
+							onClick={() => setShowGlobalSearch(true)}
+							className="p-2 rounded-lg transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-muted/80"
+							title="Search messages (Cmd+K)"
+						>
+							<MagnifyingGlass className="w-5 h-5" weight="bold" />
+						</button>
+
 						{viewMode === 'map' && conversationNodes.length > 0 && (
 							<div className="relative" ref={menuRef}>
 								<button
@@ -177,20 +210,18 @@ export default function ConversationAppShell({
 								>
 									<ArrowsLeftRight className="w-5 h-5" />
 								</button>
-								<button
-									onClick={() => setViewMode('chat')}
-									className={`p-2 rounded-lg transition-all duration-200 ${viewMode === 'chat'
-										? 'bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 shadow-sm'
-										: 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground hover:bg-muted dark:hover:bg-muted/80'
-										}`}
-									title="Chat View - Focused conversation threads"
-								>
-									<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-										<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-									</svg>
-								</button>
 							</div>
 						)}
+						<button
+							onClick={() => {
+								setSidebarTab('settings')
+								setSidebarOpen(true)
+							}}
+							className="p-2 rounded-lg transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-muted/80"
+							title="Settings"
+						>
+							<Gear className="w-5 h-5" weight="bold" />
+						</button>
 						<ThemeToggle />
 					</div>
 				</div>
@@ -224,6 +255,11 @@ export default function ConversationAppShell({
 				messageCount={messages.length}
 				onUpgrade={() => setShowPricingModal(true)}
 				onDeleteConversation={handleDeleteConversation}
+				isOpen={sidebarOpen}
+				onOpenChange={setSidebarOpen}
+				activeTab={sidebarTab}
+				onTabChange={setSidebarTab}
+				onExportData={() => setShowExportImport(true)}
 			/>
 
 			<PricingModal
@@ -241,153 +277,142 @@ export default function ConversationAppShell({
 				}}
 			/>
 
-			{branches.length === 0 && conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length === 0 && !pendingBranchMessageId ? (
-				<div className="flex items-center justify-center h-screen p-4">
-					<div className="w-full max-w-4xl border border-border rounded-2xl bg-card shadow-lg p-6">
-						{conversationNodes.length > 0 && (
-							<BranchNavigation
-								branches={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).map(n => ({
-									id: n.id,
-									label: n.title || 'Branch',
-									parentId: n.parentId,
-									parentMessageId: n.parentMessageId
-								}))}
-								currentBranchId={activeBranchId}
-								onNavigateToBranch={handleSelectBranch}
-								onNavigateToMain={() => {
-									setActiveBranchId('main')
-									setCurrentBranch(null)
-								}}
-							/>
-						)}
+			{
+				branches.length === 0 && conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length === 0 && !pendingBranchMessageId ? (
+					<div className="flex items-center justify-center h-screen p-4">
+						<div className="w-full max-w-4xl border border-border rounded-2xl bg-card shadow-lg p-6">
+							{conversationNodes.length > 0 && (
+								<BranchNavigation
+									branches={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).map(n => ({
+										id: n.id,
+										label: n.title || 'Branch',
+										parentId: n.parentId,
+										parentMessageId: n.parentMessageId
+									}))}
+									currentBranchId={activeBranchId}
+									onNavigateToBranch={handleSelectBranch}
+									onNavigateToMain={() => {
+										setActiveBranchId('main')
+										setCurrentBranch(null)
+									}}
+								/>
+							)}
 
-						<div className="flex items-center justify-between mb-6">
-							<AIPills
+							<div className="flex items-center justify-between mb-6">
+								<AIPills
+									selectedAIs={selectedAIs}
+									onAddAI={addAI}
+									onRemoveAI={removeAI}
+									onSelectSingle={selectSingleAI}
+									showAddButton={true}
+									getBestAvailableModel={getBestAvailableModel}
+								/>
+
+							</div>
+
+							<ChatInterface
+								messages={messages}
+								onSendMessage={sendMessage}
 								selectedAIs={selectedAIs}
-								onAddAI={addAI}
-								onRemoveAI={removeAI}
-								onSelectSingle={selectSingleAI}
-								showAddButton={true}
-								getBestAvailableModel={getBestAvailableModel}
+								onBranchFromMessage={branchFromMessage}
+								currentBranch={currentBranch}
+								isGenerating={isGenerating}
+								onStopGeneration={stopGeneration}
+								existingBranchesCount={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length}
+								isMain={true}
+								onExportImport={() => setShowExportImport(true)}
 							/>
-
-							<button
-								onClick={() => setShowExportImport(true)}
-								className="px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-							>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-									<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
-								</svg>
-								Export/Import
-							</button>
 						</div>
-
-						<ChatInterface
-							messages={messages}
-							onSendMessage={sendMessage}
-							selectedAIs={selectedAIs}
-							onBranchFromMessage={branchFromMessage}
-							currentBranch={currentBranch}
-							isGenerating={isGenerating}
-							onStopGeneration={stopGeneration}
-							existingBranchesCount={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length}
-							isMain={true}
-							onExportImport={() => setShowExportImport(true)}
-						/>
 					</div>
-				</div>
-			) : (
-				viewMode === 'comparison' ? (
-					<ComparisonView
-						branches={
-							selectedMessageIds.length >= 2
-								? conversationNodes.filter(n => n.id !== 'main' && !n.isMain && n.data?.messages?.some((m: any) => selectedMessageIds.includes(m.id)))
-								: conversationNodes.filter(n => n.id !== 'main' && !n.isMain)
-						}
-						initialSelectedBranchIds={selectedBranchIds}
-						initialFocusedMessageIds={selectedMessageIds}
-						onClose={() => setViewMode('map')}
-					/>
-				) : conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length > 0 && viewMode === 'chat' ? (
-					<ChatBranchesView
-						mainMessages={messages}
-						branches={conversationNodes}
-						selectedAIs={selectedAIs}
-						onAddAI={addAI}
-						onRemoveAI={removeAI}
-						onSelectSingle={selectSingleAI}
-						getBestAvailableModel={getBestAvailableModel}
-						onSendMessage={sendMessage}
-						onBranchFromMessage={branchFromMessage}
-						isGenerating={isGenerating}
-						onStopGeneration={stopGeneration}
-						activeBranchId={activeBranchId}
-						onSelectBranch={handleSelectBranch}
-						onDeleteBranch={handleDeleteBranch}
-					/>
 				) : (
-					<FlowCanvas
-						selectedAIs={selectedAIs}
-						onAddAI={addAI}
-						onRemoveAI={removeAI}
-						mainMessages={messages}
-						onSendMainMessage={sendMessage}
-						onBranchFromMain={branchFromMessage}
-						initialBranchMessageId={currentBranch}
-						pendingBranchMessageId={pendingBranchMessageId}
-						pendingBranchData={pendingBranchData}
-						onPendingBranchProcessed={() => {
-							setPendingBranchMessageId(null)
-							setPendingBranchData(null)
-						}}
-						onNodesUpdate={updateConversationNodes}
-						onNodeDoubleClick={(nodeId) => {
-							console.log('Node double-clicked:', nodeId)
-						}}
-						onPillClick={(aiId) => {
-							console.log('Pill clicked:', aiId)
-						}}
-						getBestAvailableModel={getBestAvailableModel}
-						onSelectSingle={selectSingleAIById}
-						onExportImport={() => setShowExportImport(true)}
-						restoredConversationNodes={conversationNodes}
-						selectedBranchId={activeBranchId}
-						onBranchWarning={handleBranchWarning}
-						onMinimizeAllRef={(fn) => { minimizeAllRef.current = fn }}
-						onMaximizeAllRef={(fn) => { maximizeAllRef.current = fn }}
-						onAllNodesMinimizedChange={(minimized) => setAllNodesMinimized(minimized)}
-						onSelectionChange={setSelectedBranchIds}
-						onMessageSelectionChange={setSelectedMessageIds}
-						conversationId={currentConversationIdRef.current}
-					/>
-				)
-			)}
-
-			{(selectedBranchIds.filter(id => id !== 'main').length >= 2 || selectedMessageIds.length >= 2) && viewMode === 'map' && (
-				<div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-200">
-					<button
-						onClick={() => {
-							if (selectedMessageIds.length >= 2) {
-								setViewMode('comparison')
-							} else {
-								const branchesToCompare = selectedBranchIds.filter(id => id !== 'main')
-								if (branchesToCompare.length >= 2) {
-									setViewMode('comparison')
+					viewMode === 'comparison' ? (
+						<ComparisonView
+							branches={
+								selectedMessageIds.length >= 2
+									? conversationNodes.filter(n => n.id !== 'main' && !n.isMain && n.data?.messages?.some((m: any) => selectedMessageIds.includes(m.id)))
+									: conversationNodes.filter(n => n.id !== 'main' && !n.isMain)
+							}
+							initialSelectedBranchIds={selectedBranchIds}
+							initialFocusedMessageIds={selectedMessageIds}
+							onClose={() => setViewMode('map')}
+						/>
+					) : (
+						<FlowCanvas
+							selectedAIs={selectedAIs}
+							onAddAI={addAI}
+							onRemoveAI={removeAI}
+							mainMessages={messages}
+							onSendMainMessage={sendMessage}
+							onBranchFromMain={branchFromMessage}
+							pendingBranchMessageId={pendingBranchMessageId}
+							pendingBranchData={pendingBranchData}
+							onPendingBranchProcessed={() => {
+								setPendingBranchMessageId(null)
+								setPendingBranchData(null)
+							}}
+							onNodesUpdate={updateConversationNodes}
+							onNodeDoubleClick={(nodeId) => {
+								console.log('Node double-clicked:', nodeId)
+							}}
+							onPillClick={(aiId) => {
+								console.log('Pill clicked:', aiId)
+							}}
+							getBestAvailableModel={getBestAvailableModel}
+							onSelectSingle={selectSingleAIById}
+							onExportImport={() => setShowExportImport(true)}
+							restoredConversationNodes={conversationNodes}
+							selectedBranchId={activeBranchId}
+							onBranchWarning={handleBranchWarning}
+							onMinimizeAllRef={(fn) => { minimizeAllRef.current = fn }}
+							onMaximizeAllRef={(fn) => { maximizeAllRef.current = fn }}
+							onAllNodesMinimizedChange={(minimized) => setAllNodesMinimized(minimized)}
+							onSelectionChange={setSelectedBranchIds}
+							onMessageSelectionChange={setSelectedMessageIds}
+							conversationId={currentConversationIdRef.current}
+							onActiveNodeChange={(nodeId) => {
+								// Update active branch ID when node focus changes in canvas
+								// This ensures persistence works correctly
+								if (nodeId && nodeId !== activeBranchId) {
+									setActiveBranchId(nodeId)
+									if (nodeId === 'main') {
+										setCurrentBranch(null)
+									} else {
+										setCurrentBranch(nodeId)
+									}
 								}
-							}
-						}}
-						className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full shadow-lg hover:shadow-xl hover:bg-primary/90 transition-all duration-200 font-medium"
-					>
-						<ArrowsLeftRight className="w-5 h-5" />
-						<span>
-							{selectedMessageIds.length >= 2
-								? `Compare ${selectedMessageIds.length} Messages`
-								: `Compare ${selectedBranchIds.length} Branches`
-							}
-						</span>
-					</button>
-				</div>
-			)}
+							}}
+						/>
+					)
+				)
+			}
+
+			{
+				(selectedBranchIds.filter(id => id !== 'main').length >= 2 || selectedMessageIds.length >= 2) && viewMode === 'map' && (
+					<div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-200">
+						<button
+							onClick={() => {
+								if (selectedMessageIds.length >= 2) {
+									setViewMode('comparison')
+								} else {
+									const branchesToCompare = selectedBranchIds.filter(id => id !== 'main')
+									if (branchesToCompare.length >= 2) {
+										setViewMode('comparison')
+									}
+								}
+							}}
+							className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full shadow-lg hover:shadow-xl hover:bg-primary/90 transition-all duration-200 font-medium"
+						>
+							<ArrowsLeftRight className="w-5 h-5" />
+							<span>
+								{selectedMessageIds.length >= 2
+									? `Compare ${selectedMessageIds.length} Messages`
+									: `Compare ${selectedBranchIds.length} Branches`
+								}
+							</span>
+						</button>
+					</div>
+				)
+			}
 
 			<ExportImportModal
 				isOpen={showExportImport}
@@ -404,7 +429,14 @@ export default function ConversationAppShell({
 				isOpen={showCommandPalette}
 				onClose={() => setShowCommandPalette(false)}
 			/>
-		</div>
+
+			<GlobalSearch
+				isOpen={showGlobalSearch}
+				onClose={() => setShowGlobalSearch(false)}
+				nodes={conversationNodes}
+				onNavigate={handleNavigateToSearchResult}
+			/>
+		</div >
 	)
 }
 

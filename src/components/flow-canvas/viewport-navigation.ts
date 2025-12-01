@@ -135,7 +135,7 @@ export function focusOnBranchWithZoom(
 	nodeId: string,
 	nodes: Node[],
 	padding: number = 0.25,
-	zoomMultiplier: number = 1.15 // Slight zoom-in (15% more zoomed than fit)
+	zoomMultiplier: number = 1.3 // Increased zoom (30% more zoomed than fit)
 ): void {
 	if (!reactFlowInstance) return
 

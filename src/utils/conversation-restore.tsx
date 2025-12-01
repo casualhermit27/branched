@@ -108,8 +108,11 @@ export function sanitizeMessages(msgs: any[]): Message[] {
 				streamingText: undefined
 			}
 
+			// Aggressively clean React internals and undefined values
+			const keysToDelete = ['$$typeof', '_owner', '_store', '_self', '_source', 'type', 'props', 'ref', 'key']
+
 			Object.keys(sanitized).forEach(key => {
-				if (sanitized[key as keyof Message] === undefined) {
+				if (sanitized[key as keyof Message] === undefined || keysToDelete.includes(key)) {
 					delete sanitized[key as keyof Message]
 				}
 			})

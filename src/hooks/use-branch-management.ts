@@ -51,6 +51,7 @@ interface UseBranchManagementParams {
 	activeNodeId: string | null
 	toggleNodeMinimize: (nodeId: string) => void
 	onDeleteBranch?: (nodeId: string) => void
+	setNodeActive?: (nodeId: string) => void
 }
 
 /**
@@ -79,7 +80,8 @@ export function useBranchManagement({
 	minimizedNodes,
 	activeNodeId,
 	toggleNodeMinimize,
-	onDeleteBranch
+	onDeleteBranch,
+	setNodeActive
 }: UseBranchManagementParams) {
 	// Initialize ContextManager with stores
 	const contextManager = new ContextManager(
@@ -151,7 +153,7 @@ export function useBranchManagement({
 				const parentNode = nodesRef.current.find((n) => n.id === parentNodeId)
 				if (parentNode?.data?.messages) {
 					// Merge node messages with context messages, avoiding duplicates
-					const nodeMessageIds = new Set(parentMessages.map(m => m.id))
+					const nodeMessageIds = new Set(parentMessages.map((m: Message) => m.id))
 					const additionalMessages = parentNode.data.messages.filter(
 						m => !nodeMessageIds.has(m.id)
 					)
@@ -160,7 +162,7 @@ export function useBranchManagement({
 					parentMessages = [...parentMessages, ...additionalMessages]
 
 					// Also ensure all node messages are in messageStore
-					parentNode.data.messages.forEach((msg) => {
+					parentNode.data.messages.forEach((msg: Message) => {
 						if (msg && msg.id) {
 							messageStore.set(msg)
 						}
@@ -305,7 +307,8 @@ export function useBranchManagement({
 				contextSnapshot: snapshot,
 				branchMessageIds: [], // Empty initially - messages created in this branch will be added here
 				metadata: {
-					selectedAIs: branchSelectedAIs
+					selectedAIs: branchSelectedAIs,
+					branchGroupId: branchGroupId
 				}
 			}
 
@@ -325,14 +328,15 @@ export function useBranchManagement({
 				{
 					onBranch: (nodeId: string, msgId?: string) =>
 						handleBranchRef.current?.(nodeId, msgId, false),
-					onSendMessage: handleSendMessageRef.current,
+					onSendMessage: handleSendMessageRef.current || (async () => { }),
 					onAddAI: (nodeId: string, ai: AI) => handleBranchAddAI(nodeId, ai),
 					onRemoveAI: (nodeId: string, aiId: string) =>
 						handleBranchRemoveAI(nodeId, aiId),
 					onSelectSingle: (nodeId: string, aiId: string) =>
 						handleBranchSelectSingle(nodeId, aiId),
 					getBestAvailableModel,
-					onDeleteBranch
+					onDeleteBranch,
+					onToggleMultiModel: () => { }
 				},
 				{
 					isMinimized: minimizedNodes.has(branchId),
@@ -420,6 +424,9 @@ export function useBranchManagement({
 				}
 			}
 
+			// Force duplicate creation if allowDuplicate is true
+			const forceDuplicate = allowDuplicate && existingCount > 0
+
 			// Lock check - prevent duplicate branch creation (after checking if exists)
 			// Check if this specific messageId is already locked (prevents rapid double-clicks)
 			if (branchCreationLockRef.current.has(messageId)) {
@@ -442,6 +449,13 @@ export function useBranchManagement({
 			}
 
 			// Get parent messages
+			// Ensure main messages are in store if branching from main
+			if (parentNodeId === 'main') {
+				mainMessages.forEach(m => {
+					if (m && m.id) messageStore.set(m)
+				})
+			}
+
 			let parentMessages =
 				parentNodeId === 'main'
 					? mainMessages
@@ -453,14 +467,14 @@ export function useBranchManagement({
 				const parentNode = nodesRef.current.find((n) => n.id === parentNodeId)
 				if (parentNode?.data?.messages) {
 					// Merge node messages with context messages, avoiding duplicates
-					const nodeMessageIds = new Set(parentMessages.map(m => m.id))
+					const nodeMessageIds = new Set(parentMessages.map((m: Message) => m.id))
 					const additionalMessages = parentNode.data.messages.filter(
 						m => !nodeMessageIds.has(m.id)
 					)
 					parentMessages = [...parentMessages, ...additionalMessages]
 
 					// Also ensure all node messages are in messageStore
-					parentNode.data.messages.forEach((msg) => {
+					parentNode.data.messages.forEach((msg: Message) => {
 						if (msg && msg.id) {
 							messageStore.set(msg)
 						}
@@ -491,6 +505,16 @@ export function useBranchManagement({
 				}
 			}
 
+			// Fallback: Search in mainMessages explicitly if still not found (sometimes store sync lags)
+			if (!targetMessage && parentNodeId === 'main') {
+				targetMessage = mainMessages.find(m => m.id === messageId)
+				if (targetMessage) {
+					console.log('✅ Found message in mainMessages fallback')
+					messageStore.set(targetMessage) // Sync back to store
+					parentMessages.push(targetMessage)
+				}
+			}
+
 			if (!targetMessage) {
 				console.error('❌ Target message not found for branching:', {
 					messageId,
@@ -499,7 +523,7 @@ export function useBranchManagement({
 					parentMessageIds: parentMessages.map(m => m.id),
 					mainMessagesCount: mainMessages.length,
 					messageStoreHasMessage: messageStore.has(messageId),
-					nodeMessages: parentNodeId !== 'main' ? nodesRef.current.find(n => n.id === parentNodeId)?.data?.messages?.map(m => m.id) : []
+					nodeMessages: parentNodeId !== 'main' ? nodesRef.current.find(n => n.id === parentNodeId)?.data?.messages?.map((m: Message) => m.id) : []
 				})
 				branchCreationLockRef.current.delete(messageId)
 				return
@@ -609,8 +633,8 @@ export function useBranchManagement({
 					allLocks: Array.from(branchCreationLockRef.current.keys())
 				})
 
-				// Prevent double-create if branch exists
-				if (branchExists) {
+				// Prevent double-create if branch exists, UNLESS allowing duplicates
+				if (branchExists && !forceDuplicate) {
 					console.warn('⚠️ Skipping branch creation - branch already exists')
 					skippedExistingIds.push(aiResponse.id)
 					return
@@ -642,6 +666,12 @@ export function useBranchManagement({
 					userMessageForContext, // Pass user message to include in context
 					finalBranchGroupId // Pass group ID for visual grouping
 				)
+
+				// If this is a duplicate branch, update its label
+				if (forceDuplicate) {
+					const duplicateCount = existingCount + 1
+					branchNode.data.label = `Duplicate Branch ${duplicateCount}`
+				}
 
 				// Validate branch node before adding
 				if (!branchNode || !branchNode.id) {
@@ -768,6 +798,11 @@ export function useBranchManagement({
 											// Double-check nodes are in state before focusing
 											setTimeout(() => {
 												fitViewportToNodes([lastBranchId], 0.25, true) // Use zoom animation for branch focus
+												// Explicitly set active node to ensure focus sticks
+												if (activeNodeId !== lastBranchId && setNodeActive) {
+													setNodeActive(lastBranchId)
+													console.log('🎯 Focusing on new branch:', lastBranchId)
+												}
 											}, 150)
 										})
 									})

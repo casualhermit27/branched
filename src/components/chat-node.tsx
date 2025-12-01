@@ -62,6 +62,8 @@ interface ChatNodeData {
   isSelected?: boolean
   onMessageSelect?: (messageId: string, isMultiSelect: boolean) => void
   selectedMessageIds?: Set<string>
+  depth?: number
+  onNavigateToMessage?: (messageId: string) => void
 }
 
 export default function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
@@ -87,11 +89,13 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
   }, [showMenu])
 
   const handleSendMessage = (message: string, branchId?: string) => {
+    console.log('📨 ChatNode handleSendMessage:', { nodeId: id, message, branchId })
     if (id === 'main') {
       // For main node, use the passed function directly (which is onSendMainMessage)
       data.onSendMessage?.(id, message)
     } else {
       // For branch nodes, pass the node id
+      console.log('📨 Calling data.onSendMessage for branch:', id)
       data.onSendMessage?.(id, message)
     }
   }
@@ -141,19 +145,19 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
         ${data.isSelected
           ? 'ring-2 ring-white border-white shadow-[0_0_0_2px_rgba(255,255,255,0.5)] z-20'
           : data.isActive
-            ? 'border-primary/50 shadow-md shadow-primary/5 ring-1 ring-primary/20 z-10'
+            ? 'border-primary shadow-lg shadow-primary/10 ring-2 ring-primary/30 z-10'
             : 'border-border/40 shadow-sm hover:border-border/80 hover:shadow-md'
         }
         ${data.isHighlighted && !data.isSelected ? 'border-primary/30 shadow-2xl shadow-primary/10 ring-1 ring-primary/20' : ''}
-        ${!data.isMinimized ? 'w-[95vw] md:w-[1200px] min-w-[300px] md:min-w-[1200px] max-w-full md:max-w-[1200px]' : ''}
+        ${!data.isMinimized ? 'w-[calc(100vw-2rem)] md:w-[1300px] min-w-[300px] md:min-w-[1300px] max-w-full md:max-w-[1300px]' : ''}
       `}
       style={{
         width: data.isMinimized ? '280px' : undefined,
         minWidth: data.isMinimized ? '280px' : undefined,
         maxWidth: data.isMinimized ? '280px' : undefined,
         height: data.isMinimized ? '200px' : 'auto',
-        minHeight: data.isMinimized ? '200px' : '400px',
-        maxHeight: data.isMinimized ? '200px' : '850px',
+        minHeight: data.isMinimized ? '200px' : '450px',
+        maxHeight: data.isMinimized ? '200px' : '1200px',
         overflow: 'visible',
         display: 'flex',
         flexDirection: 'column',
@@ -387,20 +391,47 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
                 <div className="px-5 py-2 bg-muted/30 border-t border-border/40 flex items-center gap-2 text-xs text-muted-foreground">
                   <GitBranch className="w-3.5 h-3.5 flex-shrink-0 opacity-70" weight="regular" />
                   <span className="font-medium opacity-70">Branched from:</span>
-                  <span
-                    className="flex-1 truncate opacity-90 font-mono"
-                    title={(() => {
-                      const parentMsg = data.inheritedMessages.find(m => m.id === data.parentMessageId)
-                      return parentMsg?.text || ''
-                    })()}
-                  >
-                    {(() => {
-                      const parentMsg = data.inheritedMessages.find(m => m.id === data.parentMessageId)
-                      if (!parentMsg) return 'Message...'
-                      const text = parentMsg.text || ''
-                      return text.length > 60 ? `${text.substring(0, 60)}...` : text
-                    })()}
-                  </span>
+                  <div className="group relative flex-1 min-w-0">
+                    <span
+                      className="block truncate opacity-90 font-mono cursor-pointer hover:text-primary transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (data.onNavigateToMessage && data.parentMessageId) {
+                          data.onNavigateToMessage(data.parentMessageId)
+                        }
+                      }}
+                    >
+                      {(() => {
+                        const parentMsg = data.inheritedMessages.find(m => m.id === data.parentMessageId)
+                        if (!parentMsg) return 'Message...'
+                        const text = parentMsg.text || ''
+                        return text.length > 60 ? `${text.substring(0, 60)}...` : text
+                      })()}
+                      <span className="inline-block ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-primary">
+                        <ArrowsOut className="w-3 h-3 inline" />
+                      </span>
+                    </span>
+
+                    {/* Tooltip Popup */}
+                    <div className="absolute bottom-full left-0 mb-2 w-[300px] p-3 bg-popover text-popover-foreground text-xs rounded-lg border border-border shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
+                      <div className="font-semibold mb-1 text-muted-foreground">Branched from:</div>
+                      <div className="leading-relaxed">
+                        {(() => {
+                          const parentMsg = data.inheritedMessages.find(m => m.id === data.parentMessageId)
+                          return parentMsg?.text || 'Message not found'
+                        })()}
+                      </div>
+                      <div className="absolute bottom-[-5px] left-4 w-2.5 h-2.5 bg-popover border-b border-r border-border transform rotate-45"></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Nested Branch Indicator - Sleek Badge */}
+              {data.depth && data.depth > 1 && (
+                <div className="absolute top-0 left-0 -mt-3 ml-6 px-2 py-0.5 bg-indigo-500/10 backdrop-blur-md border border-indigo-500/20 rounded-t-lg flex items-center gap-1.5 text-[10px] text-indigo-500 font-medium uppercase tracking-wider shadow-sm z-0">
+                  <GitBranch className="w-3 h-3" weight="bold" />
+                  <span>Level {data.depth}</span>
                 </div>
               )}
             </div>

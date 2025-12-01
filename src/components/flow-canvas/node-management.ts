@@ -113,10 +113,10 @@ export function createBranchNode(
 		)
 		position = positions[branchIndex] || calculateSingleBranchPosition(parentNode, parentDims.height)
 	}
-	
+
 	// Get branch context
 	const branchContext = branchStore.get(branchId)
-	
+
 	// Ensure branch context exists before trying to get messages
 	if (!branchContext) {
 		console.warn('⚠️ Branch context not found for branchId:', branchId)
@@ -133,7 +133,13 @@ export function createBranchNode(
 				parentMessageId,
 				parentId: parentNodeId,
 				contextSnapshot,
-				...handlers,
+				onBranch: handlers.onBranch,
+				onSendMessage: handlers.onSendMessage,
+				onAddAI: (ai: AI) => handlers.onAddAI(branchId, ai),
+				onRemoveAI: (aiId: string) => handlers.onRemoveAI(branchId, aiId),
+				onSelectSingle: (aiId: string) => handlers.onSelectSingle(branchId, aiId),
+				onToggleMultiModel: () => handlers.onToggleMultiModel(branchId),
+				getBestAvailableModel: handlers.getBestAvailableModel,
 				isMain: false,
 				showAIPill: true,
 				isMinimized: state.isMinimized,
@@ -141,21 +147,22 @@ export function createBranchNode(
 				isGenerating: state.isGenerating,
 				nodeId: branchId,
 				onToggleMinimize: state.onToggleMinimize,
-				onDeleteBranch: handlers.onDeleteBranch
+				onDeleteBranch: handlers.onDeleteBranch,
+				depth: (parentNode.data?.depth || 0) + 1
 			}
 		}
 	}
-	
+
 	// Get messages for display using ContextManager
 	const contextManager = new ContextManager(messageStore as any, branchStore as any)
 	const displayMessages = contextManager.getContextForDisplay(branchId)
-	
+
 	// Generate branch label
 	const parentMessage = messageStore.get(contextSnapshot.branchPointMessageId)
 	const label = parentMessage
 		? `Branch from: ${parentMessage.text.substring(0, 40)}...`
 		: `Branch ${branchId.slice(-6)}`
-	
+
 	// Log for debugging
 	if (displayMessages.length === 0) {
 		console.warn('⚠️ Branch has no messages after context resolution:', {
@@ -194,8 +201,8 @@ export function createBranchNode(
 			isGenerating: state.isGenerating,
 			nodeId: branchId,
 			onToggleMinimize: state.onToggleMinimize,
-			onDeleteBranch: handlers.onDeleteBranch,
-			branchGroupId // Store group ID for visual grouping
+			branchGroupId: branchGroupId || branchContext.metadata?.branchGroupId, // Use passed ID or retrieve from store
+			depth: (parentNode.data?.depth || 0) + 1
 		}
 	}
 }
@@ -261,13 +268,13 @@ export function restoreNodesFromState(
 
 		// Restore branch node - handle cases where data might be undefined
 		const nodeData = savedNode.data || {}
-		
+
 		// Try to use ContextManager if we have a contextSnapshot
 		const contextSnapshot = nodeData.contextSnapshot
 		if (contextSnapshot && contextSnapshot.inheritedMessageIds) {
 			const contextManager = new ContextManager(messageStore as any, branchStore as any)
 			const branchId = savedNode.id
-			
+
 			// Check if branch context exists in store
 			const branchContext = branchStore.get(branchId)
 			if (branchContext) {
@@ -275,7 +282,7 @@ export function restoreNodesFromState(
 				const displayMessages = contextManager.getContextForDisplay(branchId)
 				const inheritedMessages = contextManager.getInheritedContext(branchId)
 				const branchMessages = contextManager.getBranchMessages(branchId)
-				
+
 				// Only use ContextManager if we got messages
 				if (displayMessages.length > 0 || inheritedMessages.length > 0 || branchMessages.length > 0) {
 					return {
@@ -289,7 +296,8 @@ export function restoreNodesFromState(
 							branchMessages: branchMessages,
 							selectedAIs: nodeData.selectedAIs || selectedAIs,
 							contextSnapshot: nodeData.contextSnapshot,
-							...handlers
+							...handlers,
+							branchGroupId: nodeData.branchGroupId || branchContext.metadata?.branchGroupId // Restore branchGroupId
 						}
 					}
 				}
@@ -301,10 +309,10 @@ export function restoreNodesFromState(
 		const fallbackMessages = Array.isArray(nodeData.messages) ? nodeData.messages : []
 		const fallbackInherited = Array.isArray(nodeData.inheritedMessages) ? nodeData.inheritedMessages : []
 		const fallbackBranch = Array.isArray(nodeData.branchMessages) ? nodeData.branchMessages : []
-		
+
 		// Combine messages for display
 		const combinedMessages = [...fallbackInherited, ...fallbackBranch]
-		
+
 		return {
 			...savedNode,
 			// Preserve position from saved node
@@ -320,7 +328,8 @@ export function restoreNodesFromState(
 					? nodeData.parentId
 					: savedNode.id === 'main' ? undefined : 'main',
 				contextSnapshot: nodeData.contextSnapshot,
-				...handlers
+				...handlers,
+				branchGroupId: nodeData.branchGroupId || (savedNode as any).branchGroupId || (savedNode as any).groupId // Restore branchGroupId
 			}
 		}
 	}).filter((node): node is Node<ChatNodeData> => node !== null)

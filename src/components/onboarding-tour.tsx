@@ -1,12 +1,24 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { XMarkIcon, ChevronRightIcon, ChevronLeftIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { PlayCircle } from '@phosphor-icons/react'
+
+const VideoPlaceholder = ({ name }: { name: string }) => {
+    return (
+        <div className="w-full aspect-video bg-muted/30 dark:bg-muted/10 rounded-xl border-2 border-dashed border-border/50 flex flex-col items-center justify-center gap-3 group relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5" />
+            <div className="w-16 h-16 rounded-full bg-background/80 backdrop-blur-sm shadow-sm flex items-center justify-center z-10">
+                <PlayCircle className="w-8 h-8 text-primary/80" weight="fill" />
+            </div>
+            <p className="text-xs text-muted-foreground font-mono z-10">Insert Video: {name}</p>
+        </div>
+    )
+}
 
 interface Step {
     title: string
     description: string
-    target?: string // CSS selector for highlighting (optional for MVP)
-    image?: React.ReactNode
+    image: React.ReactNode
 }
 
 interface OnboardingTourProps {
@@ -21,23 +33,28 @@ export function OnboardingTour({ isOpen, onClose, onComplete }: OnboardingTourPr
     const steps: Step[] = [
         {
             title: "Welcome to Multi-AI Conversations",
-            description: "Experience a new way to collaborate with AI. Branch conversations, compare models, and visualize your thoughts.",
-            image: <div className="text-6xl">👋</div>
+            description: "Experience a new way to collaborate with AI. Branch conversations, compare models, and visualize your thoughts in a powerful canvas.",
+            image: <VideoPlaceholder name="welcome_tour.mp4" />
         },
         {
             title: "Branching Conversations",
             description: "Don't just chat linearly. Click the 'Branch' button on any message to explore different directions without losing context.",
-            image: <div className="text-6xl">🌿</div>
+            image: <VideoPlaceholder name="branching_demo.mp4" />
         },
         {
             title: "Multi-Model Comparison",
-            description: "Select multiple AI models (Gemini, Mistral, etc.) to see how they answer the same prompt differently side-by-side.",
-            image: <div className="text-6xl">🤖</div>
+            description: "Select multiple AI models (Gemini, Mistral, OpenAI, etc.) to see how they answer the same prompt differently side-by-side.",
+            image: <VideoPlaceholder name="comparison_demo.mp4" />
         },
         {
             title: "Visual Flow Canvas",
             description: "Switch to Map View to see your entire conversation tree. Zoom, pan, and organize your ideas visually.",
-            image: <div className="text-6xl">🗺️</div>
+            image: <VideoPlaceholder name="canvas_nav.mp4" />
+        },
+        {
+            title: "Bring Your Own Key (BYOK)",
+            description: "Use your own API keys for OpenAI, Anthropic, Google, and more. Click the Settings (Gear) icon in the top bar to manage your keys securely.",
+            image: <VideoPlaceholder name="settings_byok.mp4" />
         }
     ]
 
@@ -72,7 +89,7 @@ export function OnboardingTour({ isOpen, onClose, onComplete }: OnboardingTourPr
                     initial={{ opacity: 0, scale: 0.9, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                    className="relative w-full max-w-md bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl overflow-hidden"
+                    className="relative w-full max-w-md bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl overflow-hidden border border-neutral-200 dark:border-neutral-800"
                 >
                     <button
                         onClick={onClose}
@@ -82,25 +99,34 @@ export function OnboardingTour({ isOpen, onClose, onComplete }: OnboardingTourPr
                     </button>
 
                     <div className="p-8 flex flex-col items-center text-center">
-                        <div className="w-24 h-24 bg-indigo-50 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mb-6 text-indigo-600 dark:text-indigo-400">
+                        <div className="w-full mb-8">
                             {steps[currentStep].image}
                         </div>
 
-                        <h2 className="text-2xl font-bold text-neutral-900 dark:text-white mb-3">
-                            {steps[currentStep].title}
-                        </h2>
-                        <p className="text-neutral-600 dark:text-neutral-400 mb-8 leading-relaxed">
-                            {steps[currentStep].description}
-                        </p>
+                        <motion.div
+                            key={currentStep}
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            transition={{ duration: 0.3 }}
+                            className="flex flex-col items-center"
+                        >
+                            <h2 className="text-2xl font-bold text-neutral-900 dark:text-white mb-3">
+                                {steps[currentStep].title}
+                            </h2>
+                            <p className="text-neutral-600 dark:text-neutral-400 mb-8 leading-relaxed text-sm">
+                                {steps[currentStep].description}
+                            </p>
+                        </motion.div>
 
-                        <div className="flex items-center justify-between w-full">
-                            <div className="flex gap-1">
+                        <div className="flex items-center justify-between w-full mt-auto">
+                            <div className="flex gap-1.5">
                                 {steps.map((_, idx) => (
                                     <div
                                         key={idx}
-                                        className={`w-2 h-2 rounded-full transition-all ${idx === currentStep
-                                                ? 'bg-indigo-600 w-6'
-                                                : 'bg-neutral-200 dark:bg-neutral-700'
+                                        className={`h-1.5 rounded-full transition-all duration-300 ${idx === currentStep
+                                            ? 'bg-indigo-600 w-6'
+                                            : 'bg-neutral-200 dark:bg-neutral-700 w-1.5'
                                             }`}
                                     />
                                 ))}

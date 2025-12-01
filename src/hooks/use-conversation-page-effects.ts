@@ -106,14 +106,6 @@ export function useConversationPageEffects({
 	}, [setShowCommandPalette])
 
 	useEffect(() => {
-		console.log('📊 Messages state changed:', messages.length, messages.map(m => ({
-			id: m.id,
-			text: m.text.substring(0, Math.min(20, m.text.length)),
-			isUser: m.isUser
-		})))
-	}, [messages])
-
-	useEffect(() => {
 		if (isInitialLoadRef.current) {
 			isInitialLoadRef.current = false
 
@@ -170,17 +162,28 @@ export function useConversationPageEffects({
 			}
 			setConversationNodes([mainNode])
 		} else if (viewMode === 'chat' && conversationNodes.length > 0) {
-			const hasMain = conversationNodes.some(n => n.id === 'main' || n.isMain)
-			if (hasMain) {
-				setConversationNodes(prev => prev.map(node => {
-					if (node.id === 'main' || node.isMain) {
-						return {
-							...node,
-							messages: node.messages && node.messages.length > 0 ? node.messages : (messages || [])
+			const mainNode = conversationNodes.find(n => n.id === 'main' || n.isMain)
+			if (mainNode) {
+				const currentMessages = mainNode.messages || []
+				const globalMessages = messages || []
+
+				// Only update if message count differs or last message ID differs
+				// This prevents infinite loops when object references change but content is same
+				const hasChanges = currentMessages.length !== globalMessages.length ||
+					(currentMessages.length > 0 && globalMessages.length > 0 &&
+						currentMessages[currentMessages.length - 1].id !== globalMessages[globalMessages.length - 1].id)
+
+				if (hasChanges) {
+					setConversationNodes(prev => prev.map(node => {
+						if (node.id === 'main' || node.isMain) {
+							return {
+								...node,
+								messages: globalMessages
+							}
 						}
-					}
-					return node
-				}))
+						return node
+					}))
+				}
 			}
 		}
 	}, [conversationNodes, currentBranch, messages, selectedAIs, setConversationNodes, viewMode])
