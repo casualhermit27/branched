@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Plus, X, Sparkle } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-interface AI {
+export interface AI {
   id: string
   name: string
   color: string

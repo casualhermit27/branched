@@ -577,7 +577,8 @@ export function useBranchManagement({
 
 				// Use existing groupId from responses when available for visual grouping
 				if (!finalBranchGroupId) {
-					finalBranchGroupId = aiResponses[0]?.groupId || `group-${messageId}`
+					const firstGroupId = aiResponses[0]?.groupId
+					finalBranchGroupId = (typeof firstGroupId === 'string' ? firstGroupId : undefined) || `group-${messageId}`
 				}
 			} else if (targetMessage.isUser && !isMultiBranch) {
 				// Single branch: find first AI response

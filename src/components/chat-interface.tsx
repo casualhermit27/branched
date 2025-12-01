@@ -449,71 +449,98 @@ export default function ChatInterface({
 
       {/* Fixed Footer Input Area */}
       {!readOnly && (
-        <div className="flex-shrink-0 z-30 bg-card/80 backdrop-blur-md border-t border-border/40 p-3 md:p-4">
-          <div className="max-w-5xl mx-auto relative">
-            <form
-              onSubmit={handleSubmit}
-              className="relative flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/50 shadow-sm rounded-2xl p-2 ring-1 ring-black/5 dark:ring-white/5"
-            >
-              {/* Attachment Button */}
-              <button
-                type="button"
-                onClick={() => alert('Attachments coming soon!')}
-                className="w-9 h-9 flex-shrink-0 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                title="Add attachment"
+        <div className="flex-shrink-0 z-30 p-4 md:p-6">
+          <div className="max-w-4xl mx-auto relative group">
+            {/* Gradient Glow Effect */}
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
+
+            <div className="relative bg-card border border-border/50 shadow-lg rounded-2xl overflow-hidden transition-all duration-300 focus-within:ring-1 focus-within:ring-ring/20 focus-within:border-primary/20">
+              <form
+                onSubmit={handleSubmit}
+                className="flex flex-col"
               >
-                <Plus weight="bold" className="w-4 h-4" />
-              </button>
-
-              <textarea
-                ref={textareaRef}
-                value={message}
-                onChange={handleInputChange}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    handleSubmit(e)
-                  }
-                }}
-                onFocus={() => {
-                  setShouldAutoScroll(true)
-                  setTimeout(() => {
-                    if (messagesContainerRef.current) {
-                      messagesContainerRef.current.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior: 'smooth' })
+                <textarea
+                  ref={textareaRef}
+                  value={message}
+                  onChange={handleInputChange}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSubmit(e)
                     }
-                  }, 100)
-                }}
-                placeholder={selectedAIs.length > 1 ? `Message ${selectedAIs.length} models...` : "Type a message..."}
-                className="flex-1 bg-transparent border-none focus:ring-0 resize-none py-2.5 px-2 max-h-32 min-h-[40px] text-sm placeholder:text-muted-foreground/50 leading-relaxed"
-                style={{ height: 'auto' }}
-                onInput={(e) => {
-                  const target = e.target as HTMLTextAreaElement
-                  target.style.height = 'auto'
-                  target.style.height = Math.min(target.scrollHeight, 128) + 'px'
-                }}
-              />
+                  }}
+                  onFocus={() => {
+                    setShouldAutoScroll(true)
+                    setTimeout(() => {
+                      if (messagesContainerRef.current) {
+                        messagesContainerRef.current.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior: 'smooth' })
+                      }
+                    }, 100)
+                  }}
+                  placeholder={selectedAIs.length > 1 ? `Message ${selectedAIs.length} models...` : "Type a message..."}
+                  className="w-full bg-transparent border-none outline-none p-4 text-base placeholder:text-muted-foreground/40 min-h-[60px] resize-none"
+                  style={{ maxHeight: '200px' }}
+                  onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement
+                    target.style.height = 'auto'
+                    target.style.height = Math.min(target.scrollHeight, 200) + 'px'
+                  }}
+                />
 
-              <div className="flex-shrink-0">
-                {isGenerating ? (
-                  <button
-                    type="button"
-                    onClick={onStopGeneration}
-                    className="w-10 h-10 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors"
-                    title="Stop generation"
-                  >
-                    <Stop weight="fill" className="w-5 h-5" />
-                  </button>
-                ) : (
-                  <button
-                    type="submit"
-                    disabled={!message.trim()}
-                    className="w-12 h-10 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center shadow-sm hover:shadow hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none"
-                  >
-                    <PaperPlaneRight weight="fill" className="w-5 h-5" />
-                  </button>
-                )}
-              </div>
-            </form>
+                {/* Bottom Actions */}
+                <div className="flex items-center justify-between px-4 py-3 bg-muted/30 border-t border-border/30">
+                  <div className="flex items-center gap-4">
+                    {/* AI Pills */}
+                    {onAddAI && onRemoveAI && (
+                      <AIPills
+                        selectedAIs={selectedAIs}
+                        onAddAI={onAddAI}
+                        onRemoveAI={onRemoveAI}
+                        onSelectSingle={onSelectSingle ? (ai) => onSelectSingle(ai.id) : undefined}
+                        showAddButton={true}
+                        getBestAvailableModel={getBestAvailableModel}
+                      />
+                    )}
+
+                    <div className="h-6 w-px bg-border/50 mx-2"></div>
+
+                    {/* Attachment Button */}
+                    <button
+                      type="button"
+                      onClick={() => alert('Attachments coming soon!')}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      <Plus weight="bold" className="w-4 h-4" />
+                      <span>Add Files</span>
+                    </button>
+                  </div>
+
+                  <div className="flex-shrink-0">
+                    {isGenerating ? (
+                      <button
+                        type="button"
+                        onClick={onStopGeneration}
+                        className="w-10 h-10 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors"
+                        title="Stop generation"
+                      >
+                        <Stop weight="fill" className="w-5 h-5" />
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={!message.trim()}
+                        className={`p-2 rounded-full transition-all duration-200 ${message.trim()
+                          ? 'bg-primary text-primary-foreground shadow-md hover:scale-105'
+                          : 'bg-muted text-muted-foreground cursor-not-allowed'
+                          }`}
+                      >
+                        <PaperPlaneRight weight="fill" className="w-5 h-5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </form>
+            </div>
 
             {/* Branch Context Indicator (Floating above input) */}
             {currentBranch && (

@@ -11,10 +11,19 @@ interface ComparisonViewProps {
     initialSelectedBranchIds?: string[]
     initialFocusedMessageIds?: string[]
     className?: string
+    onSendMessage?: (text: string, branchId: string) => void
 }
 
-export function ComparisonView({ branches, onClose, className = '', initialSelectedBranchIds = [], initialFocusedMessageIds = [] }: ComparisonViewProps) {
+export function ComparisonView({
+    branches,
+    onClose,
+    className = '',
+    initialSelectedBranchIds = [],
+    initialFocusedMessageIds = [],
+    onSendMessage
+}: ComparisonViewProps) {
     const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>(initialSelectedBranchIds)
+    const [inputs, setInputs] = useState<{ [key: string]: string }>({})
 
     // Initialize with first 2 branches if available
     useEffect(() => {
@@ -89,6 +98,25 @@ export function ComparisonView({ branches, onClose, className = '', initialSelec
         a.click()
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
+    }
+
+    const handleInputChange = (branchId: string, value: string) => {
+        setInputs(prev => ({ ...prev, [branchId]: value }))
+    }
+
+    const handleSend = (branchId: string) => {
+        const text = inputs[branchId]?.trim()
+        if (text && onSendMessage) {
+            onSendMessage(text, branchId)
+            setInputs(prev => ({ ...prev, [branchId]: '' }))
+        }
+    }
+
+    const handleKeyDown = (e: React.KeyboardEvent, branchId: string) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            handleSend(branchId)
+        }
     }
 
     return (
@@ -224,10 +252,31 @@ export function ComparisonView({ branches, onClose, className = '', initialSelec
                                             ))}
                                         </div>
 
-                                        {/* Metrics Footer */}
-                                        <div className="p-3 border-t border-border bg-muted/30 text-xs text-muted-foreground flex justify-between font-mono">
-                                            <span>{data.messages?.length || 0} messages</span>
-                                            <span>~{(data.messages?.reduce((acc: number, m: any) => acc + (m.text?.length || 0), 0) || 0) / 4} tokens</span>
+                                        {/* Input Area */}
+                                        <div className="p-4 border-t border-border bg-background">
+                                            <div className="relative">
+                                                <textarea
+                                                    value={inputs[branchId] || ''}
+                                                    onChange={(e) => handleInputChange(branchId, e.target.value)}
+                                                    onKeyDown={(e) => handleKeyDown(e, branchId)}
+                                                    placeholder="Send a message..."
+                                                    className="w-full min-h-[80px] p-3 pr-12 rounded-xl border border-border bg-muted/30 focus:bg-background focus:border-primary focus:ring-1 focus:ring-primary resize-none text-sm transition-all"
+                                                />
+                                                <button
+                                                    onClick={() => handleSend(branchId)}
+                                                    disabled={!inputs[branchId]?.trim()}
+                                                    className="absolute bottom-3 right-3 p-1.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                                                >
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <path d="M22 2L11 13" />
+                                                        <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            <div className="mt-2 flex justify-between text-xs text-muted-foreground font-mono">
+                                                <span>{data.messages?.length || 0} messages</span>
+                                                <span>~{(data.messages?.reduce((acc: number, m: any) => acc + (m.text?.length || 0), 0) || 0) / 4} tokens</span>
+                                            </div>
                                         </div>
                                     </div>
                                 )

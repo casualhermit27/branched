@@ -110,7 +110,10 @@ export function useConversationPageEffects({
 			isInitialLoadRef.current = false
 
 			loadConversations().then(success => {
-				if (!success) return
+				if (!success) {
+					state.setIsLoading(false)
+					return
+				}
 
 				if (typeof window !== 'undefined') {
 					fetch('/api/conversations')
@@ -134,10 +137,15 @@ export function useConversationPageEffects({
 						.catch(error => {
 							console.error('❌ Error loading conversations:', error)
 						})
+						.finally(() => {
+							state.setIsLoading(false)
+						})
+				} else {
+					state.setIsLoading(false)
 				}
 			})
 		}
-	}, [isInitialLoadRef, loadConversations, restoreConversationState, setAllConversations])
+	}, [isInitialLoadRef, loadConversations, restoreConversationState, setAllConversations, state])
 
 	useEffect(() => {
 		if (selectedAIs.length === 0) {

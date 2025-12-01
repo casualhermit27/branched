@@ -907,16 +907,17 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			// 2. Populate branchStore with branch contexts
 			if (restoredConversationNodes) {
 				restoredConversationNodes.forEach((node: any) => {
-					if (node.id !== 'main' && (node.data?.contextSnapshot || node.contextSnapshot)) {
-						const contextSnapshot = node.data?.contextSnapshot || node.contextSnapshot
+					const nodeData = node.data || node.nodeData || {}
+					if (node.id !== 'main' && (nodeData.contextSnapshot || node.contextSnapshot)) {
+						const contextSnapshot = nodeData.contextSnapshot || node.contextSnapshot
 						const branchContext = {
 							branchId: node.id,
-							parentBranchId: node.data?.parentId || node.parentId || 'main',
+							parentBranchId: nodeData.parentId || node.parentId || 'main',
 							contextSnapshot: contextSnapshot,
-							branchMessageIds: (node.data?.branchMessages || node.branchMessages || []).map((m: Message) => m.id),
+							branchMessageIds: (nodeData.branchMessages || node.branchMessages || []).map((m: Message) => m.id),
 							metadata: {
-								selectedAIs: node.data?.selectedAIs || node.selectedAIs || selectedAIs,
-								branchGroupId: node.data?.branchGroupId || node.branchGroupId // Persist branchGroupId
+								selectedAIs: nodeData.selectedAIs || node.selectedAIs || selectedAIs,
+								branchGroupId: nodeData.branchGroupId || node.branchGroupId // Persist branchGroupId
 							}
 						}
 						branchStore.set(branchContext)
@@ -1090,11 +1091,14 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 				// Fade in the canvas after restoration is complete
 				setIsReady(true)
 			}, 300) // Slight delay to allow layout to settle
-		} else if (nodes.length === 0 && !restoredConversationNodes) {
+		} else if (nodes.length === 0 && (!restoredConversationNodes || restoredConversationNodes.length === 0)) {
 			// If no nodes to restore (new conversation), just show it
 			setIsReady(true)
+		} else if (nodes.length > 0 && !isRestoringRef.current) {
+			// If nodes already exist and we're not restoring, show it
+			setIsReady(true)
 		}
-	}, [restoredConversationNodes, selectedBranchId, reactFlowInstance])
+	}, [restoredConversationNodes, selectedBranchId, reactFlowInstance, nodes.length])
 
 	// ============================================
 	// FOCUS ON RESTORED BRANCH
@@ -1326,6 +1330,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 				// Use zoom animation for branch focus
 				setTimeout(() => {
 					focusOnBranchWithZoom(reactFlowInstance, selectedBranchId, nodes, 0.25, 1.1)
+					// Mark as programmatic focus to prevent double-focus by the activeNodeId effect
+					lastProgrammaticFocusRef.current = Date.now()
 					setNodeActive(selectedBranchId)
 				}, 100)
 			}
@@ -1529,6 +1535,16 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		setEdges((eds) => applyEdgeChanges(changes, eds))
 	}, [setEdges])
 
+	const onNodeDragStopHandler = useCallback(
+		(_event: React.MouseEvent, _node: ReactFlowNode) => {
+			// Update parent state with new positions after drag
+			if (onNodesUpdate) {
+				onNodesUpdate(nodes)
+			}
+		},
+		[onNodesUpdate, nodes]
+	)
+
 	return (
 		<ReactFlowProvider>
 			<div className={`w-full h-screen transition-opacity duration-700 ${isReady ? 'opacity-100' : 'opacity-0'}`}>
@@ -1545,6 +1561,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					onEdgesChange={onEdgesChangeHandler}
 					onNodeClick={onNodeClick}
 					onNodeDoubleClick={onNodeDoubleClickHandler}
+					onNodeDragStop={onNodeDragStopHandler}
 					onInit={setReactFlowInstance}
 					fitView
 					fitViewOptions={{

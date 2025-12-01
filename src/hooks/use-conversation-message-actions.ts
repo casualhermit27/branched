@@ -147,9 +147,11 @@ export function useConversationMessageActions({
 			console.error('❌ Error fetching memory context:', error)
 		}
 
+		const targetBranchId = branchId || activeBranchId
+
 		const context: ConversationContext = {
 			messages: [...messages, newMessage],
-			currentBranch: activeBranchId || 'main',
+			currentBranch: targetBranchId || 'main',
 			parentMessages: messages,
 			memoryContext
 		}
@@ -159,13 +161,26 @@ export function useConversationMessageActions({
 		const abortController = new AbortController()
 		mainAbortControllerRef.current = abortController
 
-		if (activeBranchId) {
+		if (targetBranchId) {
 			setSavedBranches(prev =>
-				prev.map(b => b.id === activeBranchId
+				prev.map(b => b.id === targetBranchId
 					? { ...b, messages: [...b.messages, newMessage] }
 					: b
 				)
 			)
+
+			setConversationNodes(prev => prev.map(node => {
+				if (node.id === targetBranchId) {
+					return {
+						...node,
+						data: {
+							...node.data,
+							messages: [...(node.data.messages || []), newMessage]
+						}
+					}
+				}
+				return node
+			}))
 		} else if (messages.length === 0) {
 			const autoBranchId = `branch-${Date.now()}`
 			const autoBranch: ConversationBranch = {
@@ -227,7 +242,7 @@ export function useConversationMessageActions({
 
 						const chunk = `${i === 0 ? '' : ' '}${words[i]}`
 
-						setMessages(prev => prev.map(msg =>
+						setMessages(prev => prev.map((msg: Message) =>
 							msg.id === streamingMessageId
 								? { ...msg, streamingText: (msg.streamingText || '') + chunk }
 								: msg
@@ -237,7 +252,7 @@ export function useConversationMessageActions({
 							if (node.id === 'main') return node
 
 							const branchMessages = node.data?.messages || []
-							const matchingStreamingMessage = branchMessages.find(msg =>
+							const matchingStreamingMessage = branchMessages.find((msg: Message) =>
 								msg.isStreaming &&
 								msg.aiModel === ai.id &&
 								msg.id?.startsWith(`branch-${streamingMessageId}`)
@@ -248,7 +263,7 @@ export function useConversationMessageActions({
 									...node,
 									data: {
 										...node.data,
-										messages: branchMessages.map(msg =>
+										messages: branchMessages.map((msg: Message) =>
 											msg.id === matchingStreamingMessage.id
 												? { ...msg, streamingText: (msg.streamingText || '') + chunk }
 												: msg
@@ -263,23 +278,11 @@ export function useConversationMessageActions({
 						await new Promise(resolve => setTimeout(resolve, chunkDelay))
 					}
 
-					setMessages(prev => prev.map(msg =>
-						msg.id === streamingMessageId
-							? {
-								...msg,
-								text: mockResponse,
-								isStreaming: false,
-								streamingText: undefined,
-								timestamp: Date.now()
-							}
-							: msg
-					))
-
 					setConversationNodes(prevNodes => prevNodes.map(node => {
 						if (node.id === 'main') return node
 
 						const branchMessages = node.data?.messages || []
-						const matchingStreamingMessage = branchMessages.find(msg =>
+						const matchingStreamingMessage = branchMessages.find((msg: Message) =>
 							msg.isStreaming &&
 							msg.aiModel === ai.id &&
 							msg.id?.startsWith(`branch-${streamingMessageId}`)
@@ -290,7 +293,7 @@ export function useConversationMessageActions({
 								...node,
 								data: {
 									...node.data,
-									messages: branchMessages.map(msg =>
+									messages: branchMessages.map((msg: Message) =>
 										msg.id === matchingStreamingMessage.id
 											? {
 												...msg,
@@ -398,6 +401,21 @@ export function useConversationMessageActions({
 
 					setMessages(prev => [...prev, streamingMessage])
 
+					if (targetBranchId) {
+						setConversationNodes(prev => prev.map(node => {
+							if (node.id === targetBranchId) {
+								return {
+									...node,
+									data: {
+										...node.data,
+										messages: [...(node.data.messages || []), streamingMessage]
+									}
+								}
+							}
+							return node
+						}))
+					}
+
 					if (abortController.signal.aborted) {
 						throw new Error('Generation aborted')
 					}
@@ -420,10 +438,39 @@ export function useConversationMessageActions({
 								: msg
 						))
 
+						if (targetBranchId) {
+							setConversationNodes(prevNodes => prevNodes.map(node => {
+								if (node.id === targetBranchId) {
+									const branchMessages = node.data?.messages || []
+									const matchingStreamingMessage = branchMessages.find(msg => msg.id === streamingMessageId) ||
+										(branchMessages.length > 0 && branchMessages[branchMessages.length - 1].id === streamingMessageId ? branchMessages[branchMessages.length - 1] : undefined)
+
+									if (matchingStreamingMessage) {
+										return {
+											...node,
+											data: {
+												...node.data,
+												messages: branchMessages.map((msg: Message) =>
+													msg.id === streamingMessageId
+														? { ...msg, streamingText: (msg.streamingText || '') + chunk }
+														: msg
+												)
+											}
+										}
+									} else {
+										// If message not found (maybe first chunk), append it? 
+										// Actually, we haven't added the streaming message to conversationNodes yet!
+										// We need to add it initially.
+									}
+								}
+								return node
+							}))
+						}
+
 						await new Promise(resolve => setTimeout(resolve, chunkDelay))
 					}
 
-					setMessages(prev => prev.map(msg =>
+					setMessages(prev => prev.map((msg: Message) =>
 						msg.id === streamingMessageId
 							? {
 								...msg,
@@ -434,6 +481,31 @@ export function useConversationMessageActions({
 							}
 							: msg
 					))
+
+					if (targetBranchId) {
+						setConversationNodes(prevNodes => prevNodes.map(node => {
+							if (node.id === targetBranchId) {
+								return {
+									...node,
+									data: {
+										...node.data,
+										messages: node.data.messages.map((msg: Message) =>
+											msg.id === streamingMessageId
+												? {
+													...msg,
+													text: mockResponse,
+													isStreaming: false,
+													streamingText: undefined,
+													timestamp: Date.now()
+												}
+												: msg
+										)
+									}
+								}
+							}
+							return node
+						}))
+					}
 
 					aiResponse = {
 						id: streamingMessageId,
@@ -460,13 +532,33 @@ export function useConversationMessageActions({
 					setMessages(prev => [...prev, aiResponse])
 				}
 
-				if (activeBranchId) {
+				if (targetBranchId) {
 					setSavedBranches(prev =>
-						prev.map(b => b.id === activeBranchId
+						prev.map(b => b.id === targetBranchId
 							? { ...b, messages: [...b.messages, aiResponse] }
 							: b
 						)
 					)
+
+					setConversationNodes(prev => prev.map(node => {
+						if (node.id === targetBranchId) {
+							// If it was streaming, we already updated it. If not (else block), we append.
+							// But wait, if it WAS streaming, 'aiResponse' is the final object.
+							// We updated conversationNodes above to finalize the streaming message.
+							// So we only need to append if it wasn't streaming (the else block case).
+
+							if (!aiResponse.isStreaming && !node.data.messages.some((m: Message) => m.id === aiResponse.id)) {
+								return {
+									...node,
+									data: {
+										...node.data,
+										messages: [...(node.data.messages || []), aiResponse]
+									}
+								}
+							}
+						}
+						return node
+					}))
 				}
 
 				setIsGenerating(false)
@@ -494,7 +586,7 @@ export function useConversationMessageActions({
 						id: `msg-${Date.now()}`,
 						text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
 						isUser: false,
-						timestamp: Date.Now(),
+						timestamp: Date.now(),
 						parentId: newMessage.id,
 						children: [],
 						aiModel: selectedAIs[0]?.id
