@@ -201,7 +201,8 @@ export function createBranchNode(
 			isGenerating: state.isGenerating,
 			nodeId: branchId,
 			onToggleMinimize: state.onToggleMinimize,
-			branchGroupId: branchGroupId || branchContext.metadata?.branchGroupId, // Use passed ID or retrieve from store
+			branchGroupId: (typeof branchGroupId === 'string' ? branchGroupId : undefined) ||
+				(typeof branchContext.metadata?.branchGroupId === 'string' ? branchContext.metadata.branchGroupId : undefined), // Use passed ID or retrieve from store
 			depth: (parentNode.data?.depth || 0) + 1
 		}
 	}
@@ -267,7 +268,8 @@ export function restoreNodesFromState(
 		}
 
 		// Restore branch node - handle cases where data might be undefined
-		const nodeData = savedNode.data || {}
+		// AppShell stores data in 'nodeData' property, while ReactFlow uses 'data'
+		const nodeData = savedNode.data || savedNode.nodeData || {}
 
 		// Try to use ContextManager if we have a contextSnapshot
 		const contextSnapshot = nodeData.contextSnapshot
@@ -297,7 +299,8 @@ export function restoreNodesFromState(
 							selectedAIs: nodeData.selectedAIs || selectedAIs,
 							contextSnapshot: nodeData.contextSnapshot,
 							...handlers,
-							branchGroupId: nodeData.branchGroupId || branchContext.metadata?.branchGroupId // Restore branchGroupId
+							branchGroupId: (typeof nodeData.branchGroupId === 'string' ? nodeData.branchGroupId : undefined) ||
+								(typeof branchContext.metadata?.branchGroupId === 'string' ? branchContext.metadata.branchGroupId : undefined) // Restore branchGroupId
 						}
 					}
 				}
@@ -329,7 +332,9 @@ export function restoreNodesFromState(
 					: savedNode.id === 'main' ? undefined : 'main',
 				contextSnapshot: nodeData.contextSnapshot,
 				...handlers,
-				branchGroupId: nodeData.branchGroupId || (savedNode as any).branchGroupId || (savedNode as any).groupId // Restore branchGroupId
+				branchGroupId: (typeof nodeData.branchGroupId === 'string' ? nodeData.branchGroupId : undefined) ||
+					(typeof (savedNode as any).branchGroupId === 'string' ? (savedNode as any).branchGroupId : undefined) ||
+					(typeof (savedNode as any).groupId === 'string' ? (savedNode as any).groupId : undefined) // Restore branchGroupId
 			}
 		}
 	}).filter((node): node is Node<ChatNodeData> => node !== null)

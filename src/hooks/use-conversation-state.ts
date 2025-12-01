@@ -71,6 +71,7 @@ export function useConversationState() {
 	const branchCacheRef = useRef<Map<string, string>>(new Map())
 	const currentConversationIdRef = useRef<string | null>(null)
 	const isInitialLoadRef = useRef(true)
+	const [isLoading, setIsLoading] = useState(true)
 
 	return {
 		selectedAIs,
@@ -126,7 +127,9 @@ export function useConversationState() {
 		creatingBranchRef,
 		branchCacheRef,
 		currentConversationIdRef,
-		isInitialLoadRef
+		isInitialLoadRef,
+		isLoading,
+		setIsLoading
 	}
 }
 

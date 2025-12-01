@@ -15,15 +15,15 @@ export function GroupedBranchesContainer({ nodes }: GroupedBranchesContainerProp
     const groups = new Map<string, Node[]>()
 
     nodes.forEach((node) => {
-      const groupId = node.data?.branchGroupId || (node as any).branchGroupId
+      const rawGroupId = node.data?.branchGroupId || (node as any).branchGroupId
+      const groupId = typeof rawGroupId === 'string' ? rawGroupId : undefined
 
       // Log for debugging
-      if (node.id !== 'main' && (node.data?.branchGroupId || (node as any).branchGroupId)) {
-        console.log('📦 Container found node with group ID:', {
+      if (node.id !== 'main' && rawGroupId && typeof rawGroupId !== 'string') {
+        console.warn('⚠️ Container found node with INVALID group ID (Object):', {
           id: node.id,
-          groupId,
-          dataGroupId: node.data?.branchGroupId,
-          topLevelGroupId: (node as any).branchGroupId
+          rawGroupId,
+          type: typeof rawGroupId
         })
       }
 

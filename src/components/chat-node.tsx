@@ -372,23 +372,11 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
           >
             {/* Unified Node Header */}
             <div className="flex flex-col border-b border-border/40 bg-card/50 backdrop-blur-sm rounded-t-2xl">
-              {/* Top Row: AI Pills */}
-              {data.onAddAI && data.onRemoveAI && (
-                <div className="px-5 py-4 pr-12"> {/* pr-12 for the absolute menu button */}
-                  <AIPills
-                    selectedAIs={data.selectedAIs}
-                    onAddAI={data.onAddAI}
-                    onRemoveAI={data.onRemoveAI}
-                    onSelectSingle={data.onSelectSingle ? (ai) => data.onSelectSingle?.(ai.id) : undefined}
-                    showAddButton={true}
-                    getBestAvailableModel={data.getBestAvailableModel}
-                  />
-                </div>
-              )}
+              {/* Top Row: AI Pills - Moved to ChatInterface Input Area */}
 
               {/* Bottom Row: Branch Context (if applicable) */}
               {!data.isMain && data.parentMessageId && data.inheritedMessages && (
-                <div className="px-5 py-2 bg-muted/30 border-t border-border/40 flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="px-5 py-4 pr-12 bg-muted/30 border-b border-border/40 flex items-center gap-2 text-xs text-muted-foreground min-h-[56px]">
                   <GitBranch className="w-3.5 h-3.5 flex-shrink-0 opacity-70" weight="regular" />
                   <span className="font-medium opacity-70">Branched from:</span>
                   <div className="group relative flex-1 min-w-0">
