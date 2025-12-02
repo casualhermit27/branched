@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, X, Sparkle } from '@phosphor-icons/react'
+import { Plus, X, Sparkle, Robot } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export interface AI {
@@ -11,7 +11,6 @@ export interface AI {
   functional?: boolean
 }
 
-// ... (keep interfaces and arrays as is) ...
 export const availableAIs: AI[] = [
   // Functional AIs (with API integration)
   {
@@ -69,7 +68,7 @@ export const availableAIs: AI[] = [
     id: 'perplexity-pro',
     name: 'Perplexity Pro',
     color: 'bg-gray-100 text-gray-500 border-gray-200',
-    logo: <img src="/logos/perplexity.svg" alt="Perplexity" width="16" height="16" />,
+    logo: <Robot size={16} />,
     functional: false
   },
   {
@@ -83,14 +82,14 @@ export const availableAIs: AI[] = [
     id: 'cohere-command',
     name: 'Cohere Command',
     color: 'bg-gray-100 text-gray-500 border-gray-200',
-    logo: <img src="/logos/cohere.svg" alt="Cohere" width="16" height="16" />,
+    logo: <Robot size={16} />,
     functional: false
   },
   {
     id: 'pi',
     name: 'Pi',
     color: 'bg-teal-100 text-teal-800 border-teal-200',
-    logo: <img src="/logos/pi.svg" alt="Pi" width="16" height="16" />
+    logo: <Robot size={16} />
   },
   {
     id: 'o1-preview',
@@ -102,14 +101,14 @@ export const availableAIs: AI[] = [
     id: 'deepseek-v2',
     name: 'DeepSeek V2',
     color: 'bg-slate-100 text-slate-800 border-slate-200',
-    logo: <img src="/logos/deepseek.svg" alt="DeepSeek" width="16" height="16" />
+    logo: <Robot size={16} />
   },
   {
     id: 'qwen-max',
     name: 'Qwen Max',
     color: 'bg-rose-100 text-rose-800 border-rose-200',
-    logo: <img src="/logos/qwen.svg" alt="Qwen" width="16" height="16" />
-  },
+    logo: <Robot size={16} />
+  }
 ]
 
 // Add "Best" as the first option

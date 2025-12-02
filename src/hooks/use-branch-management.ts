@@ -97,7 +97,7 @@ export function useBranchManagement({
 			parentNodeId: string,
 			messageId?: string,
 			isMultiBranch?: boolean,
-			options?: { allowDuplicate?: boolean; branchGroupId?: string }
+			options?: { allowDuplicate?: boolean; branchGroupId?: string; overrideMessages?: Message[] }
 		) => void
 	>(() => { })
 
@@ -155,7 +155,7 @@ export function useBranchManagement({
 					// Merge node messages with context messages, avoiding duplicates
 					const nodeMessageIds = new Set(parentMessages.map((m: Message) => m.id))
 					const additionalMessages = parentNode.data.messages.filter(
-						m => !nodeMessageIds.has(m.id)
+						(m: Message) => !nodeMessageIds.has(m.id)
 					)
 					// Combine: inherited messages first, then branch messages
 					// This maintains the correct order (inherited messages come before branch messages)
@@ -326,8 +326,8 @@ export function useBranchManagement({
 				totalBranches,
 				parentNode,
 				{
-					onBranch: (nodeId: string, msgId?: string) =>
-						handleBranchRef.current?.(nodeId, msgId, false),
+					onBranch: (nodeId: string, msgId?: string, isMultiBranch?: boolean, options?: any) =>
+						handleBranchRef.current?.(nodeId, msgId, isMultiBranch, options),
 					onSendMessage: handleSendMessageRef.current || (async () => { }),
 					onAddAI: (nodeId: string, ai: AI) => handleBranchAddAI(nodeId, ai),
 					onRemoveAI: (nodeId: string, aiId: string) =>
@@ -372,11 +372,12 @@ export function useBranchManagement({
 			parentNodeId: string,
 			messageId?: string,
 			isMultiBranch: boolean = false,
-			options?: { allowDuplicate?: boolean; branchGroupId?: string }
+			options?: { allowDuplicate?: boolean; branchGroupId?: string; overrideMessages?: Message[] }
 		) => {
 			if (!messageId) return
 			const allowDuplicate = options?.allowDuplicate ?? false
 			const branchGroupId = options?.branchGroupId
+			const overrideMessages = options?.overrideMessages
 
 			const existingBranches = nodesRef.current.filter(
 				(node) =>
@@ -387,10 +388,23 @@ export function useBranchManagement({
 			)
 			const existingCount = existingBranches.length
 
-			let targetMessage =
-				parentNodeId === 'main'
-					? mainMessages.find((m) => m.id === messageId)
-					: contextManager.getContextForDisplay(parentNodeId).find((m) => m.id === messageId)
+			let targetMessage: Message | undefined
+
+			// Use override messages if provided (most reliable source)
+			if (overrideMessages) {
+				targetMessage = overrideMessages.find((m) => m.id === messageId)
+				if (targetMessage) {
+					console.log('✅ Found target message in overrideMessages')
+				}
+			}
+
+			// Fallback to standard sources if not found in override
+			if (!targetMessage) {
+				targetMessage =
+					parentNodeId === 'main'
+						? mainMessages.find((m) => m.id === messageId)
+						: contextManager.getContextForDisplay(parentNodeId).find((m) => m.id === messageId)
+			}
 
 			if (!isMultiBranch) {
 				if (existingCount >= MAX_DUPLICATE_BRANCHES) {
@@ -469,7 +483,7 @@ export function useBranchManagement({
 					// Merge node messages with context messages, avoiding duplicates
 					const nodeMessageIds = new Set(parentMessages.map((m: Message) => m.id))
 					const additionalMessages = parentNode.data.messages.filter(
-						m => !nodeMessageIds.has(m.id)
+						(m: Message) => !nodeMessageIds.has(m.id)
 					)
 					parentMessages = [...parentMessages, ...additionalMessages]
 
@@ -544,18 +558,57 @@ export function useBranchManagement({
 
 			if (targetMessage.isUser && isMultiBranch) {
 				// Multi-branch: create one branch per AI response generated for this user message
-				const userIndex = parentMessages.findIndex((m) => m.id === messageId)
+
+				// Determine which messages to search for AI responses
+				let searchMessages = parentMessages
+
+				// Priority 1: Use override messages if provided (most reliable)
+				if (overrideMessages && overrideMessages.length > 0) {
+					console.log('✅ Using overrideMessages for multi-branch search')
+					searchMessages = overrideMessages
+				}
+				// Priority 2: Use branch messages if branching from a branch node
+				else if (parentNodeId !== 'main') {
+					const parentNode = nodesRef.current.find(n => n.id === parentNodeId)
+					if (parentNode?.data?.messages) {
+						const msgInBranch = parentNode.data.messages.find((m: Message) => m.id === messageId)
+						if (msgInBranch) {
+							console.log('✅ Found user message in branch messages, using branch messages for response search')
+							searchMessages = parentNode.data.messages
+						}
+					}
+				}
+
+				const userIndex = searchMessages.findIndex((m) => m.id === messageId)
 				userMessageForContext = targetMessage
+
+				console.log('🔍 Multi-branch debug:', {
+					userIndex,
+					searchMessagesLength: searchMessages.length,
+					targetMessageId: targetMessage.id,
+					usingBranchMessages: searchMessages !== parentMessages,
+					allMessageIds: searchMessages.map(m => ({ id: m.id, isUser: m.isUser, aiModel: m.aiModel, text: m.text?.substring(0, 20) }))
+				})
 
 				// Collect AI responses until the next user message appears
 				const allAIResponses: Message[] = []
-				for (let i = userIndex + 1; i < parentMessages.length; i++) {
-					const candidate = parentMessages[i]
+				for (let i = userIndex + 1; i < searchMessages.length; i++) {
+					const candidate = searchMessages[i]
 					if (!candidate) continue
 
 					if (candidate.isUser) {
+						console.log('🛑 Stopped at next user message:', candidate.id)
 						break // Stop at the next user prompt (different turn)
 					}
+
+					console.log('🔍 Checking candidate for multi-branch:', {
+						id: candidate.id,
+						isUser: candidate.isUser,
+						aiModel: candidate.aiModel,
+						ai: candidate.ai,
+						hasText: !!candidate.text,
+						hasStreamingText: !!candidate.streamingText
+					})
 
 					if (!candidate.isUser && (candidate.aiModel || candidate.ai) && (candidate.text || candidate.streamingText)) {
 						allAIResponses.push(candidate)
@@ -611,11 +664,18 @@ export function useBranchManagement({
 			// Create branch nodes
 			const newNodes: Node[] = []
 			const newEdges: Edge[] = []
-			const skippedExistingIds: string[] = []
+			const nodesToUpdate: Node[] = [] // Existing nodes that need updates (e.g. group ID)
+			const allBranchIds: string[] = [] // Track all relevant branches (new + existing)
 
 			aiResponses.forEach((aiResponse, idx) => {
 				// Check if branch already exists for this AI response
-				const branchExists = branchExistsForMessage(parentNodeId, aiResponse.id)
+				const existingBranchNode = nodesRef.current.find((node) =>
+					node.id !== 'main' &&
+					node.id !== parentNodeId &&
+					node.data?.parentId === parentNodeId &&
+					node.data?.parentMessageId === aiResponse.id
+				)
+				const branchExists = !!existingBranchNode
 
 				// Lock check: 
 				// - The messageId lock was set at the start to prevent double-clicks
@@ -628,6 +688,7 @@ export function useBranchManagement({
 					aiResponseId: aiResponse.id,
 					messageId,
 					branchExists,
+					existingBranchId: existingBranchNode?.id,
 					isLocked,
 					messageIdMatches: aiResponse.id === messageId,
 					lockKey: aiResponse.id === messageId ? messageId : aiResponse.id,
@@ -636,8 +697,22 @@ export function useBranchManagement({
 
 				// Prevent double-create if branch exists, UNLESS allowing duplicates
 				if (branchExists && !forceDuplicate) {
-					console.warn('⚠️ Skipping branch creation - branch already exists')
-					skippedExistingIds.push(aiResponse.id)
+					console.log('ℹ️ Branch already exists for AI response:', aiResponse.id)
+					if (existingBranchNode) {
+						allBranchIds.push(existingBranchNode.id)
+
+						// If in multi-branch mode, ensure existing branches join the group
+						if (isMultiBranch && finalBranchGroupId && existingBranchNode.data?.branchGroupId !== finalBranchGroupId) {
+							console.log('🔄 Updating existing branch group ID:', existingBranchNode.id, 'to', finalBranchGroupId)
+							nodesToUpdate.push({
+								...existingBranchNode,
+								data: {
+									...existingBranchNode.data,
+									branchGroupId: finalBranchGroupId
+								}
+							})
+						}
+					}
 					return
 				}
 
@@ -707,6 +782,7 @@ export function useBranchManagement({
 				})
 
 				newNodes.push(branchNode)
+				allBranchIds.push(branchNode.id)
 
 				// Create edge with dotted connector - color adapts to branch depth
 				const newEdge = createEdge(
@@ -726,33 +802,23 @@ export function useBranchManagement({
 				newEdges.push(newEdge)
 			})
 
-			if (newNodes.length === 0) {
-				if (skippedExistingIds.length > 0) {
-					console.log('ℹ️ All requested branches already exist. Focusing existing branches...')
-					// Find the existing branch nodes for these messages
-					const existingBranchNodes = nodesRef.current.filter(n =>
-						n.id !== 'main' &&
-						n.data?.parentId === parentNodeId &&
-						skippedExistingIds.includes(n.data?.parentMessageId)
-					)
-
-					if (existingBranchNodes.length > 0) {
-						// Focus the last one (similar to new creation behavior)
-						const lastBranchId = existingBranchNodes[existingBranchNodes.length - 1].id
-						setTimeout(() => {
-							fitViewportToNodes([lastBranchId], 0.25, true)
-						}, 100)
-					}
+			if (newNodes.length === 0 && nodesToUpdate.length === 0) {
+				if (allBranchIds.length > 0) {
+					console.log('ℹ️ All requested branches already exist. Focusing existing branches...', allBranchIds)
+					setTimeout(() => {
+						fitViewportToNodes(allBranchIds, 0.25, true)
+					}, 100)
 				} else {
-					console.error('❌ No branch nodes created - all were skipped or failed')
+					console.error('❌ No branch nodes created or found')
 				}
 				branchCreationLockRef.current.delete(messageId)
 				return
 			}
 
-			console.log('✅ Created branch nodes:', {
-				count: newNodes.length,
-				nodeIds: newNodes.map(n => n.id),
+			console.log('✅ Created/Updated branch nodes:', {
+				newCount: newNodes.length,
+				updateCount: nodesToUpdate.length,
+				allBranchIds,
 				edgeCount: newEdges.length
 			})
 
@@ -761,7 +827,14 @@ export function useBranchManagement({
 				const currentNodes = nodesRef.current
 				const currentEdges = edgesRef.current
 
-				const updatedNodes = [...currentNodes, ...newNodes]
+				// Merge updates:
+				// 1. Filter out nodes that are being updated from currentNodes
+				// 2. Add updated nodes
+				// 3. Add new nodes
+				const nodesToUpdateIds = new Set(nodesToUpdate.map(n => n.id))
+				const filteredCurrentNodes = currentNodes.filter(n => !nodesToUpdateIds.has(n.id))
+
+				const updatedNodes = [...filteredCurrentNodes, ...nodesToUpdate, ...newNodes]
 				const updatedEdges = [...currentEdges, ...newEdges]
 
 				// Apply layout
@@ -783,45 +856,38 @@ export function useBranchManagement({
 							onNodesUpdate(validatedNodes)
 						}
 
-						// Focus on LAST new branch (latest created) AFTER nodes are fully rendered and positioned
-						// Use validatedNodes to ensure we're focusing on the correctly positioned branch
-						if (newNodes.length > 0) {
-							const lastBranchId = newNodes[newNodes.length - 1].id
-							// Find the branch in validated nodes to ensure it exists with correct position
-							const branchInValidatedNodes = validatedNodes.find(n => n.id === lastBranchId)
-
-							if (branchInValidatedNodes) {
-								// Wait for React state update and DOM render, then focus with zoom animation
-								// Use multiple requestAnimationFrame to ensure layout is complete and viewport can pan
-								setTimeout(() => {
+						// Focus on ALL relevant branches (new + existing)
+						if (allBranchIds.length > 0) {
+							// Wait for React state update and DOM render, then focus with zoom animation
+							setTimeout(() => {
+								requestAnimationFrame(() => {
 									requestAnimationFrame(() => {
-										requestAnimationFrame(() => {
-											// Double-check nodes are in state before focusing
-											setTimeout(() => {
-												fitViewportToNodes([lastBranchId], 0.25, true) // Use zoom animation for branch focus
-												// Explicitly set active node to ensure focus sticks
-												if (activeNodeId !== lastBranchId && setNodeActive) {
-													setNodeActive(lastBranchId)
-													console.log('🎯 Focusing on new branch:', lastBranchId)
-												}
-											}, 150)
-										})
+										// Double-check nodes are in state before focusing
+										setTimeout(() => {
+											fitViewportToNodes(allBranchIds, 0.25, true)
+
+											// Set active node to the last created one, or the last existing one
+											const nodeToActivate = newNodes.length > 0 ? newNodes[newNodes.length - 1].id : allBranchIds[allBranchIds.length - 1]
+
+											if (setNodeActive && nodeToActivate) {
+												setNodeActive(nodeToActivate)
+												console.log('🎯 Focusing on branches:', allBranchIds, 'Active:', nodeToActivate)
+											}
+										}, 50)
 									})
-								}, 200) // Initial delay to ensure setNodes has updated state
-							}
+								})
+							}, 100)
 						}
 					} catch (error) {
-						console.error('Layout error:', error)
+						console.error('Error applying layout:', error)
+						// Fallback: just update nodes without layout if layout fails
+						setNodes(updatedNodes)
+						setEdges(updatedEdges)
 					}
 				})
-
-				// Clear lock after a delay to prevent rapid double-clicks
-				setTimeout(() => {
-					branchCreationLockRef.current.delete(messageId)
-				}, 500)
 			} catch (error) {
-				console.error('Branch creation error:', error)
-				// Clear lock immediately on error
+				console.error('Error updating nodes:', error)
+			} finally {
 				branchCreationLockRef.current.delete(messageId)
 			}
 		},
@@ -839,7 +905,17 @@ export function useBranchManagement({
 			setNodes,
 			setEdges,
 			onNodesUpdate,
-			fitViewportToNodes
+			fitViewportToNodes,
+			generateBranchId,
+			minimizedNodes,
+			activeNodeId,
+			toggleNodeMinimize,
+			handleBranchAddAI,
+			handleBranchRemoveAI,
+			handleBranchSelectSingle,
+			getBestAvailableModel,
+			onDeleteBranch,
+			setNodeActive
 		]
 	)
 
@@ -848,7 +924,7 @@ export function useBranchManagement({
 			parentNodeId: string,
 			messageId?: string,
 			isMultiBranch?: boolean,
-			options?: { allowDuplicate?: boolean; branchGroupId?: string }
+			options?: { allowDuplicate?: boolean; branchGroupId?: string; overrideMessages?: Message[] }
 		) => {
 			handleBranchRef.current(parentNodeId, messageId, isMultiBranch, options)
 		},
@@ -863,4 +939,3 @@ export function useBranchManagement({
 		contextManager
 	}
 }
-

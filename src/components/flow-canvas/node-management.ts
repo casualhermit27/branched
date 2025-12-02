@@ -271,6 +271,8 @@ export function restoreNodesFromState(
 		// AppShell stores data in 'nodeData' property, while ReactFlow uses 'data'
 		const nodeData = savedNode.data || savedNode.nodeData || {}
 
+
+
 		// Try to use ContextManager if we have a contextSnapshot
 		const contextSnapshot = nodeData.contextSnapshot
 		if (contextSnapshot && contextSnapshot.inheritedMessageIds) {
@@ -300,6 +302,8 @@ export function restoreNodesFromState(
 							contextSnapshot: nodeData.contextSnapshot,
 							...handlers,
 							branchGroupId: (typeof nodeData.branchGroupId === 'string' ? nodeData.branchGroupId : undefined) ||
+								(typeof (savedNode as any).branchGroupId === 'string' ? (savedNode as any).branchGroupId : undefined) ||
+								(typeof (savedNode as any).groupId === 'string' ? (savedNode as any).groupId : undefined) ||
 								(typeof branchContext.metadata?.branchGroupId === 'string' ? branchContext.metadata.branchGroupId : undefined) // Restore branchGroupId
 						}
 					}

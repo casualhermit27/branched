@@ -34,7 +34,12 @@ interface ChatNodeData {
   label: string
   messages: Message[]
   selectedAIs: AI[]
-  onBranch?: (nodeId: string, messageId?: string) => void
+  onBranch?: (
+    nodeId: string,
+    messageId?: string,
+    isMultiBranch?: boolean,
+    options?: { allowDuplicate?: boolean; branchGroupId?: string; overrideMessages?: Message[] }
+  ) => void
   onSendMessage?: (nodeId: string, message: string) => void
   onAddAI?: (ai: AI) => void
   onRemoveAI?: (aiId: string) => void
@@ -100,12 +105,11 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
     }
   }
 
-  const handleBranch = (messageId: string) => {
-    console.log('🔀 ChatNode handleBranch - nodeId:', id, 'messageId:', messageId)
-    console.log('🔀 data.onBranch function exists:', !!data.onBranch)
+  const handleBranch = (messageId: string, isMultiBranch: boolean = false) => {
+    console.log('🔀 ChatNode handleBranch - nodeId:', id, 'messageId:', messageId, 'isMultiBranch:', isMultiBranch)
     if (data.onBranch) {
-      console.log('🔀 Calling data.onBranch with:', id, messageId)
-      data.onBranch(id, messageId)
+      console.log('🔀 Calling data.onBranch with overrideMessages')
+      data.onBranch(id, messageId, isMultiBranch, { overrideMessages: data.messages })
     } else {
       console.log('❌ data.onBranch is not defined')
     }
@@ -141,7 +145,7 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
       }}
       // Handle mouse events to allow scrolling within node but prevent canvas panning
       // We now use 'nodrag' class in child components to prevent dragging while allowing selection
-      className={`bg-card/90 backdrop-blur-xl rounded-2xl border transition-all duration-300 relative ${data.isMinimized ? 'p-3' : 'p-3 md:p-0'} overflow-visible
+      className={`bg-[#1c1c1f]/95 backdrop-blur-xl rounded-2xl border transition-all duration-300 relative ${data.isMinimized ? 'p-3' : 'p-3 md:p-0'} overflow-visible
         ${data.isSelected
           ? 'ring-2 ring-white border-white shadow-[0_0_0_2px_rgba(255,255,255,0.5)] z-20'
           : data.isActive

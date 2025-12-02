@@ -250,6 +250,8 @@ export function getLayoutedElements(
 		Array.from(groupMap.entries())
 			.sort(([a], [b]) => a.localeCompare(b))
 			.forEach(([groupId, items]) => {
+				// Sort items within group by node ID to ensure consistent order
+				items.sort((a, b) => a.node.id.localeCompare(b.node.id))
 				branchUnits.push({ type: 'group', items, groupId })
 			})
 

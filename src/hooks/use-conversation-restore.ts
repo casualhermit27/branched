@@ -148,10 +148,16 @@ export function useConversationRestore() {
 						parentMessageId: b.parentMessageId,
 						contextSnapshot: b.contextSnapshot,
 						nodeId: b.id,
-						branchGroupId: b.branchGroupId || b.groupId
+						branchGroupId: b.branchGroupId || b.groupId || b.data?.branchGroupId || b.data?.groupId
 					}
 				}
 			})
+
+			// Log restored branch groups for debugging
+			const nodesWithGroups = restoredNodes.filter((n: any) => n.data?.branchGroupId)
+			if (nodesWithGroups.length > 0) {
+				console.log('✅ Restored nodes with branchGroupId:', nodesWithGroups.map((n: any) => ({ id: n.id, groupId: n.data.branchGroupId })))
+			}
 
 			if (!mainNodeInBranches) {
 				const mainMessages = sanitizeMessages(conversation.mainMessages || [])
