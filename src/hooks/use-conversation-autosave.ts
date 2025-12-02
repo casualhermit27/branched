@@ -123,7 +123,7 @@ export function useConversationAutosave({
 						isHighlighted: node.data?.isHighlighted || false,
 						position: node.position || node.data?.position || { x: 0, y: 0 },
 						isMain: isMainNode,
-						branchGroupId: node.data?.branchGroupId || node.branchGroupId,
+						branchGroupId: node.data?.branchGroupId || node.branchGroupId || node.data?.groupId || node.groupId,
 						metadata: node.data?.metadata || node.metadata || {}
 					}
 				})

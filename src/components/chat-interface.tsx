@@ -374,9 +374,9 @@ export default function ChatInterface({
                                   onMessageSelect?.(msg.id, true)
                                 }
                               }}
-                              className={`text-foreground/90 leading-relaxed bg-muted/30 rounded-2xl p-4 border border-border/10 transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
+                              className={`text-foreground/90 leading-relaxed bg-zinc-800/50 rounded-2xl p-4 border border-border/10 transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
                                 ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-                                : 'hover:bg-muted/40'
+                                : 'hover:bg-zinc-800/70'
                                 }`}
                               title="Ctrl + Click to select"
                             >
