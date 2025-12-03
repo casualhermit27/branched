@@ -113,7 +113,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	const isInitializedRef = useRef(false)
 	const isRestoringRef = useRef(false)
 	const layoutInProgressRef = useRef(false)
+
 	const restoreFocusBranchIdRef = useRef<string | null>(null)
+	const isUserInteractionRef = useRef(false)
 
 	// Branch link and compare state
 	const [isReady, setIsReady] = useState(false)
@@ -448,14 +450,6 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 
 			try {
 				const effectiveAIs = branchAIs.length > 0 ? branchAIs : selectedAIs
-				console.log('🤖 handleSendBranchMessage - AI check:', {
-					nodeId,
-					branchAIs,
-					selectedAIs,
-					effectiveAIs,
-					effectiveAIsLength: effectiveAIs.length
-				})
-
 				if (effectiveAIs.length === 0) {
 					console.error('❌ No AI models selected for this branch')
 					throw new Error('No AI models selected for this branch')
@@ -591,11 +585,16 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					setNodes((prev) =>
 						prev.map((n) => {
 							if (n.id === nodeId) {
+								const currentMessages = n.data.messages || []
+								const messageExists = currentMessages.some((m: Message) => m.id === streamingMessage.id)
+
+								if (messageExists) return n
+
 								return {
 									...n,
 									data: {
 										...n.data,
-										messages: [...(n.data.messages || []), streamingMessage],
+										messages: [...currentMessages, streamingMessage],
 										branchMessages: [...(n.data.branchMessages || []), streamingMessage]
 									}
 								}
@@ -690,7 +689,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 				}
 			} catch (error) {
 				if (error instanceof Error && error.name === 'AbortError') {
-					console.log('Generation aborted')
+					// Generation aborted
 				} else {
 					console.error('Error generating response:', error)
 				}
@@ -777,8 +776,14 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	// MEMOIZED NODE DATA (Prevent Unnecessary Updates)
 	// ============================================
 
+	// Ref to store previous node data objects to prevent re-creation on position changes
+	const prevNodeDataRef = useRef<Map<string, any>>(new Map())
+
 	const nodesWithHandlers = useMemo(() => {
 		return nodes.map((node) => {
+			// Check if we have a cached version of this node's data
+			const prevData = prevNodeDataRef.current.get(node.id)
+
 			// For branch nodes, initialize AIs from node data if not set in state map
 			if (node.id !== 'main' && node.data?.selectedAIs) {
 				const stateAIs = branchSelectedAIs.get(node.id)
@@ -789,39 +794,96 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			}
 
 			const branchAIs = getBranchAIs(node.id, selectedAIs)
+			const isMinimized = minimizedNodes.has(node.id)
+			const isSelected = selectedNodeIds.has(node.id)
+			const isActive = activeNodeId === node.id
+			const isGenerating = generatingNodeIds.has(node.id)
+			const isDragging = node.data?.isDragging
+
+			// Check if any RELEVANT data changed that requires a re-render of the node component
+			// We ignore position changes here effectively by reusing the old data object if nothing else changed
+			let dataChanged = true
+			if (prevData) {
+				const prevNode = prevData.node
+				const prevProps = prevData.props
+
+				// Compare relevant state
+				if (
+					prevProps.isMinimized === isMinimized &&
+					prevProps.isSelected === isSelected &&
+					prevProps.isActive === isActive &&
+					prevProps.isGenerating === isGenerating &&
+					prevProps.isDragging === isDragging &&
+					// Compare deep objects by reference (assuming immutable updates)
+					prevNode.data === node.data &&
+					prevProps.selectedAIs === (node.id === 'main' ? selectedAIs : branchAIs) &&
+					prevProps.selectedMessageIds === state.selectedMessageIds
+				) {
+					dataChanged = false
+				}
+			}
+
+			if (!dataChanged && prevData) {
+				// Return a new node object with NEW position but OLD data reference
+				// This satisfies React Flow's need for new node objects on position change
+				// but keeps the 'data' prop stable for React.memo(ChatNode)
+				return {
+					...node,
+					data: prevData.data
+				}
+			}
+
+			// If data changed, create new data object
+			const newData = {
+				...node.data,
+				selectedAIs: node.id === 'main' ? selectedAIs : branchAIs,
+				onSendMessage: node.id === 'main' ? handleSendMainMessage : handleSendBranchMessage,
+				onAddAI: node.id === 'main' ? onAddAI : (ai: AI) => handleBranchAddAI(node.id, ai),
+				onRemoveAI: node.id === 'main' ? onRemoveAI : (aiId: string) => handleBranchRemoveAI(node.id, aiId),
+				onSelectSingle: node.id === 'main' ? onSelectSingle : (aiId: string) => handleBranchSelectSingle(node.id, aiId),
+				onToggleMinimize: toggleNodeMinimize,
+				onDeleteBranch: node.id === 'main' ? undefined : handleDeleteBranch,
+				onLinkBranch: node.id === 'main' ? undefined : handleLinkBranch,
+				onCompareBranch: node.id === 'main' ? undefined : handleCompareBranch,
+				onStopGeneration: () => abortGeneration(node.id),
+				isMinimized,
+				isSelected,
+				onToggleSelection: toggleNodeSelection,
+				isActive,
+				isGenerating,
+				onMessageSelect: handleMessageSelect,
+				selectedMessageIds: state.selectedMessageIds,
+				isDragging,
+				onNavigateToMessage: (messageId: string) => {
+					const targetNode = nodes.find(n =>
+						n.data?.messages?.some((m: Message) => m.id === messageId) ||
+						n.data?.inheritedMessages?.some((m: Message) => m.id === messageId)
+					)
+					if (targetNode) {
+						focusOnNode(reactFlowInstance, targetNode.id, nodes)
+						setNodeActive(targetNode.id)
+					}
+				}
+			}
+
+			// Cache the new data
+			prevNodeDataRef.current.set(node.id, {
+				node: node,
+				data: newData,
+				props: {
+					isMinimized,
+					isSelected,
+					isActive,
+					isGenerating,
+					isDragging,
+					selectedAIs: node.id === 'main' ? selectedAIs : branchAIs,
+					selectedMessageIds: state.selectedMessageIds
+				}
+			})
 
 			return {
 				...node,
-				data: {
-					...node.data,
-					selectedAIs: node.id === 'main' ? selectedAIs : branchAIs,
-					onSendMessage: node.id === 'main' ? handleSendMainMessage : handleSendBranchMessage,
-					onAddAI: node.id === 'main' ? onAddAI : (ai: AI) => handleBranchAddAI(node.id, ai),
-					onRemoveAI: node.id === 'main' ? onRemoveAI : (aiId: string) => handleBranchRemoveAI(node.id, aiId),
-					onSelectSingle: node.id === 'main' ? onSelectSingle : (aiId: string) => handleBranchSelectSingle(node.id, aiId),
-					onToggleMinimize: toggleNodeMinimize,
-					onDeleteBranch: node.id === 'main' ? undefined : handleDeleteBranch,
-					onLinkBranch: node.id === 'main' ? undefined : handleLinkBranch,
-					onCompareBranch: node.id === 'main' ? undefined : handleCompareBranch,
-					onStopGeneration: () => abortGeneration(node.id),
-					isMinimized: minimizedNodes.has(node.id),
-					isSelected: selectedNodeIds.has(node.id),
-					onToggleSelection: toggleNodeSelection,
-					isActive: activeNodeId === node.id,
-					isGenerating: generatingNodeIds.has(node.id),
-					onMessageSelect: handleMessageSelect,
-					selectedMessageIds: state.selectedMessageIds,
-					onNavigateToMessage: (messageId: string) => {
-						const targetNode = nodes.find(n =>
-							n.data?.messages?.some((m: Message) => m.id === messageId) ||
-							n.data?.inheritedMessages?.some((m: Message) => m.id === messageId)
-						)
-						if (targetNode) {
-							focusOnNode(reactFlowInstance, targetNode.id, nodes)
-							setNodeActive(targetNode.id)
-						}
-					}
-				}
+				data: newData
 			}
 		})
 	}, [
@@ -1056,11 +1118,6 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 
 					if (latestBranch) {
 						branchToFocus = (latestBranch as ReactFlowNode).id
-						console.log('🎯 Found latest branch by activity:', {
-							id: branchToFocus,
-							activity: latestActivity,
-							label: (latestBranch as any).data?.label
-						})
 					}
 
 					// Fallback: use active branch if no activity data found
@@ -1070,11 +1127,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 						)
 						if (activeBranch) {
 							branchToFocus = activeBranch.id
-							console.log('🎯 Found active branch (fallback):', branchToFocus)
 						} else if (branches.length > 0) {
 							// Final fallback: last branch
 							branchToFocus = branches[branches.length - 1].id
-							console.log('🎯 Found last branch (fallback):', branchToFocus)
 						}
 					}
 				}
@@ -1083,23 +1138,21 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			// Store branch to focus for separate effect
 			if (branchToFocus) {
 				// Use a ref to track the branch we want to focus on after restoration
+				// Use a ref to track the branch we want to focus on after restoration
 				restoreFocusBranchIdRef.current = branchToFocus
-				console.log('🎯 Setting restoreFocusBranchIdRef:', branchToFocus)
-			} else {
-				console.log('⚠️ No branch found to focus on restoration')
-			}
 
-			setTimeout(() => {
-				isRestoringRef.current = false
-				// Fade in the canvas after restoration is complete
+				setTimeout(() => {
+					isRestoringRef.current = false
+					// Fade in the canvas after restoration is complete
+					setIsReady(true)
+				}, 300) // Slight delay to allow layout to settle
+			} else if (nodes.length === 0 && (!restoredConversationNodes || restoredConversationNodes.length === 0)) {
+				// If no nodes to restore (new conversation), just show it
 				setIsReady(true)
-			}, 300) // Slight delay to allow layout to settle
-		} else if (nodes.length === 0 && (!restoredConversationNodes || restoredConversationNodes.length === 0)) {
-			// If no nodes to restore (new conversation), just show it
-			setIsReady(true)
-		} else if (nodes.length > 0 && !isRestoringRef.current) {
-			// If nodes already exist and we're not restoring, show it
-			setIsReady(true)
+			} else if (nodes.length > 0 && !isRestoringRef.current) {
+				// If nodes already exist and we're not restoring, show it
+				setIsReady(true)
+			}
 		}
 	}, [restoredConversationNodes, selectedBranchId, reactFlowInstance, nodes.length])
 
@@ -1111,41 +1164,25 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	const [focusBranchId, setFocusBranchId] = useState<string | null>(null)
 
 	useEffect(() => {
-		console.log('🔍 Focus effect triggered:', {
-			focusBranchId,
-			hasInstance: !!reactFlowInstance,
-			nodesLength: nodes.length,
-			isRestoring: isRestoringRef.current,
-			restoreFocusRef: restoreFocusBranchIdRef.current
-		})
-
 		// Sync ref to state when ref changes
 		if (restoreFocusBranchIdRef.current && !focusBranchId) {
-			console.log('🎯 Setting focusBranchId from ref:', restoreFocusBranchIdRef.current)
 			setFocusBranchId(restoreFocusBranchIdRef.current)
 			return
 		}
 
 		// Relaxed check: nodes.length > 0 is enough (main node + potentially others)
 		if (focusBranchId && reactFlowInstance && nodes.length > 0 && !isRestoringRef.current) {
-			console.log('🎯 Attempting to focus on branch:', focusBranchId)
-
 			// Use getNodes() to ensure we have the latest nodes state
 			const currentNodes = reactFlowInstance.getNodes()
-			console.log('🔍 Current nodes:', currentNodes.map(n => ({ id: n.id, type: n.type })))
 			const branchNode = currentNodes.find(n => n.id === focusBranchId)
 
 			if (branchNode) {
-				console.log('🎯 Branch node found, executing simple focus')
 				// Wait for layout to settle
 				requestAnimationFrame(() => {
+					// Shorter delay, just enough for React Flow to render nodes
 					setTimeout(() => {
-						console.log('🎯 Executing simple focus for:', focusBranchId)
-
-						// Calculate viewport to center the node with 0.8x zoom
-						// We can use fitView with specific node ID and maxZoom
-						// Use focusOnBranchWithZoom for consistent animation
-						focusOnBranchWithZoom(reactFlowInstance, focusBranchId, currentNodes, 0.25, 1.1)
+						// Use focusOnNode for consistent smooth animation
+						focusOnNode(reactFlowInstance, focusBranchId, currentNodes, 0.2)
 
 						// Mark that we just performed a programmatic focus
 						lastProgrammaticFocusRef.current = Date.now()
@@ -1153,19 +1190,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 						setNodeActive(focusBranchId)
 						setFocusBranchId(null) // Clear after focusing
 						restoreFocusBranchIdRef.current = null
-					}, 100) // Reduced delay
+					}, 100)
 				})
-			} else {
-				console.log('⚠️ Branch node not found in current nodes:', focusBranchId)
-				console.log('⚠️ Available node IDs:', currentNodes.map(n => n.id))
 			}
-		} else if (focusBranchId) {
-			console.log('⏳ Waiting to focus...', {
-				hasFocusId: !!focusBranchId,
-				hasInstance: !!reactFlowInstance,
-				nodesLength: nodes.length,
-				isRestoring: isRestoringRef.current
-			})
 		}
 	}, [focusBranchId, nodes.length, reactFlowInstance, setNodeActive])
 
@@ -1221,7 +1248,6 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		// But allow retries if messages weren't ready before
 		// AND allow retry if we are forcing a duplicate
 		if (lastProcessedMessageIdRef.current === pendingBranchMessageId && processingTimeoutRef.current && !pendingBranchData?.allowDuplicate) {
-			console.log('⚠️ Already processing this messageId, skipping duplicate trigger:', pendingBranchMessageId)
 			return
 		}
 
@@ -1242,29 +1268,15 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			// Check both mainMessages prop AND mainNode.data.messages
 			// mainMessages is the source of truth from page.tsx
 			const hasMainMessages = mainMessages.length > 0
-			const mainNodeHasMessages = mainNode?.data?.messages && mainNode.data.messages.length > 0
 			const messageExists = mainMessages.some(m => m.id === pendingBranchMessageId)
 
 			if (mainNode && hasMainMessages && messageExists) {
 				// Main node exists, messages are available, and target message exists
-				console.log('✅ Ready to create branch - main node, messages, and target message all found:', {
-					mainNode: !!mainNode,
-					mainMessagesCount: mainMessages.length,
-					targetMessageId: pendingBranchMessageId,
-					messageExists
-				})
-
 				// Get isMultiBranch from pendingBranchData if available
 				const isMultiBranch = pendingBranchData?.isMultiBranch ?? false
 				const parentNodeForBranch = pendingBranchData?.parentNodeId || 'main'
 				const allowDuplicate = pendingBranchData?.allowDuplicate ?? false
 				const branchGroupId = pendingBranchData?.branchGroupId
-
-				console.log('🔍 Creating branch with isMultiBranch:', {
-					isMultiBranch,
-					fromPendingBranchData: pendingBranchData?.isMultiBranch,
-					selectedAIsCount: selectedAIs.length
-				})
 
 				// Create branch
 				handleBranch(parentNodeForBranch, pendingBranchMessageId, isMultiBranch, {
@@ -1287,13 +1299,6 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			} else if (retryCount < maxRetries) {
 				// Wait a bit more for main node to be created or messages to be loaded
 				retryCount++
-				if (!mainNode) {
-					console.log(`⏳ Waiting for main node... (retry ${retryCount}/${maxRetries})`)
-				} else if (!hasMainMessages) {
-					console.log(`⏳ Waiting for main messages... (retry ${retryCount}/${maxRetries})`)
-				} else if (!messageExists) {
-					console.log(`⏳ Waiting for target message ${pendingBranchMessageId} to be available... (retry ${retryCount}/${maxRetries})`)
-				}
 				timeoutId = setTimeout(checkAndCreateBranch, 50)
 			} else {
 				// Give up after max retries
@@ -1320,7 +1325,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		return () => {
 			if (timeoutId) clearTimeout(timeoutId)
 		}
-	}, [pendingBranchMessageId, mainMessages, handleBranch, onPendingBranchProcessed, pendingBranchData]) // Added pendingBranchData to dependencies
+	}, [pendingBranchMessageId, mainMessages, handleBranch, onPendingBranchProcessed, pendingBranchData])
 
 	// ============================================
 	// NAVIGATION
@@ -1328,20 +1333,34 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 
 	useEffect(() => {
 		if (selectedBranchId && reactFlowInstance && nodes.length > 0) {
+			// If this update was triggered by internal user interaction (clicking a node),
+			// DO NOT re-focus the camera. Only focus if it came from external navigation (sidebar).
+			if (isUserInteractionRef.current) {
+				isUserInteractionRef.current = false
+				return
+			}
+
 			const branchNode = nodes.find(n => n.id === selectedBranchId && n.id !== 'main')
 			if (branchNode) {
-				// Use zoom animation for branch focus
-				setTimeout(() => {
-					focusOnBranchWithZoom(reactFlowInstance, selectedBranchId, nodes, 0.25, 1.1)
-					// Mark as programmatic focus to prevent double-focus by the activeNodeId effect
-					lastProgrammaticFocusRef.current = Date.now()
-					setNodeActive(selectedBranchId)
-				}, 100)
+				// Use focusOnNode for smooth transition
+				requestAnimationFrame(() => {
+					setTimeout(() => {
+						focusOnNode(reactFlowInstance, selectedBranchId, nodes, 0.2)
+						// Mark as programmatic focus to prevent double-focus by the activeNodeId effect
+						lastProgrammaticFocusRef.current = Date.now()
+						setNodeActive(selectedBranchId)
+					}, 50)
+				})
 			}
 		}
 	}, [selectedBranchId, reactFlowInstance, nodes.length])
 
 	// Center viewport on active node when it changes (only for branches, not main)
+	// Center viewport on active node when it changes (only for branches, not main)
+	// Center viewport on active node when it changes (only for branches, not main)
+	// REMOVED: This effect causes jitter when clicking nodes. 
+	// Navigation should be explicit (sidebar or double-click), not on every selection.
+	/*
 	useEffect(() => {
 		if (activeNodeId && reactFlowInstance && nodes.length > 0 && activeNodeId !== 'main') {
 			// Only center if the active node exists in the nodes array and is a branch
@@ -1351,15 +1370,18 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 				const timeSinceProgrammaticFocus = Date.now() - (lastProgrammaticFocusRef.current || 0)
 
 				if (timeSinceProgrammaticFocus > 1000) {
-					// Use a small delay to ensure layout is complete, then focus with zoom
-					const timeoutId = setTimeout(() => {
-						focusOnBranchWithZoom(reactFlowInstance, activeNodeId, nodes, 0.25, 1.1)
-					}, 300)
-					return () => clearTimeout(timeoutId)
+					// Use requestAnimationFrame for smoother timing than setTimeout
+					requestAnimationFrame(() => {
+						// Small delay to ensure any layout updates are processed
+						setTimeout(() => {
+							focusOnNode(reactFlowInstance, activeNodeId, nodes, 0.2)
+						}, 50)
+					})
 				}
 			}
 		}
 	}, [activeNodeId, reactFlowInstance, nodes.length])
+	*/
 
 	// Notify parent of active node change
 	useEffect(() => {
@@ -1486,6 +1508,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 				clearSelection()
 			}
 
+			// Mark as user interaction to prevent auto-focus in effects
+			isUserInteractionRef.current = true
 			setNodeActive(node.id)
 			// Update lastActivity when node is clicked/selected
 			if (node.id !== 'main') {
@@ -1538,14 +1562,49 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		setEdges((eds) => applyEdgeChanges(changes, eds))
 	}, [setEdges])
 
+	const onNodeDragStartHandler = useCallback(
+		(_event: React.MouseEvent, node: ReactFlowNode) => {
+			setNodes((nds) =>
+				nds.map((n) => {
+					if (n.id === node.id) {
+						return {
+							...n,
+							data: {
+								...n.data,
+								isDragging: true
+							}
+						}
+					}
+					return n
+				})
+			)
+		},
+		[setNodes]
+	)
+
 	const onNodeDragStopHandler = useCallback(
-		(_event: React.MouseEvent, _node: ReactFlowNode) => {
+		(_event: React.MouseEvent, node: ReactFlowNode) => {
+			setNodes((nds) =>
+				nds.map((n) => {
+					if (n.id === node.id) {
+						return {
+							...n,
+							data: {
+								...n.data,
+								isDragging: false
+							}
+						}
+					}
+					return n
+				})
+			)
+
 			// Update parent state with new positions after drag
 			if (onNodesUpdate) {
 				onNodesUpdate(nodes)
 			}
 		},
-		[onNodesUpdate, nodes]
+		[onNodesUpdate, nodes, setNodes]
 	)
 
 	return (
@@ -1564,6 +1623,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					onEdgesChange={onEdgesChangeHandler}
 					onNodeClick={onNodeClick}
 					onNodeDoubleClick={onNodeDoubleClickHandler}
+					onNodeDragStart={onNodeDragStartHandler}
 					onNodeDragStop={onNodeDragStopHandler}
 					onInit={setReactFlowInstance}
 					fitView

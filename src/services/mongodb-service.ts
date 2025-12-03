@@ -39,20 +39,7 @@ class MongoDBService {
         const url = `${this.baseUrl}/${conversationId}`
         const method = 'PUT'
 
-        console.log('🌐 Making request to update conversation:', { 
-          url, 
-          method, 
-          conversationId, 
-          bodySize: JSON.stringify(conversationData).length,
-          mainMessagesCount: conversationData.mainMessages?.length || 0,
-          branchesCount: conversationData.branches?.length || 0,
-          mainMessages: conversationData.mainMessages?.map((m: any) => ({
-            id: m.id,
-            isUser: m.isUser,
-            textLength: m.text?.length || 0
-          })) || [],
-          branchIds: conversationData.branches?.map((b: any) => b.id) || []
-        })
+
 
         const response = await fetch(url, {
           method,
@@ -62,7 +49,7 @@ class MongoDBService {
           body: JSON.stringify(conversationData),
         })
 
-        console.log('📡 Response status:', response.status, response.statusText)
+
 
         const result = await response.json()
 
@@ -74,7 +61,6 @@ class MongoDBService {
           console.error('❌ API error:', JSON.stringify(result, null, 2))
           throw new Error(result.error || 'Failed to save conversation')
         } else {
-          console.log('✅ Updated conversation successfully:', result.success)
           return result
         }
       }
@@ -83,7 +69,7 @@ class MongoDBService {
       const url = this.baseUrl
       const method = 'POST'
 
-      console.log('🌐 Creating new conversation:', { url, method, bodySize: JSON.stringify(conversationData).length })
+
 
       const response = await fetch(url, {
         method,
@@ -93,7 +79,7 @@ class MongoDBService {
         body: JSON.stringify(conversationData),
       })
 
-      console.log('📡 Response status:', response.status, response.statusText)
+
 
       const result = await response.json()
 
@@ -102,7 +88,6 @@ class MongoDBService {
         throw new Error(result.error || 'Failed to save conversation')
       }
 
-      console.log('✅ Created conversation successfully:', result.success)
       return result
     } catch (error) {
       console.error('❌ Error saving conversation:', error)
@@ -199,13 +184,12 @@ class MongoDBService {
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout)
     }
-
     // Set new timeout
     this.saveTimeout = setTimeout(async () => {
       try {
         const result = await this.saveConversation(conversationData, conversationId)
         if (result.success) {
-          console.log('✅ Auto-saved conversation to MongoDB')
+          // Success
         } else {
           console.error('❌ Auto-save failed:', result.error)
         }

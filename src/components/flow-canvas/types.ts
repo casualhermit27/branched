@@ -80,6 +80,7 @@ export interface ChatNodeData {
 	selectedMessageIds?: Set<string>
 	depth?: number
 	onNavigateToMessage?: (messageId: string) => void
+	isDragging?: boolean
 }
 
 export interface FlowCanvasProps {

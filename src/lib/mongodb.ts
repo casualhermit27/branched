@@ -1,5 +1,9 @@
 import mongoose from 'mongoose'
 
+declare global {
+  var mongoose: any
+}
+
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/ai-conversation-canvas'
 
 if (!MONGODB_URI) {
@@ -28,7 +32,6 @@ async function connectDB() {
     }
 
     cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      console.log('✅ Connected to MongoDB')
       return mongoose
     }).catch((error) => {
       console.error('❌ MongoDB connection error:', error)

@@ -208,7 +208,10 @@ export default function ChatInterface({
   const groupedMessages = normalizedMessages.reduce((groups, msg) => {
     if (msg.groupId) {
       if (!groups[msg.groupId]) groups[msg.groupId] = []
-      groups[msg.groupId].push(msg)
+      // Prevent duplicates in the same group
+      if (!groups[msg.groupId].some(m => m.id === msg.id)) {
+        groups[msg.groupId].push(msg)
+      }
     } else {
       groups[`single-${msg.id}`] = [msg]
     }
@@ -246,7 +249,7 @@ export default function ChatInterface({
 
       {/* Messages Area */}
       <div
-        className="flex-1 overflow-y-auto overflow-x-hidden space-y-8 px-4 pb-4 pt-4"
+        className="flex-1 overflow-y-auto overflow-x-hidden space-y-8 px-4 pb-4 pt-4 overscroll-contain"
         ref={messagesContainerRef}
         onScroll={handleScroll}
         data-scrollable
@@ -264,7 +267,7 @@ export default function ChatInterface({
               {/* Multi-model Group Header */}
               {isMultiModel && (
                 <div className="flex items-center justify-center gap-3 py-2 opacity-80 hover:opacity-100 transition-opacity">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-muted/50 backdrop-blur-sm rounded-full text-[10px] text-muted-foreground font-medium border border-border/30">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-muted rounded-full text-[10px] text-muted-foreground font-medium border border-border/30">
                     <span>{groupMessages.length} Responses</span>
                   </div>
                   <button
@@ -374,9 +377,9 @@ export default function ChatInterface({
                                   onMessageSelect?.(msg.id, true)
                                 }
                               }}
-                              className={`text-foreground/90 leading-relaxed bg-zinc-800/50 rounded-2xl p-4 border border-border/10 transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
+                              className={`text-foreground/90 leading-relaxed bg-muted/50 rounded-2xl p-4 border border-border/10 transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
                                 ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-                                : 'hover:bg-zinc-800/70'
+                                : 'hover:bg-muted/80'
                                 }`}
                               title="Ctrl + Click to select"
                             >
@@ -544,7 +547,7 @@ export default function ChatInterface({
 
             {/* Branch Context Indicator (Floating above input) */}
             {currentBranch && (
-              <div className="absolute -top-10 left-4 flex items-center gap-2 px-3 py-1.5 bg-background/90 backdrop-blur-md border border-border/50 rounded-full shadow-sm text-xs text-muted-foreground">
+              <div className="absolute -top-10 left-4 flex items-center gap-2 px-3 py-1.5 bg-background border border-border/50 rounded-full shadow-sm text-xs text-muted-foreground">
                 <GitBranch className="w-3.5 h-3.5" />
                 <span className="max-w-[200px] truncate">
                   Branch from: {messages.find(m => m.id === currentBranch)?.text || '...'}

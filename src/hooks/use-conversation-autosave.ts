@@ -14,6 +14,8 @@ interface UseConversationAutosaveParams {
 	isInitialLoadRef: React.MutableRefObject<boolean>
 }
 
+import { useSyncStore } from '@/stores/sync-store'
+
 export function useConversationAutosave({
 	messages,
 	selectedAIs,
@@ -25,6 +27,7 @@ export function useConversationAutosave({
 	isInitialLoadRef
 }: UseConversationAutosaveParams) {
 	useEffect(() => {
+		// ... (keep existing checks for hasMessages, hasNodes, hasBranches)
 		const hasMessages = messages.length > 0 && messages.some((m: any) => m.text || m.streamingText)
 		const hasNodes = conversationNodes.length > 0 && conversationNodes.some((n: any) => {
 			const nodeMessages = n.data?.messages || n.messages || []
@@ -32,18 +35,40 @@ export function useConversationAutosave({
 		})
 		const hasBranches = branches.length > 0
 
-		console.log(`💾 Autosave check: Messages=${messages.length}, Nodes=${conversationNodes.length}, Branches=${branches.length}`)
-		conversationNodes.forEach(n => {
-			const msgCount = (n.data?.messages || n.messages || []).length
-			if (msgCount > 0) console.log(`   Node ${n.id}: ${msgCount} messages`)
-		})
-
 		const shouldSave = !isInitialLoadRef.current && (hasMessages || hasNodes || hasBranches)
 
 		if (shouldSave) {
 			const timeoutId = setTimeout(() => {
-				let allNodes = [...conversationNodes]
+				const dirtyNodeIds = useSyncStore.getState().getDirtyNodes()
+				const conversationId = currentConversationIdRef.current
 
+				// If we have a conversation ID and dirty nodes, try a delta update
+				if (conversationId && dirtyNodeIds.size > 0) {
+					// Prepare delta payload
+					const updates: Record<string, any> = {}
+
+					// Check if main messages changed (special case)
+					// In a real implementation, we'd track 'main' as a dirty node too
+					// For now, let's assume if dirtyNodeIds has 'main', we update main messages
+
+					conversationNodes.forEach(node => {
+						if (dirtyNodeIds.has(node.id)) {
+							// Construct node data similar to full save logic
+							// ... (reuse the node construction logic here or extract it)
+							// For brevity in this step, I will reuse the existing logic but filter by dirty IDs
+							// In a full refactor, we should extract the "node to mongo object" logic
+						}
+					})
+
+					// FALLBACK: For this iteration, let's stick to the full save but clear the dirty flag
+					// The actual delta payload construction requires refactoring the mapping logic above into a helper
+					// which is safer to do in a separate step. 
+					// Let's proceed with the full save for now but clear the dirty set to indicate we handled it.
+					useSyncStore.getState().clearDirtyNodes()
+				}
+
+				let allNodes = [...conversationNodes]
+				// ... (rest of the existing full save logic)
 				const hasMainNode = allNodes.some(node => node.id === 'main')
 
 				if (!hasMainNode) {
@@ -168,6 +193,14 @@ export function useConversationAutosave({
 				})
 
 				const conversationIdToSave = currentConversationIdRef.current
+
+				// If we have dirty nodes and an ID, we *could* do a delta update here.
+				// For now, we are just clearing the dirty state to acknowledge we have "saved" (even if fully).
+				// The next step would be to actually call a `saveDelta` method on mongoDBService.
+				if (conversationIdToSave) {
+					useSyncStore.getState().clearDirtyNodes()
+				}
+
 				autoSaveConversation(conversationData, conversationIdToSave || undefined)
 			}, 100)
 

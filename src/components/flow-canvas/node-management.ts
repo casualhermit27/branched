@@ -208,6 +208,8 @@ export function createBranchNode(
 	}
 }
 
+import { useSyncStore } from '@/stores/sync-store'
+
 /**
  * Update node data while preserving structure
  */
@@ -215,6 +217,7 @@ export function updateNodeData<T extends ChatNodeData>(
 	node: Node<T>,
 	updates: Partial<T>
 ): Node<T> {
+	useSyncStore.getState().addDirtyNode(node.id)
 	return {
 		...node,
 		data: {

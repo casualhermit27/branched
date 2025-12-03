@@ -168,7 +168,8 @@ export interface IConversation {
     messages: IMessage[] // Main conversation thread
     selectedAIs: IAIModel[] // Active models for main thread
   }
-  branches: IBranch[] // Side explorations
+  // nodes: Map<string, IBranch> // Flat structure for all nodes (main + branches)
+  nodes: Map<string, any>
   contextLinks: string[] // Edge IDs for context connections
   collapsedNodes: string[]
   minimizedNodes: string[]
@@ -184,6 +185,7 @@ export interface IConversation {
   // Legacy fields for backward compatibility (will be migrated)
   mainMessages?: IMessage[]
   selectedAIs?: IAIModel[]
+  branches?: IBranch[] // Keep for backward compatibility during migration
 }
 
 const ConversationSchema = new Schema<IConversation>({
@@ -192,7 +194,31 @@ const ConversationSchema = new Schema<IConversation>({
     messages: { type: [MessageSchema], default: [] },
     selectedAIs: { type: [AIModelSchema], default: [] }
   },
-  branches: { type: [BranchSchema], default: [] },
+  // Use Map for O(1) access and atomic updates
+  nodes: {
+    type: Map,
+    of: new Schema({
+      id: String,
+      label: String,
+      type: String, // 'chatNode', 'main'
+      parentId: String,
+      parentMessageId: String,
+      inheritedMessages: [MessageSchema],
+      branchMessages: [MessageSchema],
+      messages: [MessageSchema], // For main node or unified storage
+      selectedAIs: [AIModelSchema],
+      isMinimized: Boolean,
+      isActive: Boolean,
+      isGenerating: Boolean,
+      isHighlighted: Boolean,
+      position: { x: Number, y: Number },
+      branchGroupId: String,
+      metadata: Schema.Types.Mixed,
+      // ... other fields from BranchSchema
+    }, { _id: false }),
+    default: {}
+  },
+  branches: { type: [BranchSchema], default: [] }, // Deprecated but kept for safety
   contextLinks: { type: [String], default: [] },
   collapsedNodes: { type: [String], default: [] },
   minimizedNodes: { type: [String], default: [] },
