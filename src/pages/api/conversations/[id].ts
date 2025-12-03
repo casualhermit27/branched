@@ -6,23 +6,23 @@ import { Conversation } from '../../../models/conversation'
 async function getConversation(req: NextApiRequest, res: NextApiResponse, id: string) {
   try {
     await connectDB()
-    
+
     // Check if using normalized structure
     const useNormalized = req.query.normalized === 'true'
-    
+
     if (useNormalized) {
       // Use normalized structure (messages and branches collections)
       const { MongoClient } = await import('mongodb')
       const client = await MongoClient.connect(process.env.MONGODB_URI || '')
       const db = client.db(process.env.MONGODB_DB_NAME || 'branched')
-      
+
       // 1. Get all branches for this conversation
       const branches = await db
         .collection('branches')
         .find({ conversationId: id })
         .sort({ createdAt: 1 })
         .toArray()
-      
+
       // 2. Get all message IDs from all branches
       const allMessageIds = new Set<string>()
       branches.forEach((branch: any) => {
@@ -37,21 +37,21 @@ async function getConversation(req: NextApiRequest, res: NextApiResponse, id: st
           )
         }
       })
-      
+
       // 3. Fetch all messages
       const messages = await db
         .collection('messages')
         .find({ _id: { $in: Array.from(allMessageIds) } })
         .sort({ timestamp: 1 })
         .toArray()
-      
+
       // 4. Get conversation metadata
       const conversation = await db
         .collection('conversations')
         .findOne({ _id: id })
-      
+
       await client.close()
-      
+
       return res.status(200).json({
         success: true,
         data: {
@@ -73,22 +73,14 @@ async function getConversation(req: NextApiRequest, res: NextApiResponse, id: st
     } else {
       // Use legacy structure (single conversation document)
       const conversation = await Conversation.findById(id)
-      
+
       if (!conversation) {
         return res.status(404).json({
           success: false,
           error: 'Conversation not found'
         })
       }
-      
-      console.log(`📥 GET conversation ${id}:`, {
-        mainMessagesCount: conversation.mainMessages?.length || 0,
-        branchesCount: conversation.branches?.length || 0,
-        hasMainMessages: !!conversation.mainMessages,
-        hasBranches: !!conversation.branches,
-        branchIds: conversation.branches?.map((b: any) => b.id) || []
-      })
-      
+
       return res.status(200).json({
         success: true,
         data: conversation
@@ -107,26 +99,12 @@ async function getConversation(req: NextApiRequest, res: NextApiResponse, id: st
 async function updateConversation(req: NextApiRequest, res: NextApiResponse, id: string) {
   try {
     await connectDB()
-    
-    console.log(`📝 Updating conversation ${id} with data:`, {
-      hasBody: !!req.body,
-      title: req.body?.title,
-      mainMessagesCount: req.body?.mainMessages?.length,
-      mainMessages: req.body?.mainMessages?.map((m: any) => ({
-        id: m.id,
-        isUser: m.isUser,
-        textLength: m.text?.length || 0
-      })),
-      selectedAIsCount: req.body?.selectedAIs?.length,
-      branchesCount: req.body?.branches?.length,
-      branchIds: req.body?.branches?.map((b: any) => b.id) || []
-    })
-    
+
     // Prepare update data
     const updateData: any = {
       updatedAt: new Date() // Always update the timestamp
     }
-    
+
     // Only include fields that are provided
     if (req.body.title !== undefined) updateData.title = req.body.title
     if (req.body.mainMessages !== undefined) updateData.mainMessages = req.body.mainMessages
@@ -137,36 +115,21 @@ async function updateConversation(req: NextApiRequest, res: NextApiResponse, id:
     if (req.body.minimizedNodes !== undefined) updateData.minimizedNodes = req.body.minimizedNodes
     if (req.body.activeNodeId !== undefined) updateData.activeNodeId = req.body.activeNodeId
     if (req.body.viewport !== undefined) updateData.viewport = req.body.viewport
-    
-    console.log(`📦 Update data being applied:`, {
-      mainMessagesCount: updateData.mainMessages?.length || 0,
-      branchesCount: updateData.branches?.length || 0,
-      hasMainMessages: !!updateData.mainMessages,
-      hasBranches: !!updateData.branches,
-      updateDataKeys: Object.keys(updateData)
-    })
-    
+
     // Update conversation - Mongoose handles the update object directly
     const conversation = await Conversation.findByIdAndUpdate(
       id,
       updateData, // Mongoose will automatically use $set internally
       { new: true, runValidators: true } // Return updated document and run validators
     )
-    
+
     if (!conversation) {
       return res.status(404).json({
         success: false,
         error: 'Conversation not found'
       })
     }
-    
-    console.log(`✅ Updated conversation ${id}:`, {
-      mainMessagesCount: conversation.mainMessages?.length || 0,
-      branchesCount: conversation.branches?.length || 0,
-      hasMainMessages: !!conversation.mainMessages,
-      hasBranches: !!conversation.branches
-    })
-    
+
     return res.status(200).json({
       success: true,
       data: conversation
@@ -178,7 +141,7 @@ async function updateConversation(req: NextApiRequest, res: NextApiResponse, id:
       stack: error.stack,
       error
     })
-    
+
     return res.status(500).json({
       success: false,
       error: error.message
@@ -190,18 +153,16 @@ async function updateConversation(req: NextApiRequest, res: NextApiResponse, id:
 async function deleteConversation(req: NextApiRequest, res: NextApiResponse, id: string) {
   try {
     await connectDB()
-    
+
     const conversation = await Conversation.findByIdAndDelete(id)
-    
+
     if (!conversation) {
       return res.status(404).json({
         success: false,
         error: 'Conversation not found'
       })
     }
-    
-    console.log(`✅ Deleted conversation ${id}`)
-    
+
     return res.status(200).json({
       success: true,
       data: {}
@@ -217,11 +178,11 @@ async function deleteConversation(req: NextApiRequest, res: NextApiResponse, id:
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query
-  
+
   if (!id || Array.isArray(id)) {
     return res.status(400).json({ success: false, error: 'Invalid conversation ID' })
   }
-  
+
   switch (req.method) {
     case 'GET':
       return getConversation(req, res, id)

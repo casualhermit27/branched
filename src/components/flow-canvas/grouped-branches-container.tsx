@@ -46,8 +46,8 @@ export function GroupedBranchesContainer({ nodes }: GroupedBranchesContainerProp
     >()
 
     const getNodeDimensions = (node: Node) => {
-      const fallbackWidth = node.data?.isMinimized ? 280 : 1200
-      const fallbackHeight = node.data?.isMinimized ? 200 : 600
+      const fallbackWidth = node.data?.isMinimized ? 280 : 1300
+      const fallbackHeight = node.data?.isMinimized ? 200 : 450
       const width =
         typeof node.width === 'number'
           ? node.width

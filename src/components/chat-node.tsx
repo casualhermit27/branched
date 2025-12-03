@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Handle, Position } from 'reactflow'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Minus, ArrowsOut, GitBranch, Trash, DotsThreeVertical, Link, ArrowsClockwise } from '@phosphor-icons/react'
@@ -69,9 +69,10 @@ interface ChatNodeData {
   selectedMessageIds?: Set<string>
   depth?: number
   onNavigateToMessage?: (messageId: string) => void
+  isDragging?: boolean
 }
 
-export default function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
+function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -128,7 +129,6 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
 
   return (
     <motion.div
-      layout
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{
         opacity: 1,
@@ -136,24 +136,21 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
         y: 0
       }}
       transition={{
-        layout: {
-          duration: 0.25,
-          ease: [0.4, 0, 0.2, 1]
-        },
         opacity: { duration: 0.2 },
         scale: { duration: 0.2 }
       }}
       // Handle mouse events to allow scrolling within node but prevent canvas panning
       // We now use 'nodrag' class in child components to prevent dragging while allowing selection
-      className={`bg-[#1c1c1f]/95 backdrop-blur-xl rounded-2xl border transition-all duration-300 relative ${data.isMinimized ? 'p-3' : 'p-3 md:p-0'} overflow-visible
+      className={`bg-card rounded-2xl border transition-[box-shadow,border-color,background-color] duration-300 relative ${data.isMinimized ? 'p-3' : 'p-3 md:p-0'} overflow-visible
         ${data.isSelected
-          ? 'ring-2 ring-white border-white shadow-[0_0_0_2px_rgba(255,255,255,0.5)] z-20'
+          ? 'ring-2 ring-primary border-primary shadow-[0_0_0_2px_rgba(var(--primary),0.5)] z-20'
           : data.isActive
             ? 'border-primary shadow-lg shadow-primary/10 ring-2 ring-primary/30 z-10'
             : 'border-border/40 shadow-sm hover:border-border/80 hover:shadow-md'
         }
         ${data.isHighlighted && !data.isSelected ? 'border-primary/30 shadow-2xl shadow-primary/10 ring-1 ring-primary/20' : ''}
         ${!data.isMinimized ? 'w-[calc(100vw-2rem)] md:w-[1300px] min-w-[300px] md:min-w-[1300px] max-w-full md:max-w-[1300px]' : ''}
+        ${data.isDragging ? '!shadow-none' : ''} 
       `}
       style={{
         width: data.isMinimized ? '280px' : undefined,
@@ -190,7 +187,7 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
             e.preventDefault()
             setShowMenu(!showMenu)
           }}
-          className="p-2 rounded-lg transition-all duration-200 bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/60 hover:border-border/80 shadow-md hover:shadow-lg backdrop-blur-sm"
+          className="p-2 rounded-lg transition-all duration-200 bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/60 hover:border-border/80 shadow-md hover:shadow-lg"
           title="More options"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
@@ -218,7 +215,7 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: -8 }}
                 transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                className="absolute top-full right-0 mt-2 w-48 bg-card border border-border/50 shadow-[0_4px_16px_rgba(0,0,0,0.12)] rounded-lg overflow-hidden backdrop-blur-xl z-50"
+                className="absolute top-full right-0 mt-2 w-48 bg-card border border-border/50 shadow-[0_4px_16px_rgba(0,0,0,0.12)] rounded-lg overflow-hidden z-50"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="py-1.5">
@@ -375,7 +372,7 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
             className="flex flex-col h-full min-h-0"
           >
             {/* Unified Node Header */}
-            <div className="flex flex-col border-b border-border/40 bg-card/50 backdrop-blur-sm rounded-t-2xl">
+            <div className="flex flex-col border-b border-border/40 bg-card rounded-t-2xl">
               {/* Top Row: AI Pills - Moved to ChatInterface Input Area */}
 
               {/* Bottom Row: Branch Context (if applicable) */}
@@ -421,7 +418,7 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
 
               {/* Nested Branch Indicator - Sleek Badge */}
               {data.depth && data.depth > 1 && (
-                <div className="absolute top-0 left-0 -mt-3 ml-6 px-2 py-0.5 bg-indigo-500/10 backdrop-blur-md border border-indigo-500/20 rounded-t-lg flex items-center gap-1.5 text-[10px] text-indigo-500 font-medium uppercase tracking-wider shadow-sm z-0">
+                <div className="absolute top-0 left-0 -mt-3 ml-6 px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded-t-lg flex items-center gap-1.5 text-[10px] text-indigo-500 font-medium uppercase tracking-wider shadow-sm z-0">
                   <GitBranch className="w-3 h-3" weight="bold" />
                   <span>Level {data.depth}</span>
                 </div>
@@ -476,3 +473,6 @@ export default function ChatNode({ data, id }: { data: ChatNodeData; id: string 
     </motion.div>
   )
 }
+
+// Memoize the component to prevent unnecessary re-renders
+export default React.memo(ChatNode)

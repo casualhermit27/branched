@@ -28,27 +28,19 @@ export function useConversationRestore() {
 		selectedAIs,
 		defaultAI
 	}: RestoreConversationParams) => {
-		console.log('🔄 Restoring conversation:', conversation._id)
-		console.log('📊 Conversation data:', {
-			id: conversation._id,
-			title: conversation.title,
-			mainMessagesCount: conversation.mainMessages?.length || 0,
-			branchesCount: conversation.branches?.length || 0,
-			selectedAIsCount: conversation.selectedAIs?.length || 0
-		})
+
 
 		const hasMessages = (conversation.mainMessages && conversation.mainMessages.length > 0) ||
 			(conversation.messages && conversation.messages.length > 0)
 		const hasBranches = conversation.branches && conversation.branches.length > 0
 
 		if (!hasMessages && !hasBranches) {
-			console.log('⚠️ Skipping restore - conversation has no content')
 			return
 		}
 
 		if (conversation._id) {
 			currentConversationIdRef.current = conversation._id
-			console.log('✅ Set conversation ID:', conversation._id)
+			currentConversationIdRef.current = conversation._id
 		}
 
 		if (conversation.mainMessages && Array.isArray(conversation.mainMessages)) {
@@ -62,11 +54,7 @@ export function useConversationRestore() {
 				}))
 
 			setMessages(validMessages)
-			console.log('✅ Restored messages:', {
-				total: validMessages.length,
-				userMessages: validMessages.filter((m: any) => m.isUser).length,
-				aiMessages: validMessages.filter((m: any) => !m.isUser).length
-			})
+			setMessages(validMessages)
 		} else {
 			setMessages([])
 		}
@@ -74,7 +62,7 @@ export function useConversationRestore() {
 		if (conversation.selectedAIs && conversation.selectedAIs.length > 0) {
 			const restoredAIs = conversation.selectedAIs.map((ai: any) => restoreAILogos(ai))
 			setSelectedAIs(restoredAIs)
-			console.log('✅ Restored selected AIs:', restoredAIs.length)
+			setSelectedAIs(restoredAIs)
 		} else {
 			setSelectedAIs([defaultAI])
 		}
@@ -153,11 +141,7 @@ export function useConversationRestore() {
 				}
 			})
 
-			// Log restored branch groups for debugging
-			const nodesWithGroups = restoredNodes.filter((n: any) => n.data?.branchGroupId)
-			if (nodesWithGroups.length > 0) {
-				console.log('✅ Restored nodes with branchGroupId:', nodesWithGroups.map((n: any) => ({ id: n.id, groupId: n.data.branchGroupId })))
-			}
+
 
 			if (!mainNodeInBranches) {
 				const mainMessages = sanitizeMessages(conversation.mainMessages || [])
@@ -215,7 +199,6 @@ export function useConversationRestore() {
 
 		// Restore active node/branch if available
 		if (conversation.activeNodeId) {
-			console.log('🎯 Restoring active node:', conversation.activeNodeId)
 			setActiveBranchId(conversation.activeNodeId)
 			if (conversation.activeNodeId !== 'main') {
 				setCurrentBranch(conversation.activeNodeId)

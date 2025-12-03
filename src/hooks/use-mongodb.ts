@@ -76,7 +76,7 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
           setCurrentConversationId(newConversationId)
         } else if (id && newConversationId && newConversationId !== id) {
           // Conversation was not found, so a new one was created - update the ID
-          console.log('🔄 Conversation ID changed from', id, 'to', newConversationId, '- updating')
+          // Conversation was not found, so a new one was created - update the ID
           setConversations(prev => [result.data!, ...prev])
           setCurrentConversationId(newConversationId)
         } else if (id) {
@@ -207,7 +207,6 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
             // Only skip if it's definitely a React element (has $$typeof)
             if (item && typeof item === 'object') {
               if (item.$$typeof) {
-                console.log('⚠️ Stripping React element from array:', { keys: Object.keys(item), typeof: item.$$typeof })
                 return undefined
               }
             }
@@ -271,9 +270,7 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
 
     const sanitizedData = sanitizeData(data)
 
-    console.log(`📦 Sanitized data: MainMessages=${sanitizedData.mainMessages?.length || 0}, Branches=${sanitizedData.branches?.length || 0}`)
     sanitizedData.branches?.forEach((b: any) => {
-      if (b.messages?.length > 0) console.log(`   Branch ${b.id}: ${b.messages.length} messages`)
     })
 
     // Check if data has changed
@@ -281,7 +278,6 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
     const lastDataString = lastSavedDataRef.current ? JSON.stringify(lastSavedDataRef.current) : null
 
     if (dataString === lastDataString) {
-      console.log('⏭️ Skipping save - data unchanged')
       return // No changes, skip auto-save
     }
 
@@ -297,12 +293,6 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
       // Allow if messages increased or branches increased (data is getting better)
       // But prevent if both decreased significantly (likely incomplete state)
       if (currentMessagesCount < lastMessagesCount - 1 && currentBranchesCount < lastBranchesCount) {
-        console.log('⏭️ Skipping save - new data has less content than last saved:', {
-          lastMessages: lastMessagesCount,
-          currentMessages: currentMessagesCount,
-          lastBranches: lastBranchesCount,
-          currentBranches: currentBranchesCount
-        })
         return
       }
     }
@@ -314,7 +304,6 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
         if (result.success) {
           // Only update lastSavedDataRef AFTER successful save
           lastSavedDataRef.current = sanitizedData
-          console.log('✅ Auto-saved conversation to MongoDB', result.conversationId ? `(ID: ${result.conversationId})` : '')
         } else {
           console.error('❌ Auto-save failed, not updating lastSavedDataRef')
         }
