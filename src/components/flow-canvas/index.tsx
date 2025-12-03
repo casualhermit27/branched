@@ -1136,8 +1136,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			}
 
 			// Store branch to focus for separate effect
+			// Store branch to focus for separate effect
 			if (branchToFocus) {
-				// Use a ref to track the branch we want to focus on after restoration
 				// Use a ref to track the branch we want to focus on after restoration
 				restoreFocusBranchIdRef.current = branchToFocus
 
@@ -1146,13 +1146,17 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					// Fade in the canvas after restoration is complete
 					setIsReady(true)
 				}, 300) // Slight delay to allow layout to settle
-			} else if (nodes.length === 0 && (!restoredConversationNodes || restoredConversationNodes.length === 0)) {
-				// If no nodes to restore (new conversation), just show it
-				setIsReady(true)
-			} else if (nodes.length > 0 && !isRestoringRef.current) {
-				// If nodes already exist and we're not restoring, show it
+			} else {
+				// If no specific branch to focus (e.g. only main node), just show it
+				isRestoringRef.current = false
 				setIsReady(true)
 			}
+		} else if (nodes.length === 0 && (!restoredConversationNodes || restoredConversationNodes.length === 0)) {
+			// If no nodes to restore (new conversation), just show it
+			setIsReady(true)
+		} else if (nodes.length > 0 && !isRestoringRef.current) {
+			// If nodes already exist and we're not restoring, show it
+			setIsReady(true)
 		}
 	}, [restoredConversationNodes, selectedBranchId, reactFlowInstance, nodes.length])
 

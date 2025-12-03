@@ -27,16 +27,21 @@ export function ComparisonView({
 
     // Initialize with first 2 branches if available
     useEffect(() => {
-        if (branches.length >= 2 && selectedBranchIds.length === 0) {
+        if (selectedBranchIds.length === 0) {
             // Filter out main node if possible, or just take first 2
-            const validBranches = branches.filter(b => b.id !== 'main')
+            const validBranches = branches.filter(b => b.id !== 'main' && !b.data?.isMain)
+
             if (validBranches.length >= 2) {
                 setSelectedBranchIds([validBranches[0].id, validBranches[1].id])
             } else if (branches.length >= 2) {
+                // Fallback to any branches if we don't have enough non-main branches
                 setSelectedBranchIds([branches[0].id, branches[1].id])
+            } else if (validBranches.length === 1) {
+                // If only one branch, select it
+                setSelectedBranchIds([validBranches[0].id])
             }
         }
-    }, [branches])
+    }, [branches]) // Remove selectedBranchIds from dependency to avoid loop if we clear it manually
 
     // Scroll to focused messages
     useEffect(() => {

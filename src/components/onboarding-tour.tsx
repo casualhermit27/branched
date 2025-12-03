@@ -62,6 +62,7 @@ export function OnboardingTour({ isOpen, onClose, onComplete }: OnboardingTourPr
         if (currentStep < steps.length - 1) {
             setCurrentStep(prev => prev + 1)
         } else {
+            localStorage.setItem('hasSeenOnboarding', 'true')
             onComplete()
         }
     }
