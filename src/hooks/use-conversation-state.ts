@@ -65,7 +65,6 @@ export function useConversationState() {
 		allowDuplicate?: boolean
 		existingBranchesCount?: number
 		limitReached?: boolean
-		limitMessage?: string
 		branchGroupId?: string
 	} | null>(null)
 	const creatingBranchRef = useRef<Set<string>>(new Set())

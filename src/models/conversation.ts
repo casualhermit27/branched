@@ -39,7 +39,6 @@ export interface IMessage {
   tokensUsed?: number
   cost?: number
   contextUsed?: string[] // Memory IDs that were used
-  role?: 'user' | 'assistant' | 'system'
 }
 
 const MessageSchema = new Schema<IMessage>({
@@ -236,9 +235,6 @@ const ConversationSchema = new Schema<IConversation>({
   mainMessages: { type: [MessageSchema], required: false },
   selectedAIs: { type: [AIModelSchema], required: false }
 })
-
-// Index for faster lookups by user
-ConversationSchema.index({ userId: 1 })
 
 // Update timestamps
 ConversationSchema.pre('save', function (next) {

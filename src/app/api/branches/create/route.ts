@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import connectDB from '@/lib/mongodb'
 import { Conversation } from '@/models/conversation'
-import { auth } from '@/lib/auth'
-import { getGuestIdServer } from '@/lib/guest'
-import { checkUsageLimit } from '@/lib/limits'
 
 // POST /api/branches/create - Create a new branch with duplicate prevention
 export async function POST(req: NextRequest) {
@@ -27,30 +24,6 @@ export async function POST(req: NextRequest) {
         { success: false, error: 'Conversation not found' },
         { status: 404 }
       )
-    }
-
-    // Check Usage Limits
-    const session = await auth()
-    let userId = session?.user?.id
-    let isGuest = false
-
-    if (!userId) {
-      const guestId = await getGuestIdServer()
-      userId = guestId || undefined
-      isGuest = true
-    }
-
-    if (userId) {
-      const limitCheck = await checkUsageLimit(userId, isGuest, 'branch')
-      if (!limitCheck.allowed) {
-        return NextResponse.json({
-          success: false,
-          error: 'Branch limit reached. Please sign up for more.',
-          code: 'LIMIT_REACHED',
-          limit: limitCheck.limit,
-          current: limitCheck.count
-        }, { status: 403 })
-      }
     }
 
     // Check for existing branch with same parentMessageId and model

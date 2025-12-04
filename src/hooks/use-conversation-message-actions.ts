@@ -752,7 +752,6 @@ export function useConversationMessageActions({
 		existingBranchesCount?: number
 		parentNodeId: string
 		limitReached?: boolean
-		limitMessage?: string
 	}) => {
 		setPendingBranchData({
 			messageId: data.messageId,
@@ -760,8 +759,7 @@ export function useConversationMessageActions({
 			messageText: data.messageText,
 			parentNodeId: data.parentNodeId,
 			existingBranchesCount: data.existingBranchesCount,
-			limitReached: data.limitReached,
-			limitMessage: data.limitMessage
+			limitReached: data.limitReached
 		})
 		setShowBranchWarning(true)
 	}, [setPendingBranchData, setShowBranchWarning])
