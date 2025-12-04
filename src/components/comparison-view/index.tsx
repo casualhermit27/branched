@@ -26,17 +26,23 @@ export function ComparisonView({
     const [inputs, setInputs] = useState<{ [key: string]: string }>({})
 
     // Initialize with first 2 branches if available
+    // Initialize with first 2 branches if available
+    // Initialize with first 2 branches if available
     useEffect(() => {
-        if (branches.length >= 2 && selectedBranchIds.length === 0) {
-            // Filter out main node if possible, or just take first 2
-            const validBranches = branches.filter(b => b.id !== 'main')
-            if (validBranches.length >= 2) {
-                setSelectedBranchIds([validBranches[0].id, validBranches[1].id])
-            } else if (branches.length >= 2) {
-                setSelectedBranchIds([branches[0].id, branches[1].id])
+        // Only auto-select if nothing is selected
+        if (selectedBranchIds.length === 0 && branches.length > 0) {
+            // Filter out main node
+            const validBranches = branches.filter(b => b.id !== 'main' && !b.data?.isMain)
+
+            if (validBranches.length > 0) {
+                // Select up to 2 valid branches
+                setSelectedBranchIds(validBranches.slice(0, 2).map(b => b.id))
+            } else {
+                // Fallback: select up to 2 of ANY branches (including main if that's all there is)
+                setSelectedBranchIds(branches.slice(0, 2).map(b => b.id))
             }
         }
-    }, [branches])
+    }, [branches, selectedBranchIds.length])
 
     // Scroll to focused messages
     useEffect(() => {
@@ -227,9 +233,9 @@ export function ComparisonView({
 
                                         {/* Messages Scroll Area */}
                                         <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                                            {data.messages?.map((msg: IMessage) => (
+                                            {data.messages?.map((msg: IMessage, index: number) => (
                                                 <div
-                                                    key={msg.id}
+                                                    key={`${msg.id}-${index}`}
                                                     className={`flex flex-col ${msg.isUser ? 'items-end' : 'items-start'}`}
                                                 >
                                                     <div

@@ -14,7 +14,7 @@ async function getConversation(req: NextApiRequest, res: NextApiResponse, id: st
       // Use normalized structure (messages and branches collections)
       const { MongoClient } = await import('mongodb')
       const client = await MongoClient.connect(process.env.MONGODB_URI || '')
-      const db = client.db(process.env.MONGODB_DB_NAME || 'branched')
+      const db = client.db(process.env.MONGODB_DB_NAME || 'ai-conversation-canvas')
 
       // 1. Get all branches for this conversation
       const branches = await db
@@ -152,16 +152,39 @@ async function updateConversation(req: NextApiRequest, res: NextApiResponse, id:
 // DELETE /api/conversations/[id] - Delete a conversation
 async function deleteConversation(req: NextApiRequest, res: NextApiResponse, id: string) {
   try {
-    await connectDB()
+    // Use MongoClient for direct deletion from all collections (normalized structure)
+    const { MongoClient, ObjectId } = await import('mongodb')
+    const client = await MongoClient.connect(process.env.MONGODB_URI || '')
+    const db = client.db(process.env.MONGODB_DB_NAME || 'ai-conversation-canvas')
 
-    const conversation = await Conversation.findByIdAndDelete(id)
+    // Try deleting with string ID first (normalized structure uses string IDs)
+    let conversationResult = await db.collection('conversations').deleteOne({ _id: id })
 
-    if (!conversation) {
+    // If not found, try with ObjectId (legacy structure)
+    if (conversationResult.deletedCount === 0) {
+      try {
+        const objectId = new ObjectId(id)
+        conversationResult = await db.collection('conversations').deleteOne({ _id: objectId })
+      } catch (e) {
+        // Invalid ObjectId, ignore
+      }
+    }
+
+    if (conversationResult.deletedCount === 0) {
+      await client.close()
       return res.status(404).json({
         success: false,
-        error: 'Conversation not found'
+        error: 'Conversation not found or already deleted'
       })
     }
+
+    // 2. Delete associated branches
+    await db.collection('branches').deleteMany({ conversationId: id })
+
+    // 3. Delete associated messages
+    await db.collection('messages').deleteMany({ conversationId: id })
+
+    await client.close()
 
     return res.status(200).json({
       success: true,

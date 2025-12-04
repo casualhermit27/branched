@@ -17,7 +17,8 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
-      MONGODB_URI: mongodb://mongo:27017/ai-conversation-canvas
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/ai-conversation-canvas}
+      MONGODB_DB_NAME: ${MONGODB_DB_NAME:-ai-conversation-canvas}
 
 volumes:
   mongo_data:

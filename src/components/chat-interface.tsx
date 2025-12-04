@@ -322,7 +322,7 @@ export default function ChatInterface({
                                 onMessageSelect?.(msg.id, true)
                               }
                             }}
-                            className={`bg-primary/10 text-foreground px-5 py-3 rounded-[1.5rem] rounded-tr-sm transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
+                            className={`bg-primary text-primary-foreground px-5 py-3 rounded-[1.5rem] rounded-tr-sm transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
                               ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
                               : 'hover:bg-primary/15'
                               }`}

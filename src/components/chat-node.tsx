@@ -142,6 +142,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
       // Handle mouse events to allow scrolling within node but prevent canvas panning
       // We now use 'nodrag' class in child components to prevent dragging while allowing selection
       className={`bg-card rounded-2xl border transition-[box-shadow,border-color,background-color] duration-300 relative ${data.isMinimized ? 'p-3' : 'p-3 md:p-0'} overflow-visible
+        ${data.isMain ? 'border-2 border-primary/50 shadow-[0_0_30px_-5px_rgba(var(--primary),0.3)]' : ''}
         ${data.isSelected
           ? 'ring-2 ring-primary border-primary shadow-[0_0_0_2px_rgba(var(--primary),0.5)] z-20'
           : data.isActive
@@ -377,7 +378,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
 
               {/* Bottom Row: Branch Context (if applicable) */}
               {!data.isMain && data.parentMessageId && data.inheritedMessages && (
-                <div className="px-5 py-4 pr-12 bg-muted/30 border-b border-border/40 flex items-center gap-2 text-xs text-muted-foreground min-h-[56px]">
+                <div className="px-5 py-5 pr-12 bg-muted/30 border-b border-border/40 flex items-center gap-2 text-xs text-muted-foreground min-h-[64px]">
                   <GitBranch className="w-3.5 h-3.5 flex-shrink-0 opacity-70" weight="regular" />
                   <span className="font-medium opacity-70">Branched from:</span>
                   <div className="group relative flex-1 min-w-0">
@@ -418,9 +419,17 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
 
               {/* Nested Branch Indicator - Sleek Badge */}
               {data.depth && data.depth > 1 && (
-                <div className="absolute top-0 left-0 -mt-3 ml-6 px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded-t-lg flex items-center gap-1.5 text-[10px] text-indigo-500 font-medium uppercase tracking-wider shadow-sm z-0">
-                  <GitBranch className="w-3 h-3" weight="bold" />
+                <div className="absolute top-0 left-6 -translate-y-[calc(100%-1px)] px-3 py-1 bg-indigo-100 dark:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 border-b-card rounded-t-lg flex items-center gap-1.5 text-[11px] text-indigo-700 dark:text-indigo-300 font-semibold uppercase tracking-wide shadow-sm z-0">
+                  <GitBranch className="w-3.5 h-3.5" weight="bold" />
                   <span>Level {data.depth}</span>
+                </div>
+              )}
+
+              {/* Multi-Model Group Indicator */}
+              {data.branchGroupId && (
+                <div className="absolute top-0 right-12 -translate-y-[calc(100%-1px)] px-3 py-1 bg-fuchsia-100 dark:bg-fuchsia-500/20 border border-fuchsia-200 dark:border-fuchsia-500/30 border-b-card rounded-t-lg flex items-center gap-1.5 text-[11px] text-fuchsia-700 dark:text-fuchsia-300 font-semibold uppercase tracking-wide shadow-sm z-0">
+                  <ArrowsOut className="w-3.5 h-3.5" weight="bold" />
+                  <span>Multi-Model</span>
                 </div>
               )}
             </div>
@@ -475,4 +484,4 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
 }
 
 // Memoize the component to prevent unnecessary re-renders
-export default React.memo(ChatNode)
+export default ChatNode

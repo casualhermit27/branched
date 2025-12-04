@@ -2,7 +2,7 @@
 
 import { ReactFlowInstance } from 'reactflow'
 import type { ViewportState } from './types'
-import { calculateViewportFit } from './layout-engine'
+import { calculateViewportFit, calculateNodeDimensions } from './layout-engine'
 import type { Node } from 'reactflow'
 
 /**
@@ -16,10 +16,22 @@ export function focusOnNode(
 ): void {
 	if (!reactFlowInstance) return
 
-	const targetNode = nodes.find((n) => n.id === nodeId)
+	// Try to find node in instance first (most up to date positions)
+	const instanceNodes = reactFlowInstance.getNodes()
+	let targetNode = instanceNodes.find((n) => n.id === nodeId)
+	let nodesToUse = instanceNodes
+
+	// If not found in instance, try passed nodes (might be newer state not yet in instance)
+	if (!targetNode) {
+		targetNode = nodes.find((n) => n.id === nodeId)
+		if (targetNode) {
+			nodesToUse = nodes
+		}
+	}
+
 	if (!targetNode) return
 
-	const viewport = calculateViewportFit(nodes, [nodeId], padding)
+	const viewport = calculateViewportFit(nodesToUse, [nodeId], padding)
 
 	reactFlowInstance.setViewport(
 		{
@@ -28,8 +40,7 @@ export function focusOnNode(
 			zoom: viewport.zoom
 		},
 		{
-			duration: 500,
-			easing: (t: number) => t * (2 - t) // ease-out
+			duration: 500
 		}
 	)
 }
@@ -45,7 +56,12 @@ export function focusOnNodes(
 ): void {
 	if (!reactFlowInstance || nodeIds.length === 0) return
 
-	const viewport = calculateViewportFit(nodes, nodeIds, padding)
+	// Use instance nodes to ensure we have latest positions
+	const instanceNodes = reactFlowInstance.getNodes()
+	// Fallback to passed nodes if instance is empty (unlikely)
+	const nodesToUse = instanceNodes.length > 0 ? instanceNodes : nodes
+
+	const viewport = calculateViewportFit(nodesToUse, nodeIds, padding)
 
 	reactFlowInstance.setViewport(
 		{
@@ -54,8 +70,7 @@ export function focusOnNodes(
 			zoom: viewport.zoom
 		},
 		{
-			duration: 500,
-			easing: (t: number) => t * (2 - t)
+			duration: 500
 		}
 	)
 }
@@ -135,34 +150,76 @@ export function focusOnBranchWithZoom(
 	nodeId: string,
 	nodes: Node[],
 	padding: number = 0.25,
-	zoomMultiplier: number = 1.3 // Increased zoom (30% more zoomed than fit)
+	zoomMultiplier: number = 1.3, // Increased zoom (30% more zoomed than fit)
+	parentNodeId?: string
 ): void {
 	if (!reactFlowInstance) return
 
-	const targetNode = nodes.find((n) => n.id === nodeId)
+	// Try to find node in instance first (most up to date positions)
+	const instanceNodes = reactFlowInstance.getNodes()
+	let targetNode = instanceNodes.find((n) => n.id === nodeId)
+	let nodesToUse = instanceNodes
+
+	// If not found in instance, try passed nodes (might be newer state not yet in instance)
+	if (!targetNode) {
+		targetNode = nodes.find((n) => n.id === nodeId)
+		if (targetNode) {
+			nodesToUse = nodes
+		}
+	}
+
 	if (!targetNode) return
 
 	// Calculate viewport to fit the branch
-	const viewport = calculateViewportFit(nodes, [nodeId], padding)
+	const viewport = calculateViewportFit(nodesToUse, [nodeId], padding)
 
 	// Apply zoom multiplier for slight zoom-in effect
 	// Cap at reasonable max zoom (1.5x) to avoid zooming too much
 	const targetZoom = Math.min(viewport.zoom * zoomMultiplier, 1.5)
 
-	// Smooth ease-in-out easing for natural animation
-	const easing = (t: number) => {
-		return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+	// Calculate custom center
+	const targetDims = calculateNodeDimensions(
+		targetNode.data?.messages?.length || 0,
+		targetNode.data?.isMinimized || false
+	)
+
+	let centerX = targetNode.position.x + targetDims.width / 2
+	let centerY = targetNode.position.y + targetDims.height / 2
+
+	// If parent provided, use parent's X to keep vertical alignment stable
+	// This prevents the "bottom left" jump feeling when branches spread horizontally
+	if (parentNodeId) {
+		const parentNode = nodesToUse.find(n => n.id === parentNodeId)
+		if (parentNode) {
+			const parentDims = calculateNodeDimensions(
+				parentNode.data?.messages?.length || 0,
+				parentNode.data?.isMinimized || false
+			)
+			// Use Parent's X center
+			centerX = parentNode.position.x + parentDims.width / 2
+
+			// Adjust Y to be slightly higher than the child center (closer to parent)
+			// This helps show the connection and "moves the node a little top"
+			// We bias 20% towards the parent
+			const parentCenterY = parentNode.position.y + parentDims.height / 2
+			centerY = centerY * 0.8 + parentCenterY * 0.2
+		}
 	}
+
+	const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920
+	const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 1080
+
+	const newX = viewportWidth / 2 - centerX * targetZoom
+	const newY = viewportHeight / 2 - centerY * targetZoom
 
 	reactFlowInstance.setViewport(
 		{
-			x: viewport.x,
-			y: viewport.y,
+			x: newX,
+			y: newY,
 			zoom: targetZoom
 		},
 		{
-			duration: 800, // Slower, smoother animation
-			easing
+			duration: 800
 		}
 	)
 }

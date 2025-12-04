@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { ConversationState } from './use-conversation-state'
 import type { ConversationActions } from './use-conversation-actions'
 import type { AI } from './use-conversation-state'
@@ -105,9 +105,11 @@ export function useConversationPageEffects({
 		return () => window.removeEventListener('keydown', handleKeyDown)
 	}, [setShowCommandPalette])
 
+	const hasStartedLoadingRef = useRef(false)
+
 	useEffect(() => {
-		if (isInitialLoadRef.current) {
-			isInitialLoadRef.current = false
+		if (!hasStartedLoadingRef.current) {
+			hasStartedLoadingRef.current = true
 
 			loadConversations().then(success => {
 				if (!success) {
@@ -139,13 +141,19 @@ export function useConversationPageEffects({
 						})
 						.finally(() => {
 							state.setIsLoading(false)
+							// Only enable autosave after loading is fully complete
+							isInitialLoadRef.current = false
 						})
 				} else {
 					state.setIsLoading(false)
+					isInitialLoadRef.current = false
 				}
+			}).catch(() => {
+				state.setIsLoading(false)
+				isInitialLoadRef.current = false
 			})
 		}
-	}, [isInitialLoadRef, loadConversations, restoreConversationState, setAllConversations, state])
+	}, [loadConversations, restoreConversationState, setAllConversations, state, isInitialLoadRef])
 
 	useEffect(() => {
 		if (selectedAIs.length === 0) {
