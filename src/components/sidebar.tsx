@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { List, X, ArrowsOut, ArrowsIn, Clock, GitBranch, Trash, Gear, Sparkle as SparklesIcon, Eye, EyeSlash, Key } from '@phosphor-icons/react'
@@ -123,12 +123,12 @@ export default function Sidebar({
   }, [])
 
   const handleKeyChange = (provider: string, value: string) => {
-    setApiKeys(prev => ({ ...prev, [provider]: value }))
+    setApiKeys((prev: any) => ({ ...prev, [provider]: value }))
     aiService.updateKey(provider, value)
   }
 
   const toggleKeyVisibility = (provider: string) => {
-    setShowKeys(prev => ({ ...prev, [provider]: !prev[provider] }))
+    setShowKeys((prev: any) => ({ ...prev, [provider]: !prev[provider] }))
   }
 
   // Build conversation tree from nodes with proper hierarchy
@@ -234,7 +234,7 @@ export default function Sidebar({
 
   // Toggle node expansion
   const toggleNodeExpansion = (nodeId: string) => {
-    setExpandedNodes(prev => {
+    setExpandedNodes((prev: Set<string>) => {
       const newSet = new Set(prev)
       if (newSet.has(nodeId)) {
         newSet.delete(nodeId)
@@ -257,7 +257,7 @@ export default function Sidebar({
           {/* Expand/Collapse Button */}
           {hasChildren ? (
             <button
-              onClick={(e) => {
+              onClick={(e: React.MouseEvent) => {
                 e.stopPropagation()
                 toggleNodeExpansion(node.id)
               }}
@@ -335,7 +335,7 @@ export default function Sidebar({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             onClick={() => setIsOpen(!isOpen)}
-            className="fixed top-4 left-4 z-50 p-2.5 bg-card dark:bg-card border border-border/80 dark:border-border/60 rounded-xl shadow-sm dark:shadow-lg hover:shadow-md dark:hover:shadow-xl transition-all duration-200 hover:bg-muted dark:hover:bg-muted/80"
+            className="fixed top-7 left-4 z-50 p-2.5 bg-card dark:bg-card border border-border/80 dark:border-border/60 rounded-xl shadow-sm dark:shadow-lg hover:shadow-md dark:hover:shadow-xl transition-all duration-200 hover:bg-muted dark:hover:bg-muted/80"
             aria-label="Open sidebar"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -376,19 +376,19 @@ export default function Sidebar({
                     <Image
                       src="/branched logo black.svg"
                       alt="Branched Logo"
-                      width={140}
-                      height={50}
-                      className="h-12 w-auto object-contain"
+                      width={180}
+                      height={64}
+                      className="h-16 w-auto object-contain"
                     />
                   </div>
-                  {/* Dark Mode Logo (Fallback to old one for now) */}
+                  {/* Dark Mode Logo */}
                   <div className="hidden dark:block">
                     <Image
                       src="/branched logo.svg"
                       alt="Branched Logo"
-                      width={40}
-                      height={40}
-                      className="w-10 h-10"
+                      width={240}
+                      height={96}
+                      className="h-16 w-auto object-contain"
                     />
                   </div>
                 </div>
@@ -523,7 +523,7 @@ export default function Sidebar({
                               <input
                                 type={showKeys[provider.id] ? 'text' : 'password'}
                                 value={apiKeys[provider.id as keyof typeof apiKeys]}
-                                onChange={(e) => handleKeyChange(provider.id, e.target.value)}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleKeyChange(provider.id, e.target.value)}
                                 placeholder={provider.placeholder}
                                 className="w-full bg-muted/50 dark:bg-muted/30 border border-border/50 rounded-md py-1.5 pl-2 pr-8 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
                               />

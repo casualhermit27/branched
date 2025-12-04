@@ -128,7 +128,7 @@ export function ComparisonView({
     return (
         <div className={`flex flex-col h-full bg-background ${className}`}>
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card/80 backdrop-blur-sm z-10">
+            <div className="flex items-center justify-between pl-20 pr-6 py-6 border-b border-border bg-card/80 backdrop-blur-sm z-10">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-primary/10 rounded-lg text-primary">
                         <ArrowsRightLeftIcon className="w-5 h-5" />
