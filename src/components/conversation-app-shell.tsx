@@ -232,6 +232,7 @@ export default function ConversationAppShell({
 				existingBranchesCount={pendingBranchData?.existingBranchesCount}
 				isMultiBranch={pendingBranchData?.isMultiBranch || false}
 				limitReached={pendingBranchData?.limitReached}
+				limitMessage={pendingBranchData?.limitMessage}
 				maxBranches={MAX_DUPLICATE_BRANCHES}
 			/>
 

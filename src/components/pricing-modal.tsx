@@ -7,9 +7,10 @@ interface PricingModalProps {
     isOpen: boolean
     onClose: () => void
     currentPlan?: 'free' | 'pro' | 'team'
+    isGuest?: boolean
 }
 
-export function PricingModal({ isOpen, onClose, currentPlan = 'free' }: PricingModalProps) {
+export function PricingModal({ isOpen, onClose, currentPlan = 'free', isGuest = false }: PricingModalProps) {
     if (!isOpen) return null
 
     const tiers = [
@@ -22,10 +23,10 @@ export function PricingModal({ isOpen, onClose, currentPlan = 'free' }: PricingM
             features: [
                 '50 messages per month',
                 'Access to 2 AI models',
-                'Basic branching (3 branches)',
+                '10 branches per conversation',
                 'Community support'
             ],
-            cta: 'Current Plan',
+            cta: isGuest ? 'Sign Up for Free' : 'Current Plan',
             popular: false
         },
         {
@@ -63,7 +64,12 @@ export function PricingModal({ isOpen, onClose, currentPlan = 'free' }: PricingM
     ]
 
     const handleSubscribe = (tierId: string) => {
-        if (tierId === 'free') return
+        if (tierId === 'free') {
+            if (isGuest) {
+                window.location.href = '/register'
+            }
+            return
+        }
         // Mock subscription flow
         alert(`This is a demo! In production, this would open Stripe Checkout for the ${tierId.toUpperCase()} plan.`)
     }
@@ -109,8 +115,8 @@ export function PricingModal({ isOpen, onClose, currentPlan = 'free' }: PricingM
                                 <div
                                     key={tier.id}
                                     className={`relative flex flex-col p-6 rounded-2xl border-2 transition-all ${tier.popular
-                                            ? 'border-indigo-500 bg-white dark:bg-neutral-800 shadow-xl scale-105 z-10'
-                                            : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:border-neutral-300 dark:hover:border-neutral-700'
+                                        ? 'border-indigo-500 bg-white dark:bg-neutral-800 shadow-xl scale-105 z-10'
+                                        : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:border-neutral-300 dark:hover:border-neutral-700'
                                         }`}
                                 >
                                     {tier.popular && (
@@ -150,10 +156,10 @@ export function PricingModal({ isOpen, onClose, currentPlan = 'free' }: PricingM
                                         onClick={() => handleSubscribe(tier.id)}
                                         disabled={currentPlan === tier.id}
                                         className={`w-full py-3 px-4 rounded-xl font-semibold transition-all ${tier.popular
-                                                ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30'
-                                                : currentPlan === tier.id
-                                                    ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 cursor-default'
-                                                    : 'bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white hover:bg-neutral-50 dark:hover:bg-neutral-700'
+                                            ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30'
+                                            : currentPlan === tier.id
+                                                ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 cursor-default'
+                                                : 'bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white hover:bg-neutral-50 dark:hover:bg-neutral-700'
                                             }`}
                                     >
                                         {currentPlan === tier.id ? 'Current Plan' : tier.cta}
