@@ -274,63 +274,65 @@ export function useConversationMessageActions({
 							if (node.id === 'main') return node
 
 							const branchMessages = node.data?.messages || []
-							const matchingStreamingMessage = branchMessages.find((msg: Message) =>
-								msg.isStreaming &&
-								msg.aiModel === ai.id &&
-								msg.id === streamingMessageId
-							)
+							// Find message by ID - more robust than checking isStreaming
+							const messageIndex = branchMessages.findIndex((msg: Message) => msg.id === streamingMessageId)
 
-							if (matchingStreamingMessage) {
+							if (messageIndex !== -1) {
+								const updatedMessages = [...branchMessages]
+								const currentMsg = updatedMessages[messageIndex]
+
+								updatedMessages[messageIndex] = {
+									...currentMsg,
+									streamingText: (currentMsg.streamingText || '') + chunk
+								}
+
 								return {
 									...node,
 									data: {
 										...node.data,
-										messages: branchMessages.map((msg: Message) =>
-											msg.id === matchingStreamingMessage.id
-												? { ...msg, streamingText: (msg.streamingText || '') + chunk }
-												: msg
-										)
+										messages: updatedMessages
+									}
+								}
+							} else {
+								// Fallback: If message not found (rare race condition), append it
+								// This ensures we don't lose the message if the initial add hasn't propagated
+								return {
+									...node,
+									data: {
+										...node.data,
+										messages: [...branchMessages, {
+											...streamingMessage,
+											streamingText: (streamingMessage.streamingText || '') + chunk
+										}]
 									}
 								}
 							}
-
-							return node
 						}))
 
-						await new Promise(resolve => setTimeout(resolve, chunkDelay))
+						await new Promise(resolve => setTimeout(resolve, 80)) // Increased delay for stability
 					}
 
 					setConversationNodes(prevNodes => prevNodes.map(node => {
 						if (node.id === 'main') return node
 
 						const branchMessages = node.data?.messages || []
-						const matchingStreamingMessage = branchMessages.find((msg: Message) =>
-							msg.isStreaming &&
-							msg.aiModel === ai.id &&
-							msg.id === streamingMessageId
-						)
-
-						if (matchingStreamingMessage) {
-							return {
-								...node,
-								data: {
-									...node.data,
-									messages: branchMessages.map((msg: Message) =>
-										msg.id === matchingStreamingMessage.id
-											? {
-												...msg,
-												text: mockResponse,
-												isStreaming: false,
-												streamingText: undefined,
-												timestamp: Date.now()
-											}
-											: msg
-									)
-								}
+						return {
+							...node,
+							data: {
+								...node.data,
+								messages: branchMessages.map((msg: Message) =>
+									msg.id === streamingMessageId
+										? {
+											...msg,
+											text: mockResponse,
+											isStreaming: false,
+											streamingText: undefined,
+											timestamp: Date.now()
+										}
+										: msg
+								)
 							}
 						}
-
-						return node
 					}))
 
 					return {
@@ -464,34 +466,48 @@ export function useConversationMessageActions({
 							setConversationNodes(prevNodes => prevNodes.map(node => {
 								if (node.id === targetBranchId) {
 									const branchMessages = node.data?.messages || []
-									const matchingStreamingMessage = branchMessages.find(msg => msg.id === streamingMessageId) ||
-										(branchMessages.length > 0 && branchMessages[branchMessages.length - 1].id === streamingMessageId ? branchMessages[branchMessages.length - 1] : undefined)
+									// Find message by ID - more robust than checking isStreaming
+									const messageIndex = branchMessages.findIndex((msg: Message) => msg.id === streamingMessageId)
 
-									if (matchingStreamingMessage) {
+									if (messageIndex !== -1) {
+										const updatedMessages = [...branchMessages]
+										const currentMsg = updatedMessages[messageIndex]
+
+										updatedMessages[messageIndex] = {
+											...currentMsg,
+											streamingText: (currentMsg.streamingText || '') + chunk
+										}
+
 										return {
 											...node,
 											data: {
 												...node.data,
-												messages: branchMessages.map((msg: Message) =>
-													msg.id === streamingMessageId
-														? { ...msg, streamingText: (msg.streamingText || '') + chunk }
-														: msg
-												)
+												messages: updatedMessages
 											}
 										}
 									} else {
-										// If message not found (maybe first chunk), append it? 
-										// Actually, we haven't added the streaming message to conversationNodes yet!
-										// We need to add it initially.
+										// Fallback: If message not found (rare race condition), append it
+										// This ensures we don't lose the message if the initial add hasn't propagated
+										return {
+											...node,
+											data: {
+												...node.data,
+												messages: [...branchMessages, {
+													...streamingMessage,
+													streamingText: (streamingMessage.streamingText || '') + chunk
+												}]
+											}
+										}
 									}
 								}
 								return node
 							}))
 						}
 
-						await new Promise(resolve => setTimeout(resolve, chunkDelay))
+						await new Promise(resolve => setTimeout(resolve, 80)) // Increased delay for stability
 					}
 
+					// Final update to set isStreaming: false
 					setMessages(prev => prev.map((msg: Message) =>
 						msg.id === streamingMessageId
 							? {
@@ -507,11 +523,12 @@ export function useConversationMessageActions({
 					if (targetBranchId) {
 						setConversationNodes(prevNodes => prevNodes.map(node => {
 							if (node.id === targetBranchId) {
+								const branchMessages = node.data?.messages || []
 								return {
 									...node,
 									data: {
 										...node.data,
-										messages: node.data.messages.map((msg: Message) =>
+										messages: branchMessages.map((msg: Message) =>
 											msg.id === streamingMessageId
 												? {
 													...msg,
