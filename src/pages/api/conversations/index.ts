@@ -2,15 +2,37 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import connectDB from '../../../lib/mongodb'
 import { Conversation } from '../../../models/conversation'
 
+import { auth } from '@/lib/auth'
+import { getGuestIdFromReq, setGuestId, generateGuestId } from '@/lib/guest'
+
 // GET /api/conversations - Get all conversations
 async function getConversations(req: NextApiRequest, res: NextApiResponse) {
   try {
     await connectDB()
 
-    // Get all conversations, sorted by updatedAt (newest first)
-    const conversations = await Conversation.find({})
+    const session = await auth(req, res)
+    let userId = session?.user?.id
+
+    if (!userId) {
+      const guestId = getGuestIdFromReq(req)
+      userId = guestId || undefined
+      if (!userId) {
+        // No user, no guest cookie -> return empty or create guest?
+        // Let's create a guest ID and set cookie so future requests work
+        userId = generateGuestId()
+        setGuestId(res, userId)
+        // Return empty list as this is a new guest
+        return res.status(200).json({
+          success: true,
+          data: []
+        })
+      }
+    }
+
+    // Get all conversations for this user/guest
+    const conversations = await Conversation.find({ userId })
       .sort({ updatedAt: -1 })
-      .limit(50) // Limit to 50 most recent conversations
+      .limit(50)
 
     return res.status(200).json({
       success: true,
@@ -30,9 +52,24 @@ async function createConversation(req: NextApiRequest, res: NextApiResponse) {
   try {
     await connectDB()
 
+    const session = await auth(req, res)
+    let userId = session?.user?.id
+    let isGuest = false
+
+    if (!userId) {
+      const guestId = getGuestIdFromReq(req)
+      userId = guestId || undefined
+      if (!userId) {
+        userId = generateGuestId()
+        setGuestId(res, userId)
+      }
+      isGuest = true
+    }
+
     // Create conversation with data from request body
     const conversation = await Conversation.create({
       title: req.body.title || 'New Conversation',
+      userId, // Associate with user/guest
       mainMessages: req.body.mainMessages || [],
       selectedAIs: req.body.selectedAIs || [],
       branches: req.body.branches || [],

@@ -33,6 +33,7 @@ interface UseBranchManagementParams {
 		existingBranchesCount?: number
 		parentNodeId: string
 		limitReached?: boolean
+		limitMessage?: string
 	}) => void
 	onNodeDoubleClick?: (nodeId: string) => void
 	handleBranchAddAI: (nodeId: string, ai: AI) => void
@@ -363,13 +364,34 @@ export function useBranchManagement({
 	 * Main branch creation handler - simplified using ContextManager
 	 */
 	handleBranchRef.current = useCallback(
-		(
+		async (
 			parentNodeId: string,
 			messageId?: string,
 			isMultiBranch: boolean = false,
 			options?: { allowDuplicate?: boolean; branchGroupId?: string; overrideMessages?: Message[] }
 		) => {
 			if (!messageId) return
+
+			// Check limits first
+			try {
+				const limitRes = await fetch('/api/user/limits?type=branch')
+				const limitData = await limitRes.json()
+
+				if (!limitData.allowed) {
+					onBranchWarning?.({
+						messageId,
+						isMultiBranch,
+						parentNodeId,
+						limitReached: true,
+						limitMessage: limitData.error || 'Branch limit reached. Please sign up for more.',
+						existingBranchesCount: limitData.count
+					})
+					return
+				}
+			} catch (e) {
+				console.error('Failed to check limits', e)
+			}
+
 			const allowDuplicate = options?.allowDuplicate ?? false
 			const branchGroupId = options?.branchGroupId
 			const overrideMessages = options?.overrideMessages

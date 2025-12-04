@@ -14,8 +14,8 @@ const nextConfig: NextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production'
       ? {
-          exclude: ['error', 'warn'], // Keep console.error and console.warn for debugging
-        }
+        exclude: ['error', 'warn'], // Keep console.error and console.warn for debugging
+      }
       : false,
   },
 };
