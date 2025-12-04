@@ -129,7 +129,7 @@ export default function ConversationAppShell({
 	return (
 		<div className="h-screen bg-background overflow-hidden">
 			{/* Floating Controls */}
-			<div className="fixed top-4 right-4 z-50 flex items-center gap-2 p-1.5 bg-card/80 backdrop-blur-md border border-border/60 shadow-lg rounded-2xl">
+			<div className="fixed top-6 right-4 z-50 flex items-center gap-2 p-1.5 bg-card/80 backdrop-blur-md border border-border/60 shadow-lg rounded-2xl">
 				<button
 					onClick={() => setShowGlobalSearch(true)}
 					className="p-2 rounded-xl transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-muted/80"
