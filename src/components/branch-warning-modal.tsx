@@ -13,10 +13,6 @@ interface BranchWarningModalProps {
   isMultiBranch?: boolean
   limitReached?: boolean
   maxBranches?: number
-  limitMessage?: string
-  isGuest?: boolean
-  onSignUp?: () => void
-  onUpgrade?: () => void
 }
 
 export function BranchWarningModal({
@@ -28,11 +24,7 @@ export function BranchWarningModal({
   existingBranchesCount = 0,
   isMultiBranch = false,
   limitReached = false,
-  maxBranches = 6,
-  limitMessage,
-  isGuest = false,
-  onSignUp,
-  onUpgrade
+  maxBranches = 6
 }: BranchWarningModalProps) {
   if (!isOpen) return null
 
@@ -78,7 +70,7 @@ export function BranchWarningModal({
             <p className="text-sm text-muted-foreground leading-relaxed">
               {limitReached ? (
                 <>
-                  {limitMessage || `You already have ${existingBranchesCount} branches from this message. You can keep at most ${maxBranches}. Delete or merge an existing branch to create another.`}
+                  You already have {existingBranchesCount} branches from this message. You can keep at most {maxBranches}. Delete or merge an existing branch to create another.
                 </>
               ) : isMultiBranch ? (
                 <>
@@ -106,16 +98,9 @@ export function BranchWarningModal({
                 onClick={onCancel}
                 className="flex-1 px-4 py-2.5 rounded-lg bg-muted hover:bg-accent text-foreground font-medium transition-colors"
               >
-                Cancel
+                {limitReached ? 'Close' : 'Cancel'}
               </button>
-              {limitReached ? (
-                <button
-                  onClick={isGuest ? onSignUp : onUpgrade}
-                  className="flex-1 px-4 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-medium transition-colors shadow-md"
-                >
-                  {isGuest ? 'Sign Up to Continue' : 'Upgrade Plan'}
-                </button>
-              ) : (
+              {!limitReached && (
                 <button
                   onClick={onConfirm}
                   className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"

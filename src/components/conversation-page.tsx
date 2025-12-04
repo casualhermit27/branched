@@ -9,7 +9,6 @@ import { useConversationRestore } from '@/hooks/use-conversation-restore'
 import { useConversationAutosave } from '@/hooks/use-conversation-autosave'
 import { useConversationActions } from '@/hooks/use-conversation-actions'
 import { useConversationPageEffects } from '@/hooks/use-conversation-page-effects'
-import { useUserKeys } from '@/hooks/use-user-keys'
 import ConversationAppShell from '@/components/conversation-app-shell'
 
 import { allAIOptions } from '@/components/ai-pills'
@@ -20,7 +19,6 @@ interface ConversationPageProps {
 
 export default function ConversationPage({ initialConversationId }: ConversationPageProps) {
 	const defaultAI: AI = allAIOptions[0]
-	useUserKeys()
 
 	const conversationState = useConversationState()
 	const {

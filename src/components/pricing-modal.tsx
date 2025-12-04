@@ -7,10 +7,9 @@ interface PricingModalProps {
     isOpen: boolean
     onClose: () => void
     currentPlan?: 'free' | 'pro' | 'team'
-    isGuest?: boolean
 }
 
-export function PricingModal({ isOpen, onClose, currentPlan = 'free', isGuest = false }: PricingModalProps) {
+export function PricingModal({ isOpen, onClose, currentPlan = 'free' }: PricingModalProps) {
     if (!isOpen) return null
 
     const tiers = [
@@ -23,10 +22,10 @@ export function PricingModal({ isOpen, onClose, currentPlan = 'free', isGuest = 
             features: [
                 '50 messages per month',
                 'Access to 2 AI models',
-                '10 branches per conversation',
+                'Basic branching (3 branches)',
                 'Community support'
             ],
-            cta: isGuest ? 'Sign Up for Free' : 'Current Plan',
+            cta: 'Current Plan',
             popular: false
         },
         {
@@ -64,12 +63,7 @@ export function PricingModal({ isOpen, onClose, currentPlan = 'free', isGuest = 
     ]
 
     const handleSubscribe = (tierId: string) => {
-        if (tierId === 'free') {
-            if (isGuest) {
-                window.location.href = '/register'
-            }
-            return
-        }
+        if (tierId === 'free') return
         // Mock subscription flow
         alert(`This is a demo! In production, this would open Stripe Checkout for the ${tierId.toUpperCase()} plan.`)
     }

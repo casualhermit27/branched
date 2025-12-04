@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { List, X, ArrowsOut, ArrowsIn, Clock, GitBranch, Trash, Gear, Sparkle as SparklesIcon, Eye, EyeSlash, Key } from '@phosphor-icons/react'
 import ConversationHistory from './conversation-history'
 import { aiService } from '@/services/ai-api'
-import { UsageIndicator } from './usage-indicator'
 
 interface Message {
   id: string
@@ -568,7 +567,22 @@ export default function Sidebar({
                 <div className="px-6 py-4 border-t border-border/80 dark:border-border/60 bg-muted/30 dark:bg-muted/20">
                   {/* Usage Bar */}
                   <div className="mb-4">
-                    <UsageIndicator />
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <span className="font-medium text-foreground dark:text-foreground">Free Plan</span>
+                      <span className="text-muted-foreground dark:text-muted-foreground/70">{messageCount}/50 msgs</span>
+                    </div>
+                    <div className="h-2 bg-muted dark:bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${messageCount >= 50 ? 'bg-destructive' : 'bg-gradient-to-r from-indigo-500 to-purple-500'
+                          }`}
+                        style={{ width: `${Math.min((messageCount / 50) * 100, 100)}%` }}
+                      />
+                    </div>
+                    {messageCount >= 40 && (
+                      <p className="text-[10px] text-destructive mt-1 font-medium">
+                        {messageCount >= 50 ? 'Limit reached' : 'Approaching limit'}
+                      </p>
+                    )}
                   </div>
 
                   <button
