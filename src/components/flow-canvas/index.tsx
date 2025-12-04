@@ -114,6 +114,19 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	const isRestoringRef = useRef(false)
 	const layoutInProgressRef = useRef(false)
 
+	// Force layout update on mount to fix potential misalignments from tab switching
+	useEffect(() => {
+		// Small delay to ensure DOM is ready
+		const timer = setTimeout(() => {
+			if (nodes.length > 0 && edges.length > 0) {
+				const layoutResult = getLayoutedElementsWrapper(nodes, edges)
+				setNodes(layoutResult.nodes)
+				setEdges(layoutResult.edges)
+			}
+		}, 100)
+		return () => clearTimeout(timer)
+	}, []) // Run once on mount
+
 	const restoreFocusBranchIdRef = useRef<string | null>(null)
 	const isUserInteractionRef = useRef(false)
 
@@ -166,13 +179,16 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	)
 
 	const fitViewportToNodes = useCallback(
-		(nodeIds: string[], padding = 0.2, useZoomAnimation = true) => {
+		(nodeIds: string[], padding = 0.2, useZoomAnimation = true, overrideNodes?: any[], parentNodeId?: string) => {
 			if (!reactFlowInstance) return
+
+			// Use override nodes if provided (for immediate focus after layout), otherwise use state nodes
+			const nodesToUse = overrideNodes || nodes
 
 			// If focusing on a single node with animation, use our smooth custom transition
 			// This prevents the "zoom out then zoom in" bounce effect of fitView
 			if (nodeIds.length === 1 && useZoomAnimation) {
-				focusOnBranchWithZoom(reactFlowInstance, nodeIds[0], nodes, padding, 1.1)
+				focusOnBranchWithZoom(reactFlowInstance, nodeIds[0], nodesToUse, padding, 1.1, parentNodeId)
 				return
 			}
 
@@ -803,7 +819,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			// Check if any RELEVANT data changed that requires a re-render of the node component
 			// We ignore position changes here effectively by reusing the old data object if nothing else changed
 			let dataChanged = true
-			if (prevData) {
+			// Skip optimization if generating to ensure streaming updates are always reflected
+			if (prevData && !isGenerating) {
 				const prevNode = prevData.node
 				const prevProps = prevData.props
 

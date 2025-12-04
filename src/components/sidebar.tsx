@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { List, X, ArrowsOut, ArrowsIn, Clock, GitBranch, Trash, Gear, Sparkle as SparklesIcon, Eye, EyeSlash, Key } from '@phosphor-icons/react'
 import ConversationHistory from './conversation-history'
@@ -334,7 +335,7 @@ export default function Sidebar({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             onClick={() => setIsOpen(!isOpen)}
-            className="fixed top-3 left-4 z-50 p-2.5 bg-card dark:bg-card border border-border/80 dark:border-border/60 rounded-xl shadow-sm dark:shadow-lg hover:shadow-md dark:hover:shadow-xl transition-all duration-200 hover:bg-muted dark:hover:bg-muted/80"
+            className="fixed top-4 left-4 z-50 p-2.5 bg-card dark:bg-card border border-border/80 dark:border-border/60 rounded-xl shadow-sm dark:shadow-lg hover:shadow-md dark:hover:shadow-xl transition-all duration-200 hover:bg-muted dark:hover:bg-muted/80"
             aria-label="Open sidebar"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -369,7 +370,28 @@ export default function Sidebar({
             >
               {/* Header */}
               <div className="flex items-center justify-between px-6 py-5 border-b border-border/80 dark:border-border/60 bg-card dark:bg-card">
-                <h2 className="text-lg font-semibold text-foreground dark:text-foreground tracking-tight">Conversations</h2>
+                <div className="flex items-center gap-3">
+                  {/* Light Mode Logo */}
+                  <div className="dark:hidden">
+                    <Image
+                      src="/branched logo black.svg"
+                      alt="Branched Logo"
+                      width={140}
+                      height={50}
+                      className="h-12 w-auto object-contain"
+                    />
+                  </div>
+                  {/* Dark Mode Logo (Fallback to old one for now) */}
+                  <div className="hidden dark:block">
+                    <Image
+                      src="/branched logo.svg"
+                      alt="Branched Logo"
+                      width={40}
+                      height={40}
+                      className="w-10 h-10"
+                    />
+                  </div>
+                </div>
                 <motion.button
                   onClick={() => setIsOpen(false)}
                   className="p-1.5 rounded-lg text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground hover:bg-muted dark:hover:bg-muted/80 transition-all duration-200 flex-shrink-0"

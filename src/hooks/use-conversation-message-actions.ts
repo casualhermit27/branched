@@ -174,8 +174,8 @@ export function useConversationMessageActions({
 					return {
 						...node,
 						data: {
-							...node.data,
-							messages: [...(node.data.messages || []), newMessage]
+							...(node.data || {}),
+							messages: [...(node.data?.messages || []), newMessage]
 						}
 					}
 				}
@@ -228,6 +228,28 @@ export function useConversationMessageActions({
 
 					setMessages(prev => [...prev, streamingMessage])
 
+					if (targetBranchId) {
+						setSavedBranches(prev =>
+							prev.map(b => b.id === targetBranchId
+								? { ...b, messages: [...b.messages, streamingMessage] }
+								: b
+							)
+						)
+
+						setConversationNodes(prev => prev.map(node => {
+							if (node.id === targetBranchId) {
+								return {
+									...node,
+									data: {
+										...node.data,
+										messages: [...(node.data.messages || []), streamingMessage]
+									}
+								}
+							}
+							return node
+						}))
+					}
+
 					if (abortController.signal.aborted) {
 						throw new Error('Generation aborted')
 					}
@@ -255,7 +277,7 @@ export function useConversationMessageActions({
 							const matchingStreamingMessage = branchMessages.find((msg: Message) =>
 								msg.isStreaming &&
 								msg.aiModel === ai.id &&
-								msg.id?.startsWith(`branch-${streamingMessageId}`)
+								msg.id === streamingMessageId
 							)
 
 							if (matchingStreamingMessage) {
@@ -285,7 +307,7 @@ export function useConversationMessageActions({
 						const matchingStreamingMessage = branchMessages.find((msg: Message) =>
 							msg.isStreaming &&
 							msg.aiModel === ai.id &&
-							msg.id?.startsWith(`branch-${streamingMessageId}`)
+							msg.id === streamingMessageId
 						)
 
 						if (matchingStreamingMessage) {
@@ -747,20 +769,7 @@ export function useConversationMessageActions({
 
 		nodes.forEach(node => {
 			if (node.data?.parentMessageId && node.id !== 'main' && !node.data?.isMain) {
-				const oldBranchId = branchCacheRef.current.get(node.data.parentMessageId)
-				if (oldBranchId !== node.id) {
-					branchCacheRef.current.set(node.data.parentMessageId, node.id)
-
-					if (!oldBranchId) {
-						queueMicrotask(() => {
-							addToast({
-								type: 'success',
-								title: 'Branch Created',
-								message: 'Branch created successfully'
-							})
-						})
-					}
-				}
+				branchCacheRef.current.set(node.data.parentMessageId, node.id)
 			}
 		})
 

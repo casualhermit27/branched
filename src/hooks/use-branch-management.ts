@@ -44,7 +44,7 @@ interface UseBranchManagementParams {
 		nodes: any[]
 		edges: Edge[]
 	}
-	fitViewportToNodes: (nodeIds: string[], padding?: number, useZoomAnimation?: boolean) => void
+	fitViewportToNodes: (nodeIds: string[], padding?: number, useZoomAnimation?: boolean, overrideNodes?: any[], parentNodeId?: string) => void
 	handleSendMessageRef: React.MutableRefObject<
 		((nodeId: string, message: string) => Promise<void>) | undefined
 	>
@@ -103,6 +103,8 @@ export function useBranchManagement({
 			options?: { allowDuplicate?: boolean; branchGroupId?: string; overrideMessages?: Message[] }
 		) => void
 	>(() => { })
+
+	const focusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
 	/**
 	 * Generate unique branch ID
@@ -772,26 +774,27 @@ export function useBranchManagement({
 							onNodesUpdate(validatedNodes)
 						}
 
-						// Focus on ALL relevant branches (new + existing)
+						// Focus on the new branch (or last relevant one)
 						if (allBranchIds.length > 0) {
-							// Wait for React state update and DOM render, then focus with zoom animation
-							setTimeout(() => {
-								requestAnimationFrame(() => {
-									requestAnimationFrame(() => {
-										// Double-check nodes are in state before focusing
-										setTimeout(() => {
-											fitViewportToNodes(allBranchIds, 0.25, true)
+							// Clear any pending focus timeout to prevent fighting
+							if (focusTimeoutRef.current) {
+								clearTimeout(focusTimeoutRef.current)
+							}
 
-											// Set active node to the last created one, or the last existing one
-											const nodeToActivate = newNodes.length > 0 ? newNodes[newNodes.length - 1].id : allBranchIds[allBranchIds.length - 1]
+							// Wait for layout and render to settle
+							focusTimeoutRef.current = setTimeout(() => {
+								const nodeToActivate = newNodes.length > 0 ? newNodes[newNodes.length - 1].id : allBranchIds[allBranchIds.length - 1]
 
-											if (setNodeActive && nodeToActivate) {
-												setNodeActive(nodeToActivate)
-											}
-										}, 50)
-									})
-								})
-							}, 100)
+								if (nodeToActivate) {
+									// Focus directly on the target node
+									fitViewportToNodes([nodeToActivate], 0.1, true, validatedNodes, parentNodeId)
+
+									if (setNodeActive) {
+										setNodeActive(nodeToActivate)
+									}
+								}
+								focusTimeoutRef.current = null
+							}, 250) // Increased delay to prevent layout/focus fighting
 						}
 					} catch (error) {
 						console.error('Error applying layout:', error)
