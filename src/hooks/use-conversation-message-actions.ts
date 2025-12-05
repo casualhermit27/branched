@@ -18,11 +18,13 @@ interface ToastOptions {
 interface UseConversationMessageActionsParams {
 	state: ConversationState
 	addToast: (toast: ToastOptions) => void
+	checkLimit?: (type: 'branch' | 'message') => boolean
 }
 
 export function useConversationMessageActions({
 	state,
-	addToast
+	addToast,
+	checkLimit
 }: UseConversationMessageActionsParams) {
 	const {
 		selectedAIs,
@@ -114,6 +116,10 @@ export function useConversationMessageActions({
 
 	const sendMessage = useCallback(async (text: string, branchId?: string) => {
 		if (!text.trim()) {
+			return
+		}
+
+		if (checkLimit && !checkLimit('message')) {
 			return
 		}
 
@@ -660,6 +666,10 @@ export function useConversationMessageActions({
 
 	const branchFromMessage = useCallback((messageId: string, isMultiBranch = false) => {
 		if (!messageId) return
+
+		if (checkLimit && !checkLimit('branch')) {
+			return
+		}
 
 		const cachedBranchId = branchCacheRef.current.get(messageId)
 		// Only use cache if NOT creating a multi-branch or duplicate (which we can't know yet, but we can check if we're forcing a new one)

@@ -21,18 +21,21 @@ export function useConversationActions({
 	state,
 	defaultAI,
 	addToast,
-	restoreConversationState
-}: UseConversationActionsParams) {
+	restoreConversationState,
+	checkLimit
+}: UseConversationActionsParams & { checkLimit?: (type: 'branch' | 'message') => boolean }) {
 	const branchActions = useConversationBranchActions({
 		state,
 		defaultAI,
 		addToast,
-		restoreConversationState
+		restoreConversationState,
+		checkLimit
 	})
 
 	const messageActions = useConversationMessageActions({
 		state,
-		addToast
+		addToast,
+		checkLimit
 	})
 
 	return {
