@@ -337,19 +337,67 @@ export default function ConversationAppShell({
 						</div>
 					</div>
 				) : viewMode === 'comparison' ? (
-					// Comparison view - always show when viewMode is comparison
-					<ComparisonView
-						key={`compare-${conversationNodes.length}-${conversationNodes.map(n => n.id).join('-')}`}
-						branches={
-							selectedMessageIds.length >= 2
-								? conversationNodes.filter(n => n.id !== 'main' && !n.data?.isMain && n.data?.messages?.some((m: any) => selectedMessageIds.includes(m.id)))
-								: conversationNodes.filter(n => n.id !== 'main' && !n.data?.isMain)
-						}
-						initialSelectedBranchIds={selectedBranchIds}
-						initialFocusedMessageIds={selectedMessageIds}
-						onClose={() => setViewMode('map')}
-						onSendMessage={sendMessage}
-					/>
+					// Comparison view - show on top, FlowCanvas stays mounted but hidden below
+					<>
+						<ComparisonView
+							key={`compare-${conversationNodes.length}-${conversationNodes.map(n => n.id).join('-')}`}
+							branches={
+								selectedMessageIds.length >= 2
+									? conversationNodes.filter(n => n.id !== 'main' && !n.data?.isMain && n.data?.messages?.some((m: any) => selectedMessageIds.includes(m.id)))
+									: conversationNodes.filter(n => n.id !== 'main' && !n.data?.isMain)
+							}
+							initialSelectedBranchIds={selectedBranchIds}
+							initialFocusedMessageIds={selectedMessageIds}
+							onClose={() => setViewMode('map')}
+							onSendMessage={sendMessage}
+						/>
+						{/* Keep FlowCanvas mounted but hidden to preserve state */}
+						<div className="hidden">
+							<FlowCanvas
+								selectedAIs={selectedAIs}
+								onAddAI={addAI}
+								onRemoveAI={removeAI}
+								mainMessages={messages}
+								onSendMainMessage={sendMessage}
+								onBranchFromMain={branchFromMessage}
+								pendingBranchMessageId={pendingBranchMessageId}
+								pendingBranchData={pendingBranchData}
+								onPendingBranchProcessed={() => {
+									setPendingBranchMessageId(null)
+									setPendingBranchData(null)
+								}}
+								onNodesUpdate={updateConversationNodes}
+								onNodeDoubleClick={(nodeId) => {
+									console.log('Node double-clicked:', nodeId)
+								}}
+								onPillClick={(aiId) => {
+									console.log('Pill clicked:', aiId)
+								}}
+								getBestAvailableModel={getBestAvailableModel}
+								onSelectSingle={selectSingleAIById}
+								onExportImport={() => setShowExportImport(true)}
+								restoredConversationNodes={conversationNodes}
+								selectedBranchId={activeBranchId}
+								onBranchWarning={handleBranchWarning}
+								onMinimizeAllRef={(fn) => { minimizeAllRef.current = fn }}
+								onMaximizeAllRef={(fn) => { maximizeAllRef.current = fn }}
+								onAllNodesMinimizedChange={(minimized) => setAllNodesMinimized(minimized)}
+								onSelectionChange={setSelectedBranchIds}
+								onMessageSelectionChange={setSelectedMessageIds}
+								conversationId={currentConversationIdRef.current}
+								onActiveNodeChange={(nodeId) => {
+									if (nodeId && nodeId !== activeBranchId) {
+										setActiveBranchId(nodeId)
+										if (nodeId === 'main') {
+											setCurrentBranch(null)
+										} else {
+											setCurrentBranch(nodeId)
+										}
+									}
+								}}
+							/>
+						</div>
+					</>
 				) : (
 					// Show empty state or content
 					branches.length === 0 && conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length === 0 && !pendingBranchMessageId ? (

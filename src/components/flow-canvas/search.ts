@@ -19,10 +19,10 @@ export function searchMessages(
 
 	nodes.forEach((node) => {
 		const messages = node.data?.messages || []
-		
+
 		messages.forEach((message: Message) => {
 			if (!message.text) return
-			
+
 			const text = message.text.toLowerCase()
 			if (text.includes(searchTerm)) {
 				// Find match position for preview
@@ -30,7 +30,7 @@ export function searchMessages(
 				const start = Math.max(0, index - 50)
 				const end = Math.min(text.length, index + searchTerm.length + 50)
 				const preview = message.text.substring(start, end)
-				
+
 				results.push({
 					nodeId: node.id,
 					messageId: message.id,
@@ -45,20 +45,46 @@ export function searchMessages(
 }
 
 /**
- * Highlight search matches in text
+ * Escape HTML entities to prevent XSS
+ */
+function escapeHtml(text: string): string {
+	const htmlEntities: Record<string, string> = {
+		'&': '&amp;',
+		'<': '&lt;',
+		'>': '&gt;',
+		'"': '&quot;',
+		"'": '&#039;'
+	}
+	return text.replace(/[&<>"']/g, char => htmlEntities[char] || char)
+}
+
+/**
+ * Escape regex special characters
+ */
+function escapeRegex(text: string): string {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Highlight search matches in text (XSS-safe)
  */
 export function highlightSearchMatch(
 	text: string,
 	query: string
 ): string {
 	if (!query || query.trim().length === 0) {
-		return text
+		return escapeHtml(text)
 	}
 
-	const searchTerm = query.trim()
-	const regex = new RegExp(`(${searchTerm})`, 'gi')
-	
-	return text.replace(regex, '<mark>$1</mark>')
+	// First escape HTML to prevent XSS
+	const escapedText = escapeHtml(text)
+	const escapedQuery = escapeHtml(query.trim())
+
+	// Escape regex special characters in the search term
+	const safeSearchTerm = escapeRegex(escapedQuery)
+	const regex = new RegExp(`(${safeSearchTerm})`, 'gi')
+
+	return escapedText.replace(regex, '<mark>$1</mark>')
 }
 
 /**
@@ -75,15 +101,15 @@ export function getSearchResultContext(
 	}
 
 	const messages = node.data.messages || []
-	const messageIndex = messages.findIndex((m) => m.id === result.messageId)
-	
+	const messageIndex = messages.findIndex((m: Message) => m.id === result.messageId)
+
 	if (messageIndex === -1) {
 		return []
 	}
 
 	const start = Math.max(0, messageIndex - contextSize)
 	const end = Math.min(messages.length, messageIndex + contextSize + 1)
-	
+
 	return messages.slice(start, end)
 }
 

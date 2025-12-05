@@ -484,4 +484,14 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
 }
 
 // Memoize the component to prevent unnecessary re-renders
-export default ChatNode
+export default React.memo(ChatNode, (prevProps, nextProps) => {
+  // Custom comparison - only re-render when these key props change
+  return (
+    prevProps.data?.messages?.length === nextProps.data?.messages?.length &&
+    prevProps.data?.isMinimized === nextProps.data?.isMinimized &&
+    prevProps.data?.isActive === nextProps.data?.isActive &&
+    prevProps.data?.isGenerating === nextProps.data?.isGenerating &&
+    prevProps.data?.selectedAIs?.length === nextProps.data?.selectedAIs?.length &&
+    prevProps.data?.isDragging === nextProps.data?.isDragging
+  )
+})
