@@ -10,6 +10,8 @@ import { useConversationAutosave } from '@/hooks/use-conversation-autosave'
 import { useConversationActions } from '@/hooks/use-conversation-actions'
 import { useConversationPageEffects } from '@/hooks/use-conversation-page-effects'
 import ConversationAppShell from '@/components/conversation-app-shell'
+import { LoginModal } from '@/components/auth/login-modal'
+import { useGuestLimits } from '@/hooks/use-guest-limits'
 
 import { allAIOptions } from '@/components/ai-pills'
 
@@ -27,6 +29,11 @@ export default function ConversationPage({ initialConversationId }: Conversation
 		setConversationNodes,
 		setShowExportImport
 	} = conversationState
+
+	const { checkLimit, showLoginModal, setShowLoginModal } = useGuestLimits(
+		conversationState.savedBranches,
+		conversationState.messages
+	)
 
 	const { addToast } = useToast()
 
@@ -81,7 +88,8 @@ export default function ConversationPage({ initialConversationId }: Conversation
 		state: conversationState,
 		defaultAI,
 		addToast,
-		restoreConversationState
+		restoreConversationState,
+		checkLimit
 	})
 
 	useConversationPageEffects({
@@ -131,10 +139,14 @@ export default function ConversationPage({ initialConversationId }: Conversation
 	]
 
 	return (
-		<ConversationAppShell
-			state={conversationState}
-			actions={actions}
-			commandPaletteCommands={commandPaletteCommands}
-		/>
+		<>
+			<ConversationAppShell
+				state={conversationState}
+				actions={actions}
+				commandPaletteCommands={commandPaletteCommands}
+				onLoginClick={() => setShowLoginModal(true)}
+			/>
+			<LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
+		</>
 	)
 }

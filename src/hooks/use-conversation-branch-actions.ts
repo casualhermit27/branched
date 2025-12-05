@@ -20,13 +20,15 @@ interface UseConversationBranchActionsParams {
 	defaultAI: AI
 	addToast: (toast: ToastOptions) => void
 	restoreConversationState: (conversation: any) => void
+	checkLimit?: (type: 'branch' | 'message') => boolean
 }
 
 export function useConversationBranchActions({
 	state,
 	defaultAI,
 	addToast,
-	restoreConversationState
+	restoreConversationState,
+	checkLimit
 }: UseConversationBranchActionsParams) {
 	const {
 		selectedAIs,
@@ -75,6 +77,10 @@ export function useConversationBranchActions({
 
 	const saveCurrentBranch = useCallback(() => {
 		if (messages.length === 0) return
+
+		if (checkLimit && !checkLimit('branch')) {
+			return
+		}
 
 		const branchId = `branch-${Date.now()}`
 		const newBranch: ConversationBranch = {
@@ -184,6 +190,9 @@ export function useConversationBranchActions({
 	])
 
 	const handleCreateNewConversation = useCallback(async () => {
+		if (checkLimit && !checkLimit('branch')) {
+			return
+		}
 		setMessages([])
 		setSelectedAIs([defaultAI])
 		setBranches([])
