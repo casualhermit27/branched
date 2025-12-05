@@ -853,6 +853,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			// If data changed, create new data object
 			const newData = {
 				...node.data,
+				// CRITICAL: For main node, use mainMessages prop instead of stale node.data.messages
+				// This ensures streaming updates are reflected in real-time
+				messages: node.id === 'main' ? mainMessages : node.data.messages,
 				selectedAIs: node.id === 'main' ? selectedAIs : branchAIs,
 				onSendMessage: node.id === 'main' ? handleSendMainMessage : handleSendBranchMessage,
 				onAddAI: node.id === 'main' ? onAddAI : (ai: AI) => handleBranchAddAI(node.id, ai),
@@ -905,6 +908,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		})
 	}, [
 		nodes,
+		mainMessages, // Added: needed for streaming updates on main node
 		selectedAIs,
 		minimizedNodes,
 		activeNodeId,
