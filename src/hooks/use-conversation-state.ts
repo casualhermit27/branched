@@ -38,7 +38,15 @@ export function useConversationState() {
 	const [conversationNodes, setConversationNodes] = useState<any[]>([])
 	const [showExportImport, setShowExportImport] = useState(false)
 	const [showCommandPalette, setShowCommandPalette] = useState(false)
-	const [viewMode, setViewMode] = useState<'map' | 'chat' | 'comparison'>('map')
+	const [viewMode, setViewMode] = useState<'map' | 'chat' | 'comparison'>(() => {
+		if (typeof window !== 'undefined') {
+			const saved = localStorage.getItem('branched_viewMode')
+			if (saved === 'map' || saved === 'chat' || saved === 'comparison') {
+				return saved
+			}
+		}
+		return 'map'
+	})
 	const [allNodesMinimized, setAllNodesMinimized] = useState(false)
 	const minimizeAllRef = useRef<(() => void) | null>(null)
 	const maximizeAllRef = useRef<(() => void) | null>(null)
@@ -89,7 +97,12 @@ export function useConversationState() {
 		showCommandPalette,
 		setShowCommandPalette,
 		viewMode,
-		setViewMode,
+		setViewMode: (mode: 'map' | 'chat' | 'comparison') => {
+			setViewMode(mode)
+			if (typeof window !== 'undefined') {
+				localStorage.setItem('branched_viewMode', mode)
+			}
+		},
 		allNodesMinimized,
 		setAllNodesMinimized,
 		minimizeAllRef,

@@ -65,6 +65,7 @@ interface SidebarProps {
   onTabChange?: (tab: 'history' | 'settings') => void
   onExportData?: () => void
   onClearData?: () => void
+  pushContent?: boolean // New prop to enable push layout
 }
 
 export default function Sidebar({
@@ -85,7 +86,8 @@ export default function Sidebar({
   activeTab: externalActiveTab,
   onTabChange,
   onExportData,
-  onClearData
+  onClearData,
+  pushContent = true // Default to push layout
 }: SidebarProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false)
   const [internalActiveTab, setInternalActiveTab] = useState<'history' | 'settings'>('history')
@@ -350,15 +352,17 @@ export default function Sidebar({
       <AnimatePresence>
         {isOpen && (
           <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/5 dark:bg-black/40 backdrop-blur-sm z-30"
-              onClick={() => setIsOpen(false)}
-            />
+            {/* Backdrop - only show when not pushing content */}
+            {!pushContent && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="fixed inset-0 bg-black/5 dark:bg-black/40 backdrop-blur-sm z-30"
+                onClick={() => setIsOpen(false)}
+              />
+            )}
 
             {/* Sidebar Panel */}
             <motion.div
@@ -457,8 +461,14 @@ export default function Sidebar({
                   <ConversationHistory
                     conversations={conversations}
                     currentConversationId={currentConversationId}
-                    onSelectConversation={onSelectConversation}
-                    onCreateNewConversation={onCreateNewConversation}
+                    onSelectConversation={(id) => {
+                      onSelectConversation(id)
+                      setIsOpen(false) // Close sidebar after selecting
+                    }}
+                    onCreateNewConversation={() => {
+                      onCreateNewConversation()
+                      setIsOpen(false) // Close sidebar after creating
+                    }}
                     onDeleteConversation={(id) => onDeleteConversation?.(id)}
                   />
                 ) : (
@@ -571,9 +581,9 @@ export default function Sidebar({
                       <span className="font-medium text-foreground dark:text-foreground">Free Plan</span>
                       <span className="text-muted-foreground dark:text-muted-foreground/70">{messageCount}/50 msgs</span>
                     </div>
-                    <div className="h-2 bg-muted dark:bg-muted rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-muted dark:bg-muted/50 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-500 ${messageCount >= 50 ? 'bg-destructive' : 'bg-gradient-to-r from-indigo-500 to-purple-500'
+                        className={`h-full rounded-full transition-all duration-500 ${messageCount >= 50 ? 'bg-red-500' : 'bg-gradient-to-r from-zinc-600 to-zinc-400 dark:from-zinc-400 dark:to-zinc-300'
                           }`}
                         style={{ width: `${Math.min((messageCount / 50) * 100, 100)}%` }}
                       />
@@ -587,7 +597,7 @@ export default function Sidebar({
 
                   <button
                     onClick={onUpgrade}
-                    className="w-full py-2 px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold uppercase tracking-wide rounded-lg shadow-md hover:shadow-lg transition-all duration-200 mb-3 flex items-center justify-center gap-2"
+                    className="w-full py-2.5 px-4 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-zinc-50 dark:text-zinc-900 text-xs font-medium tracking-wide rounded-xl shadow-sm hover:shadow-md transition-all duration-200 mb-3 flex items-center justify-center gap-2"
                   >
                     <SparklesIcon className="w-3.5 h-3.5" />
                     Upgrade to Pro
