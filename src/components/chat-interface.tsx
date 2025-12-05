@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import { ArrowsOut, ArrowsIn, GitBranch, PaperPlaneRight, Stop, Plus } from '@phosphor-icons/react'
@@ -52,7 +52,7 @@ interface ChatInterfaceProps {
   selectedMessageIds?: Set<string>
 }
 
-export default function ChatInterface({
+function ChatInterface({
   messages,
   onSendMessage,
   selectedAIs,
@@ -566,3 +566,6 @@ export default function ChatInterface({
     </div>
   )
 }
+
+// Memoize ChatInterface to prevent unnecessary re-renders
+export default React.memo(ChatInterface)

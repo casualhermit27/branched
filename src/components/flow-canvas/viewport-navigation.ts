@@ -40,7 +40,7 @@ export function focusOnNode(
 			zoom: viewport.zoom
 		},
 		{
-			duration: 500
+			duration: 350
 		}
 	)
 }
@@ -70,7 +70,7 @@ export function focusOnNodes(
 			zoom: viewport.zoom
 		},
 		{
-			duration: 500
+			duration: 250
 		}
 	)
 }
@@ -88,7 +88,7 @@ export function zoomIn(
 	const newZoom = Math.min(currentZoom + step, 3)
 
 	reactFlowInstance.zoomTo(newZoom, {
-		duration: 300
+		duration: 150
 	})
 }
 
@@ -105,7 +105,7 @@ export function zoomOut(
 	const newZoom = Math.max(currentZoom - step, 0.3)
 
 	reactFlowInstance.zoomTo(newZoom, {
-		duration: 300
+		duration: 150
 	})
 }
 
@@ -119,7 +119,7 @@ export function resetViewport(
 
 	reactFlowInstance.setViewport(
 		{ x: 0, y: 0, zoom: 1 },
-		{ duration: 500 }
+		{ duration: 250 }
 	)
 }
 
@@ -219,7 +219,7 @@ export function focusOnBranchWithZoom(
 			zoom: targetZoom
 		},
 		{
-			duration: 800
+			duration: 400
 		}
 	)
 }
