@@ -386,12 +386,19 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			const mapAIModel = (
 				ai: AI
 			): { modelName: string; supported: boolean; reason?: string; displayName: string } => {
-				const supportedModels = new Set(['mistral', 'gemini'])
+				const supportedModels = new Set(['mistral', 'gemini', 'openai', 'claude', 'grok'])
 				const normalizedMap: Record<string, string> = {
 					'mistral-large': 'mistral',
 					mistral: 'mistral',
 					'gemini-2.5-pro': 'gemini',
-					gemini: 'gemini'
+					gemini: 'gemini',
+					'gpt-4': 'openai',
+					'gpt-4o': 'openai',
+					openai: 'openai',
+					'claude-3-5-sonnet': 'claude',
+					claude: 'claude',
+					'grok-beta': 'grok',
+					grok: 'grok'
 				}
 
 				const displayName = ai.name || ai.id.toUpperCase()

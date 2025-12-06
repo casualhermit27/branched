@@ -134,7 +134,13 @@ export default function ConversationAppShell({
 	return (
 		<div
 			className={`h-screen bg-background overflow-hidden transition-all duration-300 ease-in-out ${sidebarOpen ? 'ml-80' : 'ml-0'}`}
-			onClick={() => sidebarOpen && setSidebarOpen(false)}
+			onClick={(e) => {
+				if (!sidebarOpen) return
+				const target = e.target as HTMLElement
+				// Don't close if clicking interactive elements
+				if (target.closest('button, input, textarea, a, [role="button"], .react-flow__node')) return
+				setSidebarOpen(false)
+			}}
 		>
 			{/* Floating Controls */}
 			<div className="fixed top-6 right-4 z-50 flex items-center gap-2 p-1.5 bg-card/80 backdrop-blur-md border border-border/60 shadow-lg rounded-2xl">

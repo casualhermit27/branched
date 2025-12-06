@@ -30,6 +30,20 @@ const nextConfig: NextConfig = {
     'template.tsx', 'template.ts', 'template.jsx', 'template.js',
     'default.tsx', 'default.ts', 'default.jsx', 'default.js',
   ],
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'svgl.app',
+        pathname: '/library/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cdn.simpleicons.org',
+        pathname: '/**',
+      },
+    ],
+  },
 };
 
 export default nextConfig;
