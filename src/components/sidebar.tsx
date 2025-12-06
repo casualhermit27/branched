@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
-import { List, X, ArrowsOut, ArrowsIn, Clock, GitBranch, Trash, Gear, Sparkle as SparklesIcon, Eye, EyeSlash, Key } from '@phosphor-icons/react'
+import { List, X, ArrowsOut, ArrowsIn, Clock, GitBranch, Trash, Gear, Sparkle as SparklesIcon, Eye, EyeSlash, Key, CheckCircle, XCircle, Warning, ArrowsLeftRight, CaretDown } from '@phosphor-icons/react'
 import ConversationHistory from './conversation-history'
 import { aiService } from '@/services/ai-api'
+import { detectProviderFromKey, discoverModels, validateApiKey, type DiscoveredModel } from '@/services/model-discovery'
 
 interface Message {
   id: string
@@ -68,6 +69,63 @@ interface SidebarProps {
   pushContent?: boolean // New prop to enable push layout
 }
 
+const ProviderIcon = ({ id, className = "w-5 h-5" }: { id: string, className?: string }) => {
+  switch (id) {
+    case 'openai':
+      return (
+        <Image
+          src="/logos/openai.svg"
+          alt="OpenAI"
+          width={20}
+          height={20}
+          className={`dark:invert ${className}`}
+        />
+      )
+    case 'claude':
+      return (
+        <Image
+          src="/logos/claude-ai-icon.svg"
+          alt="Claude"
+          width={20}
+          height={20}
+          className={className}
+        />
+      )
+    case 'gemini':
+      return (
+        <Image
+          src="/logos/gemini.svg"
+          alt="Gemini"
+          width={20}
+          height={20}
+          className={className}
+        />
+      )
+    case 'mistral':
+      return (
+        <Image
+          src="/logos/mistral-ai_logo.svg"
+          alt="Mistral"
+          width={20}
+          height={20}
+          className={`dark:invert ${className}`}
+        />
+      )
+    case 'grok':
+      return (
+        <Image
+          src="/logos/xai_light.svg"
+          alt="Grok"
+          width={20}
+          height={20}
+          className={`dark:invert ${className}`}
+        />
+      )
+    default:
+      return <div className={`bg-muted rounded-sm ${className}`} />
+  }
+}
+
 export default function Sidebar({
   branches,
   currentBranchId,
@@ -111,7 +169,16 @@ export default function Sidebar({
   })
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({})
 
-  // Load keys on mount
+  // Smart BYOK state
+  const [selectedProvider, setSelectedProvider] = useState('')
+  const [newApiKey, setNewApiKey] = useState('')
+  const [showNewKey, setShowNewKey] = useState(false)
+  const [keyValidation, setKeyValidation] = useState<{ valid: boolean | null, message: string }>({ valid: null, message: '' })
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [isValidating, setIsValidating] = useState(false)
+  const [discoveredModels, setDiscoveredModels] = useState<Record<string, DiscoveredModel[]>>({})
+
+  // Load keys and discovered models on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setApiKeys({
@@ -121,6 +188,23 @@ export default function Sidebar({
         gemini: aiService.getKey('gemini'),
         grok: aiService.getKey('grok')
       })
+
+      // Load previously discovered models from localStorage
+      const loadedModels: Record<string, DiscoveredModel[]> = {}
+      const providers = ['openai', 'claude', 'gemini', 'mistral', 'grok']
+      providers.forEach(provider => {
+        const stored = localStorage.getItem(`models_${provider}`)
+        if (stored) {
+          try {
+            loadedModels[provider] = JSON.parse(stored)
+          } catch (e) {
+            console.error(`Failed to parse models for ${provider}:`, e)
+          }
+        }
+      })
+      if (Object.keys(loadedModels).length > 0) {
+        setDiscoveredModels(loadedModels)
+      }
     }
   }, [])
 
@@ -371,6 +455,7 @@ export default function Sidebar({
               exit={{ x: -320, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               className="fixed top-0 left-0 z-40 h-full bg-card dark:bg-card border-r border-border/60 dark:border-border/40 shadow-2xl w-80 flex flex-col"
+              onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
               <div className="flex items-center justify-between px-6 py-5 border-b border-border/80 dark:border-border/60 bg-card dark:bg-card">
@@ -461,13 +546,10 @@ export default function Sidebar({
                   <ConversationHistory
                     conversations={conversations}
                     currentConversationId={currentConversationId}
-                    onSelectConversation={(id) => {
-                      onSelectConversation(id)
-                      setIsOpen(false) // Close sidebar after selecting
-                    }}
+                    onSelectConversation={onSelectConversation}
                     onCreateNewConversation={() => {
                       onCreateNewConversation()
-                      setIsOpen(false) // Close sidebar after creating
+                      setIsOpen(false) // Only close sidebar after creating new conversation
                     }}
                     onDeleteConversation={(id) => onDeleteConversation?.(id)}
                   />
@@ -509,44 +591,248 @@ export default function Sidebar({
 
                     <div>
                       <h3 className="text-sm font-semibold text-foreground dark:text-foreground mb-4">API Keys (BYOK)</h3>
-                      <div className="space-y-3">
-                        {[
-                          { id: 'mistral', label: 'Mistral AI', placeholder: 'Enter Mistral API Key' },
-                          { id: 'openai', label: 'OpenAI (GPT-4)', placeholder: 'sk-...' },
-                          { id: 'claude', label: 'Anthropic (Claude)', placeholder: 'sk-ant-...' },
-                          { id: 'gemini', label: 'Google Gemini', placeholder: 'Enter Gemini API Key' },
-                          { id: 'grok', label: 'xAI (Grok)', placeholder: 'Enter xAI API Key' }
-                        ].map((provider) => (
-                          <div key={provider.id} className="p-3 rounded-lg border border-border/60 dark:border-border/40 bg-card dark:bg-card">
-                            <div className="flex items-center justify-between mb-2">
-                              <label className="text-sm font-medium text-foreground dark:text-foreground flex items-center gap-2">
-                                <Key size={14} className="text-muted-foreground" />
-                                {provider.label}
-                              </label>
-                              {apiKeys[provider.id as keyof typeof apiKeys] && (
-                                <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-500 rounded font-medium">
-                                  Active
-                                </span>
+
+                      {/* Smart Key Input */}
+                      <div className="mb-4 p-4 rounded-xl border border-purple-500/30 bg-purple-500/5">
+                        <p className="text-xs font-medium text-foreground mb-3">Add API Key</p>
+                        <div className="space-y-3">
+                          {/* Provider Selection */}
+                          <div className="relative">
+                            <button
+                              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                              className="w-full flex items-center justify-between bg-muted/50 dark:bg-muted/30 border border-border/50 rounded-lg py-2.5 px-3 text-sm text-foreground hover:bg-muted/70 transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                {selectedProvider ? (
+                                  <>
+                                    <ProviderIcon id={selectedProvider} className="w-4 h-4 rounded-sm" />
+                                    <span className="capitalize">{[
+                                      { id: 'openai', label: 'OpenAI (GPT-4)' },
+                                      { id: 'claude', label: 'Anthropic (Claude)' },
+                                      { id: 'gemini', label: 'Google Gemini' },
+                                      { id: 'mistral', label: 'Mistral AI' },
+                                      { id: 'grok', label: 'xAI (Grok)' }
+                                    ].find(p => p.id === selectedProvider)?.label || selectedProvider}</span>
+                                  </>
+                                ) : (
+                                  <span className="text-muted-foreground">Select Provider...</span>
+                                )}
+                              </div>
+                              <CaretDown size={14} className={`text-muted-foreground transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            <AnimatePresence>
+                              {isDropdownOpen && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: -10 }}
+                                  transition={{ duration: 0.15 }}
+                                  className="absolute top-full left-0 right-0 mt-1 bg-card dark:bg-card border border-border/60 rounded-xl shadow-lg z-50 overflow-hidden py-1"
+                                >
+                                  {[
+                                    { id: 'openai', label: 'OpenAI (GPT-4)' },
+                                    { id: 'claude', label: 'Anthropic (Claude)' },
+                                    { id: 'gemini', label: 'Google Gemini' },
+                                    { id: 'mistral', label: 'Mistral AI' },
+                                    { id: 'grok', label: 'xAI (Grok)' }
+                                  ].map((provider) => (
+                                    <button
+                                      key={provider.id}
+                                      onClick={() => {
+                                        setSelectedProvider(provider.id)
+                                        setIsDropdownOpen(false)
+                                      }}
+                                      className={`w-full flex items-center gap-3 px-3 py-2 text-sm transition-colors ${selectedProvider === provider.id
+                                        ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                                        : 'text-foreground hover:bg-muted dark:hover:bg-muted/80'
+                                        }`}
+                                    >
+                                      <ProviderIcon id={provider.id} className="w-5 h-5 rounded-sm" />
+                                      <span>{provider.label}</span>
+                                      {selectedProvider === provider.id && (
+                                        <CheckCircle size={14} className="ml-auto" weight="fill" />
+                                      )}
+                                    </button>
+                                  ))}
+                                </motion.div>
                               )}
-                            </div>
-                            <div className="relative">
-                              <input
-                                type={showKeys[provider.id] ? 'text' : 'password'}
-                                value={apiKeys[provider.id as keyof typeof apiKeys]}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleKeyChange(provider.id, e.target.value)}
-                                placeholder={provider.placeholder}
-                                className="w-full bg-muted/50 dark:bg-muted/30 border border-border/50 rounded-md py-1.5 pl-2 pr-8 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
-                              />
-                              <button
-                                onClick={() => toggleKeyVisibility(provider.id)}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                              >
-                                {showKeys[provider.id] ? <EyeSlash size={14} /> : <Eye size={14} />}
-                              </button>
-                            </div>
+                            </AnimatePresence>
                           </div>
-                        ))}
+
+                          <div className="relative">
+                            <input
+                              type={showNewKey ? 'text' : 'password'}
+                              value={newApiKey}
+                              onChange={(e) => {
+                                const key = e.target.value
+                                setNewApiKey(key)
+                                // Auto-detect provider from key format using model-discovery service
+                                const detectedProvider = detectProviderFromKey(key)
+                                if (detectedProvider) {
+                                  setSelectedProvider(detectedProvider)
+                                  const providerNames: Record<string, string> = {
+                                    openai: 'OpenAI',
+                                    claude: 'Anthropic',
+                                    gemini: 'Google Gemini',
+                                    mistral: 'Mistral AI',
+                                    grok: 'xAI'
+                                  }
+                                  setKeyValidation({ valid: true, message: `${providerNames[detectedProvider]} key detected` })
+                                } else if (key.length > 20 && selectedProvider) {
+                                  setKeyValidation({ valid: null, message: 'Key format unknown - will validate on save' })
+                                } else {
+                                  setKeyValidation({ valid: null, message: '' })
+                                }
+                              }}
+                              placeholder="Paste your API key here..."
+                              className="w-full bg-muted/50 dark:bg-muted/30 border border-border/50 rounded-lg py-2 pl-3 pr-10 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-mono"
+                            />
+                            <button
+                              onClick={() => setShowNewKey(!showNewKey)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              {showNewKey ? <EyeSlash size={16} /> : <Eye size={16} />}
+                            </button>
+                          </div>
+
+                          {/* Validation Feedback */}
+                          {keyValidation.message && (
+                            <div className={`flex items-center gap-2 text-xs ${keyValidation.valid === true ? 'text-emerald-500' :
+                              keyValidation.valid === false ? 'text-red-500' : 'text-amber-500'
+                              }`}>
+                              {keyValidation.valid === true ? (
+                                <CheckCircle size={14} weight="fill" />
+                              ) : keyValidation.valid === false ? (
+                                <XCircle size={14} weight="fill" />
+                              ) : (
+                                <Warning size={14} weight="fill" />
+                              )}
+                              {keyValidation.message}
+                            </div>
+                          )}
+
+                          <button
+                            onClick={async () => {
+                              if (selectedProvider && newApiKey.trim()) {
+                                setIsValidating(true)
+                                setKeyValidation({ valid: null, message: 'Validating key and discovering models...' })
+
+                                try {
+                                  // Validate and discover models
+                                  const result = await validateApiKey(newApiKey.trim())
+
+                                  if (result.valid && result.models.length > 0) {
+                                    handleKeyChange(selectedProvider, newApiKey.trim())
+                                    setDiscoveredModels(prev => ({
+                                      ...prev,
+                                      [selectedProvider]: result.models
+                                    }))
+                                    // Store models in localStorage for persistence
+                                    localStorage.setItem(`models_${selectedProvider}`, JSON.stringify(result.models))
+                                    setKeyValidation({ valid: true, message: `Key saved! Found ${result.models.length} models` })
+                                    setTimeout(() => {
+                                      setNewApiKey('')
+                                      setSelectedProvider('')
+                                      setKeyValidation({ valid: null, message: '' })
+                                    }, 2000)
+                                  } else {
+                                    // Still save the key but show warning
+                                    handleKeyChange(selectedProvider, newApiKey.trim())
+                                    setKeyValidation({ valid: true, message: 'Key saved (using default models)' })
+                                    setTimeout(() => {
+                                      setNewApiKey('')
+                                      setSelectedProvider('')
+                                      setKeyValidation({ valid: null, message: '' })
+                                    }, 1500)
+                                  }
+                                } catch (error) {
+                                  console.error('Validation error:', error)
+                                  // Save anyway but warn
+                                  handleKeyChange(selectedProvider, newApiKey.trim())
+                                  setKeyValidation({ valid: true, message: 'Key saved (could not validate)' })
+                                  setTimeout(() => {
+                                    setNewApiKey('')
+                                    setSelectedProvider('')
+                                    setKeyValidation({ valid: null, message: '' })
+                                  }, 1500)
+                                } finally {
+                                  setIsValidating(false)
+                                }
+                              }
+                            }}
+                            disabled={!selectedProvider || !newApiKey.trim() || isValidating}
+                            className="w-full py-2 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-muted disabled:text-muted-foreground text-white text-sm font-medium rounded-lg transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          >
+                            {isValidating ? (
+                              <>
+                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                Validating...
+                              </>
+                            ) : (
+                              'Save API Key'
+                            )}
+                          </button>
+                        </div>
                       </div>
+
+                      {/* Saved Keys List - Only show if any keys exist */}
+                      {Object.values(apiKeys).some(key => !!key) && (
+                        <>
+                          <p className="text-xs font-medium text-muted-foreground mb-2">Configured Keys</p>
+                          <div className="space-y-2">
+                            {[
+                              { id: 'openai', label: 'OpenAI' },
+                              { id: 'claude', label: 'Claude' },
+                              { id: 'gemini', label: 'Gemini' },
+                              { id: 'mistral', label: 'Mistral' },
+                              { id: 'grok', label: 'Grok' }
+                            ].filter(provider => !!apiKeys[provider.id as keyof typeof apiKeys]).map((provider) => (
+                              <div key={provider.id} className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <ProviderIcon id={provider.id} className="w-4 h-4 rounded-sm" />
+                                    <span className="text-sm font-medium text-foreground">{provider.label}</span>
+                                    <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/20 text-emerald-500 rounded font-medium">Active</span>
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      handleKeyChange(provider.id, '')
+                                      setDiscoveredModels(prev => {
+                                        const updated = { ...prev }
+                                        delete updated[provider.id]
+                                        return updated
+                                      })
+                                      localStorage.removeItem(`models_${provider.id}`)
+                                    }}
+                                    className="text-xs text-red-400 hover:text-red-500 transition-colors"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                                {/* Show discovered models */}
+                                {discoveredModels[provider.id] && discoveredModels[provider.id].length > 0 && (
+                                  <div className="mt-2 pt-2 border-t border-emerald-500/20">
+                                    <p className="text-[10px] text-muted-foreground mb-1">Available models:</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {discoveredModels[provider.id].slice(0, 4).map(model => (
+                                        <span key={model.id} className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-foreground">
+                                          {model.name}
+                                        </span>
+                                      ))}
+                                      {discoveredModels[provider.id].length > 4 && (
+                                        <span className="text-[10px] px-1.5 py-0.5 text-muted-foreground">
+                                          +{discoveredModels[provider.id].length - 4} more
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     <div>
