@@ -252,7 +252,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
         className={`bg-card rounded-2xl border transition-[box-shadow,border-color,background-color] duration-300 relative overflow-hidden flex flex-col w-full
           ${data.isMain ? 'border-2 border-primary/50 shadow-[0_0_30px_-5px_rgba(var(--primary),0.3)]' : ''}
           ${data.isSelected
-            ? 'ring-2 ring-primary border-primary shadow-[0_0_0_2px_rgba(var(--primary),0.5)]'
+            ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 border-2 border-indigo-500 dark:border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.25)]'
             : data.isActive
               ? 'border-primary shadow-lg shadow-primary/10 ring-2 ring-primary/30'
               : 'border-border/40 shadow-sm hover:border-border/80 hover:shadow-md'
@@ -444,6 +444,7 @@ export default React.memo(ChatNode, (prevProps, nextProps) => {
     prevProps.data?.messages?.length === nextProps.data?.messages?.length &&
     prevProps.data?.isMinimized === nextProps.data?.isMinimized &&
     prevProps.data?.isActive === nextProps.data?.isActive &&
+    prevProps.data?.isSelected === nextProps.data?.isSelected &&
     prevProps.data?.isGenerating === nextProps.data?.isGenerating &&
     prevProps.data?.selectedAIs?.length === nextProps.data?.selectedAIs?.length &&
     prevProps.data?.isDragging === nextProps.data?.isDragging

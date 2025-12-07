@@ -91,6 +91,11 @@ export default function ConversationAppShell({
 	const [sidebarOpen, setSidebarOpen] = useState(false)
 	const [sidebarTab, setSidebarTab] = useState<'history' | 'settings'>('history')
 
+	// Tiered Access State (Default Free)
+	// ToDo: Fetch from /api/user/me or similar
+	const tier = 'free'
+	const credits = 0
+
 	const {
 		addAI,
 		removeAI,
@@ -317,6 +322,8 @@ export default function ConversationAppShell({
 				activeTab={sidebarTab}
 				onTabChange={setSidebarTab}
 				onExportData={() => setShowExportImport(true)}
+				tier={tier}
+				credits={credits}
 			/>
 
 			<PricingModal
@@ -327,7 +334,10 @@ export default function ConversationAppShell({
 
 			<OnboardingTour
 				isOpen={showOnboarding}
-				onClose={() => setShowOnboarding(false)}
+				onClose={() => {
+					setShowOnboarding(false)
+					localStorage.setItem('hasSeenOnboarding', 'true')
+				}}
 				onComplete={() => {
 					setShowOnboarding(false)
 					localStorage.setItem('hasSeenOnboarding', 'true')
@@ -415,49 +425,53 @@ export default function ConversationAppShell({
 								onRemoveAI={removeAI}
 								onSelectSingle={selectSingleAI}
 								getBestAvailableModel={getBestAvailableModel}
+								tier={tier}
 							/>
 						) : (
 							<div className="flex items-center justify-center h-screen p-4">
 								{/* Optional: Add a loading spinner here if needed */}
-								<div className="w-full max-w-4xl border border-border rounded-2xl bg-card shadow-lg flex flex-col overflow-hidden h-auto max-h-[650px]">
-									{conversationNodes.length > 0 && (
-										<BranchNavigation
-											branches={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).map(n => ({
-												id: n.id,
-												label: n.title || 'Branch',
-												parentId: n.parentId,
-												parentMessageId: n.parentMessageId
-											}))}
-											currentBranchId={activeBranchId}
-											onNavigateToBranch={handleSelectBranch}
-											onNavigateToMain={() => {
-												setActiveBranchId('main')
-												setCurrentBranch(null)
-											}}
-										/>
-									)}
+								<div className="w-full max-w-4xl rounded-2xl p-[1px] bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10 dark:from-indigo-500/20 dark:via-purple-500/20 dark:to-pink-500/20 shadow-lg h-auto max-h-[85vh] flex flex-col">
+									<div className="flex-1 w-full bg-card rounded-2xl flex flex-col overflow-hidden relative">
+										{conversationNodes.length > 0 && (
+											<BranchNavigation
+												branches={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).map(n => ({
+													id: n.id,
+													label: n.title || 'Branch',
+													parentId: n.parentId,
+													parentMessageId: n.parentMessageId
+												}))}
+												currentBranchId={activeBranchId}
+												onNavigateToBranch={handleSelectBranch}
+												onNavigateToMain={() => {
+													setActiveBranchId('main')
+													setCurrentBranch(null)
+												}}
+											/>
+										)}
 
-									<div className="flex items-center justify-between">
-										{/* AIPills moved to ChatInterface */}
-									</div>
+										<div className="flex items-center justify-between">
+											{/* AIPills moved to ChatInterface */}
+										</div>
 
-									<div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
-										<ChatInterface
-											messages={messages}
-											onSendMessage={sendMessage}
-											selectedAIs={selectedAIs}
-											onBranchFromMessage={branchFromMessage}
-											currentBranch={currentBranch}
-											isGenerating={isGenerating}
-											onStopGeneration={stopGeneration}
-											existingBranchesCount={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length}
-											isMain={true}
-											onExportImport={() => setShowExportImport(true)}
-											onAddAI={addAI}
-											onRemoveAI={removeAI}
-											onSelectSingle={selectSingleAIById}
-											getBestAvailableModel={getBestAvailableModel}
-										/>
+										<div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+											<ChatInterface
+												messages={messages}
+												onSendMessage={sendMessage}
+												selectedAIs={selectedAIs}
+												onBranchFromMessage={branchFromMessage}
+												currentBranch={currentBranch}
+												isGenerating={isGenerating}
+												onStopGeneration={stopGeneration}
+												existingBranchesCount={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length}
+												isMain={true}
+												onExportImport={() => setShowExportImport(true)}
+												onAddAI={addAI}
+												onRemoveAI={removeAI}
+												onSelectSingle={selectSingleAIById}
+												getBestAvailableModel={getBestAvailableModel}
+												tier={tier}
+											/>
+										</div>
 									</div>
 								</div>
 							</div>

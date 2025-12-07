@@ -64,7 +64,7 @@ export function useConversationPageEffects({
 	}, [menuRef, setShowMenu, showMenu])
 
 	useEffect(() => {
-		const hasSeenOnboarding = typeof window !== 'undefined' ? localStorage.getItem('hasSeenOnboarding') : 'true'
+		const hasSeenOnboarding = typeof window !== 'undefined' ? localStorage.getItem('hasSeenOnboarding') : null
 		if (!hasSeenOnboarding) {
 			setShowOnboarding(true)
 		}

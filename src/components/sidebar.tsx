@@ -67,6 +67,8 @@ interface SidebarProps {
   onExportData?: () => void
   onClearData?: () => void
   pushContent?: boolean // New prop to enable push layout
+  tier?: 'free' | 'pro'
+  credits?: number
 }
 
 const ProviderIcon = ({ id, className = "w-5 h-5" }: { id: string, className?: string }) => {
@@ -145,7 +147,9 @@ export default function Sidebar({
   onTabChange,
   onExportData,
   onClearData,
-  pushContent = true // Default to push layout
+  pushContent = true, // Default to push layout
+  tier = 'free',
+  credits = 0
 }: SidebarProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false)
   const [internalActiveTab, setInternalActiveTab] = useState<'history' | 'settings'>('history')
@@ -861,33 +865,52 @@ export default function Sidebar({
               {/* Footer */}
               {activeTab !== 'settings' && (
                 <div className="px-6 py-4 border-t border-border/80 dark:border-border/60 bg-muted/30 dark:bg-muted/20">
-                  {/* Usage Bar */}
+                  {/* Usage / Credits Bar */}
                   <div className="mb-4">
                     <div className="flex items-center justify-between text-xs mb-1.5">
-                      <span className="font-medium text-foreground dark:text-foreground">Free Plan</span>
-                      <span className="text-muted-foreground dark:text-muted-foreground/70">{messageCount}/50 msgs</span>
+                      <span className="font-medium text-foreground dark:text-foreground">
+                        {tier === 'pro' ? 'Pro Plan' : 'Free Plan'}
+                      </span>
+                      {tier === 'pro' ? (
+                        <span className="text-muted-foreground dark:text-muted-foreground/70">{credits} Credits</span>
+                      ) : (
+                        <span className="text-muted-foreground dark:text-muted-foreground/70">{messageCount}/50 msgs</span>
+                      )}
                     </div>
-                    <div className="h-1.5 bg-muted dark:bg-muted/50 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${messageCount >= 50 ? 'bg-red-500' : 'bg-gradient-to-r from-zinc-600 to-zinc-400 dark:from-zinc-400 dark:to-zinc-300'
-                          }`}
-                        style={{ width: `${Math.min((messageCount / 50) * 100, 100)}%` }}
-                      />
-                    </div>
-                    {messageCount >= 40 && (
+
+                    {tier === 'pro' ? (
+                      <div className="h-1.5 bg-muted dark:bg-muted/50 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-purple-500 to-indigo-500"
+                          style={{ width: `${Math.min((credits / 1000) * 100, 100)}%` }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-1.5 bg-muted dark:bg-muted/50 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${messageCount >= 50 ? 'bg-red-500' : 'bg-gradient-to-r from-zinc-600 to-zinc-400 dark:from-zinc-400 dark:to-zinc-300'
+                            }`}
+                          style={{ width: `${Math.min((messageCount / 50) * 100, 100)}%` }}
+                        />
+                      </div>
+                    )}
+
+                    {tier === 'free' && messageCount >= 40 && (
                       <p className="text-[10px] text-destructive mt-1 font-medium">
                         {messageCount >= 50 ? 'Limit reached' : 'Approaching limit'}
                       </p>
                     )}
                   </div>
 
-                  <button
-                    onClick={onUpgrade}
-                    className="w-full py-2.5 px-4 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-zinc-50 dark:text-zinc-900 text-xs font-medium tracking-wide rounded-xl shadow-sm hover:shadow-md transition-all duration-200 mb-3 flex items-center justify-center gap-2"
-                  >
-                    <SparklesIcon className="w-3.5 h-3.5" />
-                    Upgrade to Pro
-                  </button>
+                  {tier !== 'pro' && (
+                    <button
+                      onClick={onUpgrade}
+                      className="w-full py-2.5 px-4 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-zinc-50 dark:text-zinc-900 text-xs font-medium tracking-wide rounded-xl shadow-sm hover:shadow-md transition-all duration-200 mb-3 flex items-center justify-center gap-2"
+                    >
+                      <SparklesIcon className="w-3.5 h-3.5" />
+                      Upgrade to Pro
+                    </button>
+                  )}
 
                   <div className="text-xs text-muted-foreground dark:text-muted-foreground/70 flex justify-between items-center">
                     <span className="font-medium text-foreground dark:text-foreground">

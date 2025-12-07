@@ -5,6 +5,10 @@ export interface IUser extends Document {
   email: string
   password?: string
   image?: string
+  tier: 'free' | 'pro'
+  credits: number
+  dailyFreeUsage: number
+  lastDailyReset: Date
   createdAt: Date
   updatedAt: Date
 }
@@ -14,6 +18,10 @@ const UserSchema = new Schema<IUser>({
   email: { type: String, required: true, unique: true },
   password: { type: String },
   image: { type: String },
+  tier: { type: String, enum: ['free', 'pro'], default: 'free' },
+  credits: { type: Number, default: 0 },
+  dailyFreeUsage: { type: Number, default: 0 },
+  lastDailyReset: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 })

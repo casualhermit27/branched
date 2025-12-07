@@ -12,6 +12,7 @@ interface EmptyStateProps {
     onRemoveAI: (aiId: string) => void
     onSelectSingle: (ai: AI) => void
     getBestAvailableModel: () => string
+    tier?: 'free' | 'pro'
 }
 
 export function EmptyState({
@@ -21,7 +22,8 @@ export function EmptyState({
     onAddAI,
     onRemoveAI,
     onSelectSingle,
-    getBestAvailableModel
+    getBestAvailableModel,
+    tier = 'free'
 }: EmptyStateProps) {
     const [input, setInput] = useState('')
     const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -93,6 +95,7 @@ export function EmptyState({
                                     onSelectSingle={onSelectSingle}
                                     showAddButton={true}
                                     getBestAvailableModel={getBestAvailableModel}
+                                    tier={tier}
                                 />
                                 <div className="h-6 w-px bg-border/50 mx-2"></div>
                                 <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">

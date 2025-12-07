@@ -50,6 +50,7 @@ interface ChatInterfaceProps {
   readOnly?: boolean
   onMessageSelect?: (messageId: string, isMultiSelect: boolean) => void
   selectedMessageIds?: Set<string>
+  tier?: 'free' | 'pro'
 }
 
 function ChatInterface({
@@ -71,8 +72,10 @@ function ChatInterface({
   onExportImport,
   readOnly = false,
   onMessageSelect,
-  selectedMessageIds
+  selectedMessageIds,
+  tier = 'free'
 }: ChatInterfaceProps) {
+
   const [message, setMessage] = useState('')
   const [isUserScrolling, setIsUserScrolling] = useState(false)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
@@ -513,6 +516,7 @@ function ChatInterface({
                         onSelectSingle={onSelectSingle ? (ai) => onSelectSingle(ai.id) : undefined}
                         showAddButton={true}
                         getBestAvailableModel={getBestAvailableModel}
+                        tier={tier}
                       />
                     )}
 

@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, X, Sparkle, Robot, CaretUp, CaretDown, Check } from '@phosphor-icons/react'
+import { Plus, X, Sparkle, Robot, CaretUp, CaretDown, Check, Lock } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { discoverModels, DiscoveredModel } from '../services/model-discovery'
 import { aiService } from '../services/ai-api'
+import { UpsellModal } from './upsell-modal'
+
 
 export interface AI {
   id: string
@@ -154,9 +156,10 @@ interface AIPillsProps {
   onSelectSingle?: (ai: AI) => void
   showAddButton?: boolean
   getBestAvailableModel?: () => string
+  tier?: 'free' | 'pro'
 }
 
-export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSingle, showAddButton = true, getBestAvailableModel }: AIPillsProps) {
+export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSingle, showAddButton = true, getBestAvailableModel, tier = 'free' }: AIPillsProps) {
   const [showDropdown, setShowDropdown] = useState(false)
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
   const [placement, setPlacement] = useState<'top' | 'bottom'>('bottom')
@@ -309,6 +312,43 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
     return a.name.localeCompare(b.name)
   })
 
+  const [upsellModel, setUpsellModel] = useState<{ isOpen: boolean; model: string; provider: string }>({
+    isOpen: false,
+    model: '',
+    provider: ''
+  })
+
+  // Premium models that need locking
+  const premiumModels = ['gpt-4', 'gpt-4o', 'claude-3-5-sonnet', 'claude-3-opus', 'gemini-1.5-pro']
+  const getProviderForId = (id: string) => {
+    if (id.includes('gpt')) return 'openai'
+    if (id.includes('claude')) return 'anthropic'
+    if (id.includes('gemini')) return 'google'
+    return 'openai'
+  }
+
+  const handleAISelection = (ai: AI) => {
+    // Check if model is premium and needs unlocking
+    const isPremium = premiumModels.includes(ai.id)
+    const provider = getProviderForId(ai.id)
+    const hasKey = aiService.getKey(provider)
+
+    // If Premium AND Free Tier AND No Key -> UPSELL
+    if (isPremium && tier === 'free' && !hasKey) {
+      setUpsellModel({
+        isOpen: true,
+        model: ai.name,
+        provider: provider
+      })
+      setShowDropdown(false)
+      return
+    }
+
+    if (!ai.functional && !isPremium) return
+
+    addAI(ai)
+  }
+
   return (
     <div className="relative">
       {/* Selected AI Pills - Top Left */}
@@ -347,9 +387,9 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
                 whileTap={{ scale: selectedAIs.length < MAX_AIS ? 0.98 : 1 }}
                 onClick={() => selectedAIs.length < MAX_AIS && toggleDropdown()}
                 disabled={selectedAIs.length >= MAX_AIS}
-                className={`nodrag px-3 py-1.5 bg-card border rounded-full flex items-center gap-2 transition-all duration-200 ${selectedAIs.length >= MAX_AIS
+                className={`nodrag px-3 py-1.5 bg-card border rounded-full flex items-center gap-2 transition-colors duration-200 ${selectedAIs.length >= MAX_AIS
                   ? 'border-border/30 text-muted-foreground/40 cursor-not-allowed'
-                  : 'border-border text-foreground hover:bg-muted/50 active:scale-95'
+                  : 'border-border text-foreground hover:bg-muted/50'
                   }`}
               >
                 <Plus size={13} />
@@ -408,40 +448,54 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
                   <div className="p-1.5 space-y-0.5">
                     {combinedAIs
                       .filter(ai => !selectedAIs.find(selected => selected.id === ai.id))
-                      .map((ai, index) => (
-                        <motion.button
-                          key={ai.id}
-                          initial={{ opacity: 0, x: -4 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.02, duration: 0.15 }}
-                          onClick={() => addAI(ai)}
-                          disabled={!ai.functional}
-                          className={`w-full text-left px-3 py-2.5 transition-all duration-150 flex items-center gap-3 rounded-lg group ${!ai.functional
-                            ? 'opacity-50 cursor-not-allowed grayscale'
-                            : 'hover:bg-muted/80 cursor-pointer active:scale-[0.98]'
-                            }`}
-                        >
-                          <span className={`w-5 h-5 flex items-center justify-center flex-shrink-0 rounded-md transition-colors ${!ai.functional ? 'opacity-70' : 'group-hover:bg-white/10'}`}>
-                            {ai.logo}
-                          </span>
-                          <div className="flex flex-col gap-0.5 min-w-0">
-                            <span className={`text-sm font-medium leading-none truncate ${!ai.functional
-                              ? 'text-muted-foreground'
-                              : 'text-foreground'
-                              }`}>
-                              {getAIDisplayName(ai)}
+                      .map((ai, index) => {
+                        const isPremium = premiumModels.includes(ai.id)
+                        const provider = getProviderForId(ai.id)
+                        const hasKey = aiService.getKey(provider)
+                        const isLocked = isPremium && tier === 'free' && !hasKey
+                        const isAvailable = ai.functional || isPremium // Premium models are "available" (either functional or locked)
+
+                        return (
+                          <motion.button
+                            key={ai.id}
+                            initial={{ opacity: 0, x: -4 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.02, duration: 0.15 }}
+                            onClick={() => handleAISelection(ai)}
+                            disabled={!isAvailable}
+                            className={`w-full text-left px-3 py-2.5 transition-all duration-150 flex items-center gap-3 rounded-lg group ${!isAvailable
+                              ? 'opacity-50 cursor-not-allowed grayscale'
+                              : 'hover:bg-muted/80 cursor-pointer active:scale-[0.98]'
+                              }`}
+                          >
+                            <span className={`w-5 h-5 flex items-center justify-center flex-shrink-0 rounded-md transition-colors ${!isAvailable ? 'opacity-70' : 'group-hover:bg-white/10'}`}>
+                              {ai.logo}
                             </span>
-                            {ai.functional && (
-                              <span className="text-[10px] text-muted-foreground/70 truncate">
-                                {ai.id}
-                              </span>
-                            )}
-                            {!ai.functional && (
-                              <span className="text-[10px] text-muted-foreground/60 font-medium">Coming Soon</span>
-                            )}
-                          </div>
-                        </motion.button>
-                      ))}
+                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-sm font-medium leading-none truncate ${!isAvailable
+                                  ? 'text-muted-foreground'
+                                  : 'text-foreground'
+                                  }`}>
+                                  {getAIDisplayName(ai)}
+                                </span>
+                                {isLocked && <Lock weight="fill" className="text-amber-500 w-3 h-3" />}
+                              </div>
+                              {ai.functional && !isLocked && (
+                                <span className="text-[10px] text-muted-foreground/70 truncate">
+                                  {ai.id}
+                                </span>
+                              )}
+                              {isLocked && (
+                                <span className="text-[10px] text-amber-600/80 font-medium">Pro / BYOK</span>
+                              )}
+                              {!isAvailable && !isLocked && (
+                                <span className="text-[10px] text-muted-foreground/60 font-medium">Coming Soon</span>
+                              )}
+                            </div>
+                          </motion.button>
+                        )
+                      })}
                   </div>
                 </motion.div>
               </>
@@ -450,6 +504,14 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
           document.body
         )
       }
+
+      {/* Upsell Modal */}
+      <UpsellModal
+        isOpen={upsellModel.isOpen}
+        onClose={() => setUpsellModel({ ...upsellModel, isOpen: false })}
+        modelName={upsellModel.model}
+        provider={upsellModel.provider}
+      />
     </div >
   )
 }
