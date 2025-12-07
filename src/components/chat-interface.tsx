@@ -384,15 +384,26 @@ function ChatInterface({
                               title="Ctrl + Click to select"
                             >
                               {msg.isStreaming ? (
-                                <div className="space-y-2">
-                                  <div className="prose prose-sm dark:prose-invert max-w-none">
-                                    <ReactMarkdown>{msg.streamingText || msg.text}</ReactMarkdown>
+                                (!msg.streamingText || msg.streamingText.trim() === '') ? (
+                                  <div className="flex items-center gap-3 py-2 pl-1">
+                                    <div className="flex space-x-1">
+                                      <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                      <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                      <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"></div>
+                                    </div>
+                                    <span className="text-sm text-muted-foreground/80 font-medium animate-pulse">Thinking...</span>
                                   </div>
-                                  <div className="flex items-center gap-1.5 text-muted-foreground/70 pt-1">
-                                    <div className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-pulse" />
-                                    <span className="text-xs font-medium">Generating...</span>
+                                ) : (
+                                  <div className="space-y-2">
+                                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                                      <ReactMarkdown>{msg.streamingText}</ReactMarkdown>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-muted-foreground/70 pt-1">
+                                      <div className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-pulse" />
+                                      <span className="text-xs font-medium">Generating...</span>
+                                    </div>
                                   </div>
-                                </div>
+                                )
                               ) : (
                                 <div className="prose prose-sm dark:prose-invert max-w-none">
                                   <ReactMarkdown

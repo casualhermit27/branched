@@ -386,46 +386,39 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			const mapAIModel = (
 				ai: AI
 			): { modelName: string; supported: boolean; reason?: string; displayName: string } => {
-				const supportedModels = new Set(['mistral', 'gemini', 'openai', 'claude', 'grok'])
-				const normalizedMap: Record<string, string> = {
-					'mistral-large': 'mistral',
-					mistral: 'mistral',
-					'gemini-2.5-pro': 'gemini',
-					gemini: 'gemini',
-					'gpt-4': 'openai',
-					'gpt-4o': 'openai',
-					openai: 'openai',
-					'claude-3-5-sonnet': 'claude',
-					claude: 'claude',
-					'grok-beta': 'grok',
-					grok: 'grok'
-				}
-
 				const displayName = ai.name || ai.id.toUpperCase()
 
 				if (ai.id === 'best' && getBestAvailableModel) {
 					const bestModel = getBestAvailableModel()
-					const normalizedBest = normalizedMap[bestModel] || bestModel
+					// Check if the resolved best model is supported by checking if we have a key for it
+					// or simply if it's a known provider type.
+					// aiService.generateResponse handles the routing based on string inclusion.
 					return {
-						modelName: normalizedBest,
-						supported: supportedModels.has(normalizedBest),
-						displayName: `Best (${normalizedBest})`,
-						reason: supportedModels.has(normalizedBest)
-							? undefined
-							: `Best model fallback (${normalizedBest}) is not connected yet.`
+						modelName: bestModel,
+						supported: true, // We assume 'best' resolves to something we support
+						displayName: `Best (${bestModel})`,
+						reason: undefined
 					}
 				}
 
-				const normalized =
-					normalizedMap[ai.id] || normalizedMap[ai.id.toLowerCase()] || ai.id.toLowerCase()
+				// For specific models, we pass the ID directly.
+				// We consider it "supported" if it matches one of our known provider patterns.
+				// aiService supports: mistral, gemini, gpt/openai, claude, grok
+				const id = ai.id.toLowerCase()
+				const isKnownProvider = id.includes('mistral') ||
+					id.includes('gemini') ||
+					id.includes('gpt') ||
+					id.includes('openai') ||
+					id.includes('claude') ||
+					id.includes('grok')
 
 				return {
-					modelName: normalized,
-					supported: supportedModels.has(normalized),
+					modelName: ai.id, // Pass the specific ID (e.g. 'mistral-small-latest')
+					supported: isKnownProvider,
 					displayName,
-					reason: supportedModels.has(normalized)
+					reason: isKnownProvider
 						? undefined
-						: `${displayName} isn't connected yet.`
+						: `${displayName} is not a supported model type.`
 				}
 			}
 
@@ -542,8 +535,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 						}
 					}
 
-					// Check if model is supported
-					const isSupported = false // Force mock mode for development
+					// Check if model is supported and API key is available
+					const hasApiKey = aiService.isModelAvailable(modelName)
+					const isSupported = supported && hasApiKey
 
 					if (!isSupported) {
 						// Simulate streaming for mock response

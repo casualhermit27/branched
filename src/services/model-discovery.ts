@@ -62,7 +62,7 @@ async function fetchOpenAIModels(apiKey: string): Promise<DiscoveredModel[]> {
 
         if (!response.ok) {
             console.error('OpenAI models fetch failed:', response.status)
-            return getDefaultOpenAIModels()
+            return []
         }
 
         const data = await response.json()
@@ -86,7 +86,7 @@ async function fetchOpenAIModels(apiKey: string): Promise<DiscoveredModel[]> {
         return uniqueModels.length > 0 ? uniqueModels : getDefaultOpenAIModels()
     } catch (error) {
         console.error('Error fetching OpenAI models:', error)
-        return getDefaultOpenAIModels()
+        return []
     }
 }
 
@@ -112,7 +112,7 @@ async function fetchGeminiModels(apiKey: string): Promise<DiscoveredModel[]> {
 
         if (!response.ok) {
             console.error('Gemini models fetch failed:', response.status)
-            return getDefaultGeminiModels()
+            return []
         }
 
         const data = await response.json()
@@ -130,7 +130,7 @@ async function fetchGeminiModels(apiKey: string): Promise<DiscoveredModel[]> {
         return generativeModels.length > 0 ? generativeModels : getDefaultGeminiModels()
     } catch (error) {
         console.error('Error fetching Gemini models:', error)
-        return getDefaultGeminiModels()
+        return []
     }
 }
 
@@ -145,7 +145,7 @@ async function fetchMistralModels(apiKey: string): Promise<DiscoveredModel[]> {
 
         if (!response.ok) {
             console.error('Mistral models fetch failed:', response.status)
-            return getDefaultMistralModels()
+            return []
         }
 
         const data = await response.json()
@@ -161,7 +161,7 @@ async function fetchMistralModels(apiKey: string): Promise<DiscoveredModel[]> {
         return models.length > 0 ? models : getDefaultMistralModels()
     } catch (error) {
         console.error('Error fetching Mistral models:', error)
-        return getDefaultMistralModels()
+        return []
     }
 }
 
@@ -176,7 +176,7 @@ async function fetchGrokModels(apiKey: string): Promise<DiscoveredModel[]> {
 
         if (!response.ok) {
             console.error('xAI models fetch failed:', response.status)
-            return getDefaultGrokModels()
+            return []
         }
 
         const data = await response.json()
@@ -192,7 +192,7 @@ async function fetchGrokModels(apiKey: string): Promise<DiscoveredModel[]> {
         return models.length > 0 ? models : getDefaultGrokModels()
     } catch (error) {
         console.error('Error fetching xAI models:', error)
-        return getDefaultGrokModels()
+        return []
     }
 }
 

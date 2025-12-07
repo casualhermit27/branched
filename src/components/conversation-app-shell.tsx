@@ -419,7 +419,7 @@ export default function ConversationAppShell({
 						) : (
 							<div className="flex items-center justify-center h-screen p-4">
 								{/* Optional: Add a loading spinner here if needed */}
-								<div className="w-full max-w-4xl border border-border rounded-2xl bg-card shadow-lg p-6">
+								<div className="w-full max-w-4xl border border-border rounded-2xl bg-card shadow-lg flex flex-col overflow-hidden h-auto max-h-[650px]">
 									{conversationNodes.length > 0 && (
 										<BranchNavigation
 											branches={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).map(n => ({
@@ -437,26 +437,28 @@ export default function ConversationAppShell({
 										/>
 									)}
 
-									<div className="flex items-center justify-between mb-6">
+									<div className="flex items-center justify-between">
 										{/* AIPills moved to ChatInterface */}
 									</div>
 
-									<ChatInterface
-										messages={messages}
-										onSendMessage={sendMessage}
-										selectedAIs={selectedAIs}
-										onBranchFromMessage={branchFromMessage}
-										currentBranch={currentBranch}
-										isGenerating={isGenerating}
-										onStopGeneration={stopGeneration}
-										existingBranchesCount={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length}
-										isMain={true}
-										onExportImport={() => setShowExportImport(true)}
-										onAddAI={addAI}
-										onRemoveAI={removeAI}
-										onSelectSingle={selectSingleAIById}
-										getBestAvailableModel={getBestAvailableModel}
-									/>
+									<div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+										<ChatInterface
+											messages={messages}
+											onSendMessage={sendMessage}
+											selectedAIs={selectedAIs}
+											onBranchFromMessage={branchFromMessage}
+											currentBranch={currentBranch}
+											isGenerating={isGenerating}
+											onStopGeneration={stopGeneration}
+											existingBranchesCount={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length}
+											isMain={true}
+											onExportImport={() => setShowExportImport(true)}
+											onAddAI={addAI}
+											onRemoveAI={removeAI}
+											onSelectSingle={selectSingleAIById}
+											getBestAvailableModel={getBestAvailableModel}
+										/>
+									</div>
 								</div>
 							</div>
 						)

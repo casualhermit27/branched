@@ -63,6 +63,7 @@ abstract class BaseAIAPI {
   }
 
   abstract generateResponse(
+    model: string,
     message: string,
     context: ConversationContext,
     onChunk?: (chunk: string) => void,
@@ -85,6 +86,7 @@ export class MistralAPI extends BaseAIAPI {
   }
 
   async generateResponse(
+    model: string,
     message: string,
     context: ConversationContext,
     onChunk?: (chunk: string) => void,
@@ -96,8 +98,11 @@ export class MistralAPI extends BaseAIAPI {
 
     const conversationHistory = this.buildConversationHistory(context)
 
+    // Use specific model if passed, otherwise default
+    const effectiveModel = (model && model !== 'mistral') ? model : this.model
+
     const requestBody = {
-      model: this.model,
+      model: effectiveModel,
       messages: [
         ...conversationHistory,
         { role: 'user', content: message }
@@ -218,6 +223,7 @@ export class GeminiAPI extends BaseAIAPI {
   }
 
   async generateResponse(
+    model: string,
     message: string,
     context: ConversationContext,
     onChunk?: (chunk: string) => void,
@@ -226,6 +232,10 @@ export class GeminiAPI extends BaseAIAPI {
     if (!this.apiKey) {
       throw new Error('Gemini API key not configured')
     }
+
+    // Use specific model if passed, otherwise default
+    const effectiveModel = (model && model !== 'gemini') ? model : (process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-2.0-flash-exp')
+    const url = process.env.NEXT_PUBLIC_GEMINI_API_URL || `https://generativelanguage.googleapis.com/v1beta/models/${effectiveModel}:generateContent`
 
     const conversationHistory = this.buildConversationHistory(context)
     const requestBody = {
@@ -240,7 +250,7 @@ export class GeminiAPI extends BaseAIAPI {
     }
 
     try {
-      const response = await fetch(`${this.apiUrl}?key=${this.apiKey}`, {
+      const response = await fetch(`${url}?key=${this.apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
@@ -306,12 +316,16 @@ export class OpenAIAPI extends BaseAIAPI {
   }
 
   async generateResponse(
+    model: string,
     message: string,
     context: ConversationContext,
     onChunk?: (chunk: string) => void,
     signal?: AbortSignal
   ): Promise<AIResponse> {
     if (!this.apiKey) throw new Error('OpenAI API key not configured')
+
+    // Use specific model if passed, otherwise default
+    const effectiveModel = (model && !model.includes('openai') && !model.includes('gpt-model')) ? model : this.model
 
     const messages = [
       { role: 'system', content: context.memoryContext || 'You are a helpful assistant.' },
@@ -326,7 +340,7 @@ export class OpenAIAPI extends BaseAIAPI {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: this.model,
+        model: effectiveModel,
         messages,
         stream: !!onChunk
       }),
@@ -386,12 +400,16 @@ export class ClaudeAPI extends BaseAIAPI {
   }
 
   async generateResponse(
+    model: string,
     message: string,
     context: ConversationContext,
     onChunk?: (chunk: string) => void,
     signal?: AbortSignal
   ): Promise<AIResponse> {
     if (!this.apiKey) throw new Error('Anthropic API key not configured')
+
+    // Use specific model if passed, otherwise default
+    const effectiveModel = (model && !model.includes('claude-ai')) ? model : this.model
 
     const messages = [
       ...context.messages.slice(-10).map(m => ({ role: m.isUser ? 'user' : 'assistant', content: m.text })),
@@ -407,7 +425,7 @@ export class ClaudeAPI extends BaseAIAPI {
         'dangerously-allow-browser': 'true' // Required for client-side calls
       },
       body: JSON.stringify({
-        model: this.model,
+        model: effectiveModel,
         messages,
         system: context.memoryContext || '',
         stream: !!onChunk,
@@ -474,6 +492,7 @@ export class GrokAPI extends OpenAIAPI {
   }
 
   async generateResponse(
+    model: string,
     message: string,
     context: ConversationContext,
     onChunk?: (chunk: string) => void,
@@ -491,7 +510,7 @@ export class GrokAPI extends OpenAIAPI {
     this.model = this.xModel
 
     try {
-      return await super.generateResponse(message, context, onChunk, signal)
+      return await super.generateResponse(model, message, context, onChunk, signal)
     } finally {
       // Restore defaults
       // @ts-ignore
@@ -527,11 +546,11 @@ export class AIService {
   ): Promise<AIResponse> {
     const normalizedModel = model.toLowerCase()
 
-    if (normalizedModel.includes('mistral')) return this.mistralAPI.generateResponse(message, context, onChunk, signal)
-    if (normalizedModel.includes('gemini')) return this.geminiAPI.generateResponse(message, context, onChunk, signal)
-    if (normalizedModel.includes('gpt') || normalizedModel.includes('openai')) return this.openaiAPI.generateResponse(message, context, onChunk, signal)
-    if (normalizedModel.includes('claude')) return this.claudeAPI.generateResponse(message, context, onChunk, signal)
-    if (normalizedModel.includes('grok')) return this.grokAPI.generateResponse(message, context, onChunk, signal)
+    if (normalizedModel.includes('mistral')) return this.mistralAPI.generateResponse(model, message, context, onChunk, signal)
+    if (normalizedModel.includes('gemini')) return this.geminiAPI.generateResponse(model, message, context, onChunk, signal)
+    if (normalizedModel.includes('gpt') || normalizedModel.includes('openai')) return this.openaiAPI.generateResponse(model, message, context, onChunk, signal)
+    if (normalizedModel.includes('claude')) return this.claudeAPI.generateResponse(model, message, context, onChunk, signal)
+    if (normalizedModel.includes('grok')) return this.grokAPI.generateResponse(model, message, context, onChunk, signal)
 
     throw new Error(`Unsupported model: ${model}`)
   }
