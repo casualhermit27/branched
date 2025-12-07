@@ -50,13 +50,7 @@ export function useConversationMessageActions({
 	} = state
 
 	const getBestAvailableModel = useCallback((): string => {
-		if (aiService.isModelAvailable('gemini')) {
-			return 'gemini'
-		}
-		if (aiService.isModelAvailable('mistral')) {
-			return 'mistral'
-		}
-		return 'gpt-4'
+		return aiService.getBestModel()
 	}, [])
 
 	const addAI = useCallback((ai: AI) => {

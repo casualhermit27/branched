@@ -1,5 +1,6 @@
 // AI API Service - Gateway Edition
 // Routes all requests through /api/chat for Tiered Access & Security
+import { getCachedModels } from './model-discovery'
 
 export interface Message {
   id: string
@@ -337,7 +338,7 @@ export class AIService {
   ): Promise<AIResponse> {
     const normalizedModel = model.toLowerCase()
 
-    if (normalizedModel.includes('mistral')) return this.mistralAPI.generateResponse(model, message, context, onChunk, signal)
+    if (normalizedModel.includes('mistral') || normalizedModel.includes('codestral') || normalizedModel.includes('ministral')) return this.mistralAPI.generateResponse(model, message, context, onChunk, signal)
     if (normalizedModel.includes('gemini')) return this.geminiAPI.generateResponse(model, message, context, onChunk, signal)
     if (normalizedModel.includes('gpt') || normalizedModel.includes('openai')) return this.openaiAPI.generateResponse(model, message, context, onChunk, signal)
     if (normalizedModel.includes('claude')) return this.claudeAPI.generateResponse(model, message, context, onChunk, signal)
@@ -356,7 +357,7 @@ export class AIService {
     const normalizedModel = model.toLowerCase()
 
     // Check local keys
-    if (normalizedModel.includes('mistral')) return this.mistralAPI.hasKey()
+    if (normalizedModel.includes('mistral') || normalizedModel.includes('codestral') || normalizedModel.includes('ministral')) return this.mistralAPI.hasKey()
     if (normalizedModel.includes('gemini')) return this.geminiAPI.hasKey()
     if (normalizedModel.includes('gpt') || normalizedModel.includes('openai')) return this.openaiAPI.hasKey()
     if (normalizedModel.includes('claude')) return this.claudeAPI.hasKey()
@@ -377,6 +378,31 @@ export class AIService {
 
   getKey(provider: string): string {
     return getApiKey(provider.toLowerCase(), '')
+  }
+
+  // Get the best available model based on keys and discovered models
+  getBestModel(): string {
+    // Priority 1: Discovered models from keys
+    const providers = ['openai', 'claude', 'gemini', 'mistral', 'grok']
+
+    for (const provider of providers) {
+      if (this.getKey(provider)) {
+        const cached = getCachedModels(provider)
+        if (cached && cached.length > 0) {
+          // Return the first (usually best/newest) model from the discovered list
+          return cached[0].id
+        }
+      }
+    }
+
+    // Priority 2: Fallback to known free/available models if keys exist but no cache yet (or hardcoded fallback)
+    if (this.mistralAPI.hasKey()) return 'mistral-large-latest'
+    if (this.geminiAPI.hasKey()) return 'gemini-2.0-flash-exp'
+    if (this.openaiAPI.hasKey()) return 'gpt-4o'
+    if (this.claudeAPI.hasKey()) return 'claude-3-5-sonnet-20241022'
+
+    // Priority 3: Default fallback (likely to fail or mock)
+    return 'gpt-4o'
   }
 }
 

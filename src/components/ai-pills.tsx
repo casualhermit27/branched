@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, X, Sparkle, Robot, CaretUp, CaretDown, Check, Lock } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { discoverModels, DiscoveredModel } from '../services/model-discovery'
+import { discoverModels, DiscoveredModel, getCachedModels, setCachedModels } from '../services/model-discovery'
 import { aiService } from '../services/ai-api'
 import { UpsellModal } from './upsell-modal'
 
@@ -18,15 +18,15 @@ export interface AI {
 export const availableAIs: AI[] = [
   // Functional AIs (with API integration)
   {
-    id: 'mistral-large',
-    name: 'Mistral Large',
+    id: 'mistral-large-latest',
+    name: 'Mistral Large 3',
     color: 'bg-purple-100 text-purple-800 border-purple-200',
     logo: <img src="/logos/mistral-ai_logo.svg" alt="Mistral" width="16" height="16" />,
     functional: true
   },
   {
-    id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro',
+    id: 'gemini-3.0-pro-preview',
+    name: 'Gemini 3.0 Pro',
     color: 'bg-blue-100 text-blue-800 border-blue-200',
     logo: <img src="/logos/gemini.svg" alt="Gemini" width="16" height="16" />,
     functional: true
@@ -34,10 +34,17 @@ export const availableAIs: AI[] = [
 
   // Non-functional AIs (greyed out but visible)
   {
-    id: 'gpt-4',
-    name: 'GPT-4',
+    id: 'gpt-5.1-thinking',
+    name: 'GPT-5.1 Thinking',
     color: 'bg-gray-100 text-gray-500 border-gray-200',
     logo: <img src="/logos/openai.svg" alt="OpenAI" width="16" height="16" />,
+    functional: false
+  },
+  {
+    id: 'claude-4-5-opus-20251124',
+    name: 'Claude 4.5 Opus',
+    color: 'bg-gray-100 text-gray-500 border-gray-200',
+    logo: <img src="/logos/claude-ai-icon.svg" alt="Claude" width="16" height="16" />,
     functional: false
   },
   {
@@ -48,15 +55,8 @@ export const availableAIs: AI[] = [
     functional: false
   },
   {
-    id: 'claude-3-5-sonnet',
+    id: 'claude-3-5-sonnet-20241022',
     name: 'Claude 3.5 Sonnet',
-    color: 'bg-gray-100 text-gray-500 border-gray-200',
-    logo: <img src="/logos/claude-ai-icon.svg" alt="Claude" width="16" height="16" />,
-    functional: false
-  },
-  {
-    id: 'claude-3-opus',
-    name: 'Claude 3 Opus',
     color: 'bg-gray-100 text-gray-500 border-gray-200',
     logo: <img src="/logos/claude-ai-icon.svg" alt="Claude" width="16" height="16" />,
     functional: false
@@ -183,7 +183,16 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
         const hasKey = aiService.getKey(provider).length > 0
         if (hasKey) {
           try {
-            const models = await discoverModels(provider, aiService.getKey(provider))
+            let models = getCachedModels(provider)
+
+            // If not in cache, discover and cache them
+            if (!models || models.length === 0) {
+              models = await discoverModels(provider, aiService.getKey(provider))
+              if (models.length > 0) {
+                setCachedModels(provider, models)
+              }
+            }
+
             const mappedAIs = models.map(m => {
               const staticDef = availableAIs.find(s => s.id === m.id)
               return {
@@ -300,9 +309,31 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
     combinedAIs.push(bestOption)
   }
 
+  // 1. Add all discovered models (these are definitely usable)
   discoveredAIs.forEach(discovered => {
     if (!combinedAIs.find(a => a.id === discovered.id)) {
       combinedAIs.push(discovered)
+    }
+  })
+
+  // 2. Add hardcoded models ONLY if:
+  //    a) We haven't discovered models for their provider yet (e.g. no key entered)
+  //    b) AND they are marked as functional OR they are premium upsell targets
+  //    c) AND they aren't already in the list
+  availableAIs.forEach(ai => {
+    const provider = getProviderForId(ai.id)
+    const hasKey = aiService.getKey(provider).length > 0
+
+    // If we have a key, we trust the discovered list for this provider. 
+    // Don't add hardcoded ones (unless they were somehow discovered, which is handled above).
+    if (hasKey) return
+
+    // If no key, we show "functional" ones (free tier) or specific Premium ones for upsell
+    const isPremium = premiumModels.includes(ai.id)
+    if (ai.functional || isPremium) {
+      if (!combinedAIs.find(a => a.id === ai.id)) {
+        combinedAIs.push(ai)
+      }
     }
   })
 

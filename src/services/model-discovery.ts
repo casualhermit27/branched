@@ -238,29 +238,34 @@ export async function validateApiKey(apiKey: string): Promise<{ valid: boolean; 
 function formatModelName(id: string): string {
     // Convert model IDs to human-readable names
     const nameMap: Record<string, string> = {
+        // OpenAI
+        'gpt-5.1-thinking': 'GPT-5.1 Thinking',
+        'gpt-5.1-instant': 'GPT-5.1 Instant',
+        'gpt-5.1-codex-max': 'GPT-5.1 Codex Max',
         'gpt-4o': 'GPT-4o',
         'gpt-4o-mini': 'GPT-4o Mini',
-        'gpt-4-turbo': 'GPT-4 Turbo',
-        'gpt-4-turbo-preview': 'GPT-4 Turbo Preview',
-        'gpt-4': 'GPT-4',
-        'gpt-3.5-turbo': 'GPT-3.5 Turbo',
-        'gpt-3.5-turbo-16k': 'GPT-3.5 Turbo 16K',
+
+        // Anthropic
+        'claude-4-5-opus-20251124': 'Claude 4.5 Opus',
+        'claude-4-5-sonnet-20250921': 'Claude 4.5 Sonnet',
+        'claude-4-5-haiku-20251015': 'Claude 4.5 Haiku',
         'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
-        'claude-3-5-haiku-20241022': 'Claude 3.5 Haiku',
-        'claude-3-opus-20240229': 'Claude 3 Opus',
-        'claude-3-sonnet-20240229': 'Claude 3 Sonnet',
-        'claude-3-haiku-20240307': 'Claude 3 Haiku',
+
+        // Google
+        'gemini-3.0-pro-preview': 'Gemini 3.0 Pro',
+        'gemini-3.0-pro-image-preview': 'Gemini 3.0 Pro Vision',
         'gemini-2.0-flash-exp': 'Gemini 2.0 Flash',
         'gemini-1.5-pro': 'Gemini 1.5 Pro',
-        'gemini-1.5-flash': 'Gemini 1.5 Flash',
-        'gemini-pro': 'Gemini Pro',
-        'mistral-large-latest': 'Mistral Large',
-        'mistral-medium-latest': 'Mistral Medium',
-        'mistral-small-latest': 'Mistral Small',
-        'open-mistral-7b': 'Mistral 7B',
-        'open-mixtral-8x7b': 'Mixtral 8x7B',
-        'grok-beta': 'Grok Beta',
+
+        // Mistral
+        'mistral-large-latest': 'Mistral Large 3',
+        'mistral-large-2411': 'Mistral Large 3',
+        'ministral-3-latest': 'Ministral 3',
+        'codestral-2501': 'Codestral 2.0',
+
+        // xAI
         'grok-2': 'Grok 2',
+        'grok-beta': 'Grok Beta',
     }
 
     return nameMap[id] || id
@@ -274,11 +279,11 @@ function formatModelName(id: string): string {
 
 function getModelDescription(id: string): string {
     const descMap: Record<string, string> = {
-        'gpt-4o': 'Most capable GPT-4 model',
-        'gpt-4o-mini': 'Fast and affordable',
-        'gpt-4-turbo': 'GPT-4 with vision',
-        'gpt-4': 'Original GPT-4',
-        'gpt-3.5-turbo': 'Fast and efficient',
+        'gpt-5.1-thinking': 'Advanced reasoning & problem solving',
+        'gpt-5.1-instant': 'Fast, conversational responses',
+        'claude-4-5-opus-20251124': 'State-of-the-art coding & reasoning',
+        'gemini-3.0-pro-preview': '1M context, multimodal reasoning',
+        'mistral-large-latest': 'Top-tier open weights model',
     }
     return descMap[id] || ''
 }
@@ -297,31 +302,30 @@ function deduplicateModels(models: DiscoveredModel[]): DiscoveredModel[] {
 // Default model lists (fallbacks)
 function getDefaultOpenAIModels(): DiscoveredModel[] {
     return [
-        { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', description: 'Most capable GPT-4 model' },
-        { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai', description: 'Fast and affordable' },
-        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openai', description: 'GPT-4 with vision' },
-        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'openai', description: 'Fast and efficient' },
+        { id: 'gpt-5.1-thinking', name: 'GPT-5.1 Thinking', provider: 'openai', description: 'Advanced reasoning' },
+        { id: 'gpt-5.1-instant', name: 'GPT-5.1 Instant', provider: 'openai', description: 'Fast chat' },
+        { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', description: 'Reliable all-rounder' },
     ]
 }
 
 function getDefaultGeminiModels(): DiscoveredModel[] {
     return [
-        { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash', provider: 'gemini', description: 'Latest Gemini model' },
-        { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'gemini', description: 'Advanced reasoning' },
-        { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', provider: 'gemini', description: 'Fast responses' },
+        { id: 'gemini-3.0-pro-preview', name: 'Gemini 3.0 Pro', provider: 'gemini', description: 'Most intelligent Gemini' },
+        { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash', provider: 'gemini', description: 'Fast responses' },
     ]
 }
 
 function getDefaultMistralModels(): DiscoveredModel[] {
     return [
-        { id: 'mistral-large-latest', name: 'Mistral Large', provider: 'mistral', description: 'Most capable' },
-        { id: 'mistral-small-latest', name: 'Mistral Small', provider: 'mistral', description: 'Fast and efficient' },
+        { id: 'mistral-large-latest', name: 'Mistral Large 3', provider: 'mistral', description: 'Most capable' },
+        { id: 'ministral-3-latest', name: 'Ministral 3', provider: 'mistral', description: 'Efficient edge model' },
+        { id: 'codestral-latest', name: 'Codestral', provider: 'mistral', description: 'Code specialization' },
     ]
 }
 
 function getDefaultGrokModels(): DiscoveredModel[] {
     return [
-        { id: 'grok-beta', name: 'Grok Beta', provider: 'grok', description: 'xAI flagship model' },
+        { id: 'grok-2', name: 'Grok 2', provider: 'grok', description: 'Latest xAI model' },
     ]
 }
 

@@ -6,7 +6,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { List, X, ArrowsOut, ArrowsIn, Clock, GitBranch, Trash, Gear, Sparkle as SparklesIcon, Eye, EyeSlash, Key, CheckCircle, XCircle, Warning, ArrowsLeftRight, CaretDown } from '@phosphor-icons/react'
 import ConversationHistory from './conversation-history'
 import { aiService } from '@/services/ai-api'
-import { detectProviderFromKey, discoverModels, validateApiKey, type DiscoveredModel } from '@/services/model-discovery'
+import { detectProviderFromKey, discoverModels, validateApiKey, setCachedModels, type DiscoveredModel } from '@/services/model-discovery'
+
+
 
 interface Message {
   id: string
@@ -732,6 +734,9 @@ export default function Sidebar({
                                       ...prev,
                                       [selectedProvider]: result.models
                                     }))
+                                    // Update global cache so AIPills and AIService can see it immediately
+                                    setCachedModels(selectedProvider, result.models)
+
                                     // Store models in localStorage for persistence
                                     localStorage.setItem(`models_${selectedProvider}`, JSON.stringify(result.models))
                                     setKeyValidation({ valid: true, message: `Key saved! Found ${result.models.length} models` })
