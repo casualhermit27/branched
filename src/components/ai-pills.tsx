@@ -322,7 +322,7 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 border transition-all duration-200 shadow-sm hover:shadow-md ${freshAI.color}`}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 border transition-all duration-200 ${freshAI.color}`}
               >
                 {freshAI.logo}
                 <span className="font-medium">{getAIDisplayName(ai)}</span>
@@ -349,7 +349,7 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
                 disabled={selectedAIs.length >= MAX_AIS}
                 className={`nodrag px-3 py-1.5 bg-card border rounded-full flex items-center gap-2 transition-all duration-200 ${selectedAIs.length >= MAX_AIS
                   ? 'border-border/30 text-muted-foreground/40 cursor-not-allowed'
-                  : 'border-border/40 text-foreground hover:bg-muted/50 hover:border-border/60 active:scale-95 shadow-sm hover:shadow'
+                  : 'border-border text-foreground hover:bg-muted/50 active:scale-95'
                   }`}
               >
                 <Plus size={13} />
