@@ -22,6 +22,7 @@ import { GlobalSearch } from '@/components/global-search'
 import type { ConversationState } from '@/hooks/use-conversation-state'
 import type { ConversationActions } from '@/hooks/use-conversation-actions'
 import { EmptyState } from '@/components/empty-state'
+import { LoadingScreen } from '@/components/loading-screen'
 
 interface CommandPaletteCommand {
 	id: string
@@ -347,12 +348,7 @@ export default function ConversationAppShell({
 
 			{
 				state.isLoading ? (
-					<div className="flex items-center justify-center h-screen bg-background">
-						<div className="flex flex-col items-center gap-4">
-							<div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-							<p className="text-muted-foreground text-sm font-medium">Loading conversation...</p>
-						</div>
-					</div>
+					<LoadingScreen />
 				) : viewMode === 'comparison' ? (
 					// Comparison view - show on top, FlowCanvas stays mounted but hidden below
 					<>
