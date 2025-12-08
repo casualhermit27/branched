@@ -108,20 +108,20 @@ export const messageStore = (() => {
 		// Return a dummy instance during SSR
 		return {
 			get: () => undefined,
-			set: () => {},
+			set: () => { },
 			getMany: () => [],
 			has: () => false,
-			delete: () => {},
+			delete: () => { },
 			getAll: () => [],
 			getByNodeId: () => [],
-			clear: () => {},
+			clear: () => { },
 			size: () => 0,
-			setMany: () => {},
+			setMany: () => { },
 			export: () => [],
-			import: () => {}
-		} as MessageStore
+			import: () => { }
+		} as unknown as MessageStore
 	}
-	
+
 	if (!messageStoreInstance) {
 		messageStoreInstance = new MessageStore()
 	}

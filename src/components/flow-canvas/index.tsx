@@ -75,7 +75,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		onSelectionChange,
 		onMessageSelectionChange,
 		conversationId,
-		onActiveNodeChange
+		onActiveNodeChange,
+		onEditMessage
 	} = props
 
 	const state = useFlowCanvasState()
@@ -884,7 +885,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 						focusOnNode(reactFlowInstance, targetNode.id, nodes)
 						setNodeActive(targetNode.id)
 					}
-				}
+				},
+				onEditMessage
 			}
 
 			// Cache the new data
@@ -926,7 +928,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		abortGeneration,
 		handleMessageSelect,
 		state.selectedMessageIds,
-		selectedNodeIds
+		selectedNodeIds,
+		onEditMessage
 	])
 
 	// ============================================

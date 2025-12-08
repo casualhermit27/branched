@@ -920,6 +920,173 @@ export function useConversationMessageActions({
 		setConversationNodes
 	])
 
+	const editMessage = useCallback(async (nodeId: string, messageId: string, newText: string) => {
+		if (checkLimit && !checkLimit('message')) return
+
+		// 1. Identify Target Node and Messages
+		let targetNodeMessages: Message[] = []
+		let targetAIs: AI[] = selectedAIs
+
+		if (nodeId === 'main') {
+			targetNodeMessages = messages
+		} else {
+			const node = conversationNodes.find(n => n.id === nodeId)
+			if (node) {
+				targetNodeMessages = node.data?.messages || []
+				if (node.data?.selectedAIs?.length) {
+					targetAIs = node.data.selectedAIs
+				}
+			}
+		}
+
+		if (!targetNodeMessages.length) return
+
+		// 2. Truncate and Update
+		const msgIndex = targetNodeMessages.findIndex(m => m.id === messageId)
+		if (msgIndex === -1) return
+
+		// Keep messages up to this one
+		const truncatedMessages = targetNodeMessages.slice(0, msgIndex + 1)
+
+		// Update the text
+		truncatedMessages[msgIndex] = { ...truncatedMessages[msgIndex], text: newText }
+
+		// Update State
+		if (nodeId === 'main') {
+			setMessages(truncatedMessages)
+		} else {
+			setConversationNodes(prev => prev.map(n =>
+				n.id === nodeId
+					? { ...n, data: { ...n.data, messages: truncatedMessages } }
+					: n
+			))
+		}
+
+		// 3. Regenerate Response
+		setIsGenerating(true)
+		const abortController = new AbortController()
+		mainAbortControllerRef.current = abortController
+
+		const selectedAI = targetAIs[0] // Simplify to single AI for edit for now, or loop like sendMessage
+
+		if (!selectedAI) {
+			setIsGenerating(false)
+			return
+		}
+
+		try {
+			let modelName = selectedAI.id === 'best' ? getBestAvailableModel() : selectedAI.id
+
+			// Handle model mapping (copied from sendMessage)
+			if (selectedAI.id === 'gemini-2.5-pro') modelName = 'gemini'
+			else if (selectedAI.id === 'mistral-large') modelName = 'mistral'
+			else if (selectedAI.id.includes('gpt')) modelName = 'openai'
+			else if (selectedAI.id.includes('claude')) modelName = 'claude'
+			else if (selectedAI.id.includes('grok')) modelName = 'grok'
+			else if (selectedAI.id.includes('gemini')) modelName = 'gemini'
+
+			const hasApiKey = aiService.isModelAvailable(modelName)
+			const streamingMessageId = `msg-${Date.now()}`
+			const streamingMessage: Message = {
+				id: streamingMessageId,
+				text: '',
+				isUser: false,
+				timestamp: Date.now(),
+				parentId: messageId,
+				children: [],
+				aiModel: selectedAI.id,
+				isStreaming: true,
+				streamingText: ''
+			}
+
+			// Add streaming message to state
+			if (nodeId === 'main') {
+				setMessages(prev => [...prev, streamingMessage])
+			} else {
+				setConversationNodes(prev => prev.map(n =>
+					n.id === nodeId
+						? { ...n, data: { ...n.data, messages: [...n.data.messages, streamingMessage] } }
+						: n
+				))
+			}
+
+			let finalResponse = ''
+			if (hasApiKey) {
+				const context: ConversationContext = {
+					messages: truncatedMessages,
+					currentBranch: nodeId
+				}
+
+				const onChunk = (chunk: string) => {
+					if (nodeId === 'main') {
+						setMessages(prev => prev.map(msg =>
+							msg.id === streamingMessageId ? { ...msg, streamingText: (msg.streamingText || '') + chunk } : msg
+						))
+					} else {
+						setConversationNodes(prev => prev.map(n => {
+							if (n.id === nodeId) {
+								const msgs = n.data.messages || []
+								const idx = msgs.findIndex((m: Message) => m.id === streamingMessageId)
+								if (idx !== -1) {
+									const newMsgs = [...msgs]
+									newMsgs[idx] = { ...newMsgs[idx], streamingText: (newMsgs[idx].streamingText || '') + chunk }
+									return { ...n, data: { ...n.data, messages: newMsgs } }
+								}
+							}
+							return n
+						}))
+					}
+				}
+
+				const result = await aiService.generateResponse(modelName, newText, context, onChunk, abortController.signal)
+				finalResponse = result.text
+			} else {
+				// Mock response
+				finalResponse = `[Mock Edit] ${selectedAI.name}: response to "${newText}"`
+				// Simulate streaming... (simplified)
+				if (nodeId === 'main') {
+					setMessages(prev => prev.map(msg => msg.id === streamingMessageId ? { ...msg, streamingText: finalResponse } : msg))
+				}
+			}
+
+			// Finalize
+			if (nodeId === 'main') {
+				setMessages(prev => prev.map(msg =>
+					msg.id === streamingMessageId ? { ...msg, text: finalResponse, isStreaming: false, streamingText: undefined } : msg
+				))
+			} else {
+				setConversationNodes(prev => prev.map(n => {
+					if (n.id === nodeId) {
+						const msgs = n.data.messages || []
+						const idx = msgs.findIndex((m: Message) => m.id === streamingMessageId)
+						if (idx !== -1) {
+							const newMsgs = [...msgs]
+							newMsgs[idx] = { ...newMsgs[idx], text: finalResponse, isStreaming: false, streamingText: undefined }
+							return { ...n, data: { ...n.data, messages: newMsgs } }
+						}
+					}
+					return n
+				}))
+			}
+
+		} catch (error) {
+			console.error('Edit generation error:', error)
+		} finally {
+			setIsGenerating(false)
+			mainAbortControllerRef.current = null
+		}
+
+	}, [
+		checkLimit,
+		messages,
+		conversationNodes,
+		selectedAIs,
+		setMessages,
+		setConversationNodes,
+		setIsGenerating,
+		getBestAvailableModel
+	])
+
 	return {
 		getBestAvailableModel,
 		addAI,
@@ -932,7 +1099,8 @@ export function useConversationMessageActions({
 		handleBranchWarning,
 		handleBranchWarningConfirm,
 		handleBranchWarningCancel,
-		updateConversationNodes
+		updateConversationNodes,
+		editMessage
 	}
 }
 

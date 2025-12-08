@@ -227,11 +227,11 @@ export function getEdgeStyleForState(
 export function highlightEdge(edge: Edge): Edge {
 	return {
 		...edge,
+		animated: true,
 		style: {
 			...edge.style,
 			stroke: '#3b82f6', // blue-500
-			strokeWidth: 3,
-			animated: true
+			strokeWidth: 3
 		}
 	}
 }
@@ -242,10 +242,10 @@ export function highlightEdge(edge: Edge): Edge {
 export function unhighlightEdge(edge: Edge, originalStyle?: EdgeStyle): Edge {
 	return {
 		...edge,
+		animated: false,
 		style: originalStyle || {
 			stroke: '#cbd5e1',
-			strokeWidth: 2,
-			animated: false
+			strokeWidth: 2
 		}
 	}
 }

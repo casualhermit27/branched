@@ -3,7 +3,7 @@ import { generateServerResponse } from '@/lib/server-ai'
 import connectDB from '@/lib/mongodb'
 import { User } from '@/models/User'
 
-export const runtime = 'edge' // Optional: if using Edge runtime, but Mongoose doesn't support Edge well. Safe to remove or use nodejs.
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {

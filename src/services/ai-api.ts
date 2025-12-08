@@ -97,11 +97,22 @@ abstract class BaseAIAPI {
 
     if (!response.ok) {
       // Handle Limits
-      if (response.status === 402) throw new Error('Credit limit reached')
-      if (response.status === 403) throw new Error('Upgrade required for this model')
+      if (response.status === 402) throw new Error('Credit limit reached. Please upgrade your plan or add credits.')
+      if (response.status === 403) throw new Error('Upgrade required for this model. Please upgrade to access premium models.')
+      if (response.status === 404) throw new Error('API endpoint not found. Please check your configuration or try again later.')
+      if (response.status === 401) throw new Error('Authentication failed. Please check your API key in Settings.')
+      if (response.status === 429) throw new Error('Too many requests. Please wait a moment and try again.')
+      if (response.status >= 500) throw new Error('Server error. The AI service is temporarily unavailable. Please try again later.')
 
-      const text = await response.text()
-      throw new Error(`API Error: ${response.status} - ${text}`)
+      // Try to parse as JSON for structured errors, fallback to generic message
+      try {
+        const errorData = await response.json()
+        const errorMessage = errorData.error || errorData.message || `Request failed with status ${response.status}`
+        throw new Error(errorMessage)
+      } catch (parseError) {
+        // If JSON parsing fails, provide a generic but clean error
+        throw new Error(`Unable to process request. Please try again or contact support. (Error ${response.status})`)
+      }
     }
 
     return response
@@ -328,6 +339,9 @@ export class AIService {
     this.claudeAPI = new ClaudeAPI()
     this.grokAPI = new GrokAPI()
   }
+
+  public getMistralAPI(): MistralAPI { return this.mistralAPI }
+  public getGeminiAPI(): GeminiAPI { return this.geminiAPI }
 
   async generateResponse(
     model: string,

@@ -138,6 +138,14 @@ const getProviderColor = (provider: string) => {
   }
 }
 
+
+const getProviderForId = (id: string) => {
+  if (id.includes('gpt')) return 'openai'
+  if (id.includes('claude')) return 'anthropic'
+  if (id.includes('gemini')) return 'google'
+  return 'openai'
+}
+
 // Add "Best" as the first option
 export const allAIOptions: AI[] = [
   {
@@ -301,6 +309,9 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
     setShowDropdown(false)
   }
 
+  // Premium models that need locking
+  const premiumModels = ['gpt-4', 'gpt-4o', 'claude-3-5-sonnet', 'claude-3-opus', 'gemini-1.5-pro']
+
   // STRICT MODE: Only show discovered AIs + Best
   const combinedAIs: AI[] = []
 
@@ -349,14 +360,8 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
     provider: ''
   })
 
-  // Premium models that need locking
-  const premiumModels = ['gpt-4', 'gpt-4o', 'claude-3-5-sonnet', 'claude-3-opus', 'gemini-1.5-pro']
-  const getProviderForId = (id: string) => {
-    if (id.includes('gpt')) return 'openai'
-    if (id.includes('claude')) return 'anthropic'
-    if (id.includes('gemini')) return 'google'
-    return 'openai'
-  }
+
+
 
   const handleAISelection = (ai: AI) => {
     // Check if model is premium and needs unlocking

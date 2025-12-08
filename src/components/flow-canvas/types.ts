@@ -81,6 +81,7 @@ export interface ChatNodeData {
 	depth?: number
 	onNavigateToMessage?: (messageId: string) => void
 	isDragging?: boolean
+	onEditMessage?: (nodeId: string, messageId: string, newText: string) => void
 }
 
 export interface FlowCanvasProps {
@@ -127,6 +128,7 @@ export interface FlowCanvasProps {
 	onMessageSelectionChange?: (selectedMessageIds: string[]) => void
 	conversationId?: string | null
 	onActiveNodeChange?: (nodeId: string | null) => void
+	onEditMessage?: (nodeId: string, messageId: string, newText: string) => void
 }
 
 export interface LayoutConfig {

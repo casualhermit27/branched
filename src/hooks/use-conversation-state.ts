@@ -5,6 +5,7 @@ export interface AI {
 	name: string
 	color: string
 	logo: React.JSX.Element
+	functional?: boolean
 }
 
 export interface Message {
@@ -41,7 +42,8 @@ export function useConversationState() {
 	const [viewMode, setViewMode] = useState<'map' | 'chat' | 'comparison'>(() => {
 		if (typeof window !== 'undefined') {
 			const saved = localStorage.getItem('branched_viewMode')
-			if (saved === 'map' || saved === 'chat' || saved === 'comparison') {
+			// Only restore 'map' or 'chat' - comparison mode should not persist across sessions
+			if (saved === 'map' || saved === 'chat') {
 				return saved
 			}
 		}

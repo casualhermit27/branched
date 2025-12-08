@@ -159,7 +159,7 @@ export class UnifiedAPIWrapper {
     // This would call the actual API based on model type
     // For now, delegate to existing API classes
     const { aiService } = await import('./ai-api')
-    
+
     // Map unified request to service-specific format
     const message = request.messages[request.messages.length - 1]?.content || ''
     const context = {
@@ -174,9 +174,9 @@ export class UnifiedAPIWrapper {
     }
 
     if (config.id === 'mistral') {
-      return await aiService.mistralAPI.generateResponse(message, context)
+      return await aiService.getMistralAPI().generateResponse(config.modelName || 'mistral-large-latest', message, context)
     } else if (config.id === 'gemini') {
-      return await aiService.geminiAPI.generateResponse(message, context)
+      return await aiService.getGeminiAPI().generateResponse(config.modelName || 'models/gemini-2.0-flash-exp', message, context)
     }
 
     throw new Error(`Unsupported model: ${config.id}`)
@@ -191,7 +191,7 @@ export class UnifiedAPIWrapper {
 
   private calculateCost(config: ModelConfig, tokensUsed: number, isOutput: boolean): number {
     if (!config.costPer1kTokens) return 0
-    
+
     const costPer1k = isOutput ? config.costPer1kTokens.output : config.costPer1kTokens.input
     return (tokensUsed / 1000) * costPer1k
   }

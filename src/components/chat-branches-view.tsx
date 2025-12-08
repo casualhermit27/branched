@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CaretDown, CaretRight, GitBranch, Sparkle, ChatCircle, Clock, Trash } from '@phosphor-icons/react'
 import ChatInterface from './chat-interface'
 import { DeleteConfirmModal } from './delete-confirm-modal'
+import { allAIOptions } from './ai-pills'
 
 interface Message {
   id: string
@@ -24,6 +25,7 @@ interface AI {
   name: string
   color: string
   logo: React.JSX.Element
+  functional?: boolean
 }
 
 interface BranchNode {
@@ -54,6 +56,7 @@ interface ChatBranchesViewProps {
   activeBranchId: string | null
   onSelectBranch: (branchId: string) => void
   onDeleteBranch?: (branchId: string) => void
+  onEditMessage?: (nodeId: string, messageId: string, newText: string) => void
 }
 
 interface BranchTreeNode extends BranchNode {
@@ -75,7 +78,8 @@ export default function ChatBranchesView({
   onStopGeneration,
   activeBranchId,
   onSelectBranch,
-  onDeleteBranch
+  onDeleteBranch,
+  onEditMessage
 }: ChatBranchesViewProps) {
   const [expandedBranches, setExpandedBranches] = useState<Set<string>>(new Set(['main']))
   const lastActiveBranchRef = useRef<string | null>(activeBranchId)
@@ -83,7 +87,7 @@ export default function ChatBranchesView({
     isOpen: false,
     branchId: null
   })
-  
+
   // Auto-expand branch when it becomes active
   useEffect(() => {
     if (activeBranchId && activeBranchId !== lastActiveBranchRef.current) {
@@ -95,7 +99,7 @@ export default function ChatBranchesView({
       lastActiveBranchRef.current = activeBranchId
     }
   }, [activeBranchId])
-  
+
   const toggleBranch = (branchId: string) => {
     setExpandedBranches(prev => {
       const next = new Set(prev)
@@ -112,10 +116,10 @@ export default function ChatBranchesView({
   const buildBranchTree = useMemo(() => {
     const mainNode = branches.find(b => b.id === 'main' || b.isMain)
     const branchNodes = branches.filter(b => b.id !== 'main' && !b.isMain)
-    
+
     // Create a map for quick lookup
     const branchMap = new Map<string, BranchTreeNode>()
-    
+
     // Initialize all branches as tree nodes
     branchNodes.forEach(branch => {
       branchMap.set(branch.id, {
@@ -124,13 +128,13 @@ export default function ChatBranchesView({
         depth: 0
       })
     })
-    
+
     // Build parent-child relationships
     const rootBranches: BranchTreeNode[] = []
     branchNodes.forEach(branch => {
       const treeNode = branchMap.get(branch.id)!
       const parentId = branch.parentId || 'main'
-      
+
       if (parentId === 'main') {
         // Root level branch (child of main)
         rootBranches.push(treeNode)
@@ -146,12 +150,12 @@ export default function ChatBranchesView({
         }
       }
     })
-    
+
     return { mainNode, rootBranches, branchMap }
   }, [branches])
 
   const { mainNode, rootBranches } = buildBranchTree
-  
+
   // Ensure mainNode has messages - use mainMessages prop if mainNode.messages is missing
   const mainNodeWithMessages = mainNode ? {
     ...mainNode,
@@ -166,7 +170,7 @@ export default function ChatBranchesView({
     const minutes = Math.floor(diff / 60000)
     const hours = Math.floor(diff / 3600000)
     const days = Math.floor(diff / 86400000)
-    
+
     if (minutes < 1) return 'Just now'
     if (minutes < 60) return `${minutes}m ago`
     if (hours < 24) return `${hours}h ago`
@@ -182,7 +186,7 @@ export default function ChatBranchesView({
     ]
     const isExpanded = expandedBranches.has(branch.id)
     const isActive = activeBranchId === branch.id
-    
+
     // Get last message timestamp
     const lastMessage = allMessages[allMessages.length - 1]
     const lastMessageTime = lastMessage ? formatTime(lastMessage.timestamp) : null
@@ -193,47 +197,44 @@ export default function ChatBranchesView({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-          className={`border rounded-xl backdrop-blur-sm transition-all duration-200 relative overflow-visible group ${
-            isActive 
-              ? 'border-border dark:border-border/60 bg-card dark:bg-card shadow-md' 
-              : 'border-border/60 dark:border-border/40 bg-card/95 dark:bg-card/98 shadow-sm hover:shadow-md hover:border-border dark:hover:border-border/50'
-          }`}
+          className={`border rounded-xl backdrop-blur-sm transition-all duration-200 relative overflow-visible group ${isActive
+            ? 'border-border dark:border-border/60 bg-card dark:bg-card shadow-md'
+            : 'border-border/60 dark:border-border/40 bg-card/95 dark:bg-card/98 shadow-sm hover:shadow-md hover:border-border dark:hover:border-border/50'
+            }`}
           style={{ marginLeft: `${branch.depth * 40}px` }}
         >
           {/* Subtle top border accent */}
-          <div className={`absolute top-0 left-0 right-0 h-px transition-colors ${
-            isActive 
-              ? 'bg-border dark:bg-border/60' 
-              : 'bg-border/40 dark:bg-border/30'
-          }`} />
-          
+          <div className={`absolute top-0 left-0 right-0 h-px transition-colors ${isActive
+            ? 'bg-border dark:bg-border/60'
+            : 'bg-border/40 dark:bg-border/30'
+            }`} />
+
           {/* Tree connector lines - only for nested branches */}
           {branch.depth > 0 && (
             <>
               {/* Vertical line from parent's vertical line down to this branch */}
-              <div 
+              <div
                 className="absolute top-0 w-0.5 border-l border-dashed border-border/40 dark:border-border/30 transition-opacity group-hover:opacity-60"
-                style={{ 
+                style={{
                   left: `${-40}px`,
                   height: '32px'
                 }}
               />
               {/* Horizontal line connecting to the branch */}
-              <div 
+              <div
                 className="absolute top-8 w-5 h-0.5 border-t border-dashed border-border/40 dark:border-border/30 transition-opacity group-hover:opacity-60"
                 style={{ left: `${-40}px` }}
               />
             </>
           )}
-          
+
           <div
             onClick={() => {
               toggleBranch(branch.id)
               onSelectBranch(branch.id)
             }}
-            className={`w-full flex items-center justify-between p-5 hover:bg-muted/30 dark:hover:bg-muted/20 transition-all duration-200 rounded-t-xl cursor-pointer ${
-              isActive ? 'bg-muted/40 dark:bg-muted/30' : ''
-            }`}
+            className={`w-full flex items-center justify-between p-5 hover:bg-muted/30 dark:hover:bg-muted/20 transition-all duration-200 rounded-t-xl cursor-pointer ${isActive ? 'bg-muted/40 dark:bg-muted/30' : ''
+              }`}
           >
             <div className="flex items-center gap-4 flex-1 min-w-0">
               {branch.children.length > 0 ? (
@@ -242,40 +243,35 @@ export default function ChatBranchesView({
                   transition={{ duration: 0.2 }}
                   className="flex-shrink-0"
                 >
-                  <CaretRight className={`w-4 h-4 transition-colors ${
-                    isActive 
-                      ? 'text-foreground dark:text-foreground' 
-                      : 'text-muted-foreground/50 dark:text-muted-foreground/40'
-                  }`} weight="bold" />
+                  <CaretRight className={`w-4 h-4 transition-colors ${isActive
+                    ? 'text-foreground dark:text-foreground'
+                    : 'text-muted-foreground/50 dark:text-muted-foreground/40'
+                    }`} weight="bold" />
                 </motion.div>
               ) : (
                 <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-                  <div className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                    isActive 
-                      ? 'bg-foreground/40 dark:bg-foreground/50' 
-                      : 'bg-muted-foreground/30 dark:bg-muted-foreground/40'
-                  }`} />
+                  <div className={`w-1.5 h-1.5 rounded-full transition-colors ${isActive
+                    ? 'bg-foreground/40 dark:bg-foreground/50'
+                    : 'bg-muted-foreground/30 dark:bg-muted-foreground/40'
+                    }`} />
                 </div>
               )}
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className={`p-1.5 rounded-lg flex-shrink-0 border transition-colors ${
-                  isActive 
-                    ? 'bg-muted/50 dark:bg-muted/40 border-border/40 dark:border-border/30' 
-                    : 'bg-muted/30 dark:bg-muted/20 border-border/30 dark:border-border/20'
-                }`}>
-                  <GitBranch className={`w-3.5 h-3.5 transition-colors ${
-                    isActive 
-                      ? 'text-foreground/70 dark:text-foreground/80' 
-                      : 'text-muted-foreground/60 dark:text-muted-foreground/50'
-                  }`} weight="duotone" />
+                <div className={`p-1.5 rounded-lg flex-shrink-0 border transition-colors ${isActive
+                  ? 'bg-muted/50 dark:bg-muted/40 border-border/40 dark:border-border/30'
+                  : 'bg-muted/30 dark:bg-muted/20 border-border/30 dark:border-border/20'
+                  }`}>
+                  <GitBranch className={`w-3.5 h-3.5 transition-colors ${isActive
+                    ? 'text-foreground/70 dark:text-foreground/80'
+                    : 'text-muted-foreground/60 dark:text-muted-foreground/50'
+                    }`} weight="duotone" />
                 </div>
                 <div className="flex flex-col items-start min-w-0 flex-1">
                   <div className="flex items-center gap-2 w-full">
-                    <span className={`font-medium truncate text-sm transition-colors ${
-                      isActive 
-                        ? 'text-foreground dark:text-foreground' 
-                        : 'text-foreground/90 dark:text-foreground/90'
-                    }`}>
+                    <span className={`font-medium truncate text-sm transition-colors ${isActive
+                      ? 'text-foreground dark:text-foreground'
+                      : 'text-foreground/90 dark:text-foreground/90'
+                      }`}>
                       {branch.label || branch.title || `Branch ${branch.id.slice(-6)}`}
                     </span>
                     {branch.depth > 0 && (
@@ -299,21 +295,18 @@ export default function ChatBranchesView({
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-all duration-200 ${
-                  isActive 
-                    ? 'bg-muted/40 dark:bg-muted/30 border-border/40 dark:border-border/30' 
-                    : 'bg-muted/20 dark:bg-muted/10 border-border/20 dark:border-border/10 hover:bg-muted/30 dark:hover:bg-muted/20'
-                }`}>
-                  <ChatCircle className={`w-3 h-3 ${
-                    isActive 
-                      ? 'text-foreground/60 dark:text-foreground/70' 
-                      : 'text-muted-foreground/50 dark:text-muted-foreground/40'
-                  }`} weight="fill" />
-                  <span className={`text-xs font-medium ${
-                    isActive 
-                      ? 'text-foreground/70 dark:text-foreground/80' 
-                      : 'text-muted-foreground/60 dark:text-muted-foreground/50'
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-all duration-200 ${isActive
+                  ? 'bg-muted/40 dark:bg-muted/30 border-border/40 dark:border-border/30'
+                  : 'bg-muted/20 dark:bg-muted/10 border-border/20 dark:border-border/10 hover:bg-muted/30 dark:hover:bg-muted/20'
                   }`}>
+                  <ChatCircle className={`w-3 h-3 ${isActive
+                    ? 'text-foreground/60 dark:text-foreground/70'
+                    : 'text-muted-foreground/50 dark:text-muted-foreground/40'
+                    }`} weight="fill" />
+                  <span className={`text-xs font-medium ${isActive
+                    ? 'text-foreground/70 dark:text-foreground/80'
+                    : 'text-muted-foreground/60 dark:text-muted-foreground/50'
+                    }`}>
                     {allMessages.length}
                   </span>
                 </div>
@@ -346,11 +339,10 @@ export default function ChatBranchesView({
                 transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
                 className="overflow-hidden"
               >
-                <div className={`p-6 border-t transition-colors duration-200 ${
-                  isActive 
-                    ? 'border-border/40 dark:border-border/30 bg-muted/20 dark:bg-muted/10' 
-                    : 'border-border/30 dark:border-border/20 bg-muted/10 dark:bg-muted/5'
-                }`}>
+                <div className={`p-6 border-t transition-colors duration-200 ${isActive
+                  ? 'border-border/40 dark:border-border/30 bg-muted/20 dark:bg-muted/10'
+                  : 'border-border/30 dark:border-border/20 bg-muted/10 dark:bg-muted/5'
+                  }`}>
                   <ChatInterface
                     messages={allMessages}
                     onSendMessage={(text) => onSendMessage(text, branch.id)}
@@ -362,10 +354,14 @@ export default function ChatBranchesView({
                     existingBranchesCount={branch.children.length}
                     onAddAI={onAddAI}
                     onRemoveAI={onRemoveAI}
-                    onSelectSingle={onSelectSingle}
+                    onSelectSingle={(aiId) => {
+                      const ai = selectedAIs.find(a => a.id === aiId) || allAIOptions.find(a => a.id === aiId)
+                      if (ai) onSelectSingle(ai)
+                    }}
                     getBestAvailableModel={getBestAvailableModel}
                     isMain={false}
                     nodeId={branch.id}
+                    onEditMessage={onEditMessage ? (msgId, newText) => onEditMessage(branch.id, msgId, newText) : undefined}
                   />
                 </div>
               </motion.div>
@@ -374,13 +370,12 @@ export default function ChatBranchesView({
 
           {/* Render child branches */}
           {branch.children.length > 0 && isExpanded && (
-            <div className={`border-t relative overflow-visible transition-colors duration-200 ${
-              isActive 
-                ? 'border-border/30 dark:border-border/20 bg-muted/15 dark:bg-muted/8' 
-                : 'border-border/25 dark:border-border/15 bg-muted/8 dark:bg-muted/5'
-            }`}>
+            <div className={`border-t relative overflow-visible transition-colors duration-200 ${isActive
+              ? 'border-border/30 dark:border-border/20 bg-muted/15 dark:bg-muted/8'
+              : 'border-border/25 dark:border-border/15 bg-muted/8 dark:bg-muted/5'
+              }`}>
               {/* Vertical line extending down from this branch for its children */}
-              <div 
+              <div
                 className="absolute top-0 bottom-0 w-0.5 border-l border-dashed border-border/40 dark:border-border/30 transition-opacity group-hover:opacity-60"
                 style={{ left: `${branch.depth * 40 - 40}px` }}
               />
@@ -404,24 +399,21 @@ export default function ChatBranchesView({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-            className={`border rounded-xl backdrop-blur-sm shadow-lg hover:shadow-xl transition-all duration-200 overflow-hidden relative ${
-              activeBranchId === 'main' 
-                ? 'border-border dark:border-border/60 bg-card dark:bg-card ring-1 ring-border/50 dark:ring-border/40' 
-                : 'border-border/60 dark:border-border/40 bg-card dark:bg-card'
-            }`}
+            className={`border rounded-xl backdrop-blur-sm shadow-lg hover:shadow-xl transition-all duration-200 overflow-hidden relative ${activeBranchId === 'main'
+              ? 'border-border dark:border-border/60 bg-card dark:bg-card ring-1 ring-border/50 dark:ring-border/40'
+              : 'border-border/60 dark:border-border/40 bg-card dark:bg-card'
+              }`}
           >
             {/* Subtle top border accent */}
-            <div className={`absolute top-0 left-0 right-0 h-px transition-colors ${
-              activeBranchId === 'main' 
-                ? 'bg-border dark:bg-border/60' 
-                : 'bg-border/50 dark:bg-border/40'
-            }`} />
-            
+            <div className={`absolute top-0 left-0 right-0 h-px transition-colors ${activeBranchId === 'main'
+              ? 'bg-border dark:bg-border/60'
+              : 'bg-border/50 dark:bg-border/40'
+              }`} />
+
             <button
               onClick={() => toggleBranch('main')}
-              className={`w-full flex items-center justify-between p-7 hover:bg-muted/30 dark:hover:bg-muted/20 transition-all duration-200 ${
-                activeBranchId === 'main' ? 'bg-muted/40 dark:bg-muted/30' : ''
-              }`}
+              className={`w-full flex items-center justify-between p-7 hover:bg-muted/30 dark:hover:bg-muted/20 transition-all duration-200 ${activeBranchId === 'main' ? 'bg-muted/40 dark:bg-muted/30' : ''
+                }`}
             >
               <div className="flex items-center gap-5">
                 <motion.div
@@ -458,11 +450,10 @@ export default function ChatBranchesView({
                   transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
                   className="overflow-hidden"
                 >
-                  <div className={`p-7 border-t transition-colors duration-200 ${
-                    activeBranchId === 'main' 
-                      ? 'border-border/40 dark:border-border/30 bg-muted/20 dark:bg-muted/10' 
-                      : 'border-border/30 dark:border-border/20 bg-muted/10 dark:bg-muted/5'
-                  }`}>
+                  <div className={`p-7 border-t transition-colors duration-200 ${activeBranchId === 'main'
+                    ? 'border-border/40 dark:border-border/30 bg-muted/20 dark:bg-muted/10'
+                    : 'border-border/30 dark:border-border/20 bg-muted/10 dark:bg-muted/5'
+                    }`}>
                     <ChatInterface
                       messages={mainNodeWithMessages?.messages || mainMessages || []}
                       onSendMessage={(text) => onSendMessage(text, 'main')}
@@ -474,10 +465,14 @@ export default function ChatBranchesView({
                       existingBranchesCount={rootBranches.length}
                       onAddAI={onAddAI}
                       onRemoveAI={onRemoveAI}
-                      onSelectSingle={onSelectSingle}
+                      onSelectSingle={(aiId) => {
+                        const ai = selectedAIs.find(a => a.id === aiId) || allAIOptions.find(a => a.id === aiId)
+                        if (ai) onSelectSingle(ai)
+                      }}
                       getBestAvailableModel={getBestAvailableModel}
                       isMain={true}
                       nodeId="main"
+                      onEditMessage={onEditMessage ? (msgId, newText) => onEditMessage('main', msgId, newText) : undefined}
                     />
                   </div>
                 </motion.div>
@@ -510,7 +505,7 @@ export default function ChatBranchesView({
             <div className="ml-12 space-y-5 relative">
               {/* Vertical dotted guide line connecting from main - extends from separator */}
               <div className="absolute left-0 top-0 bottom-0 w-0.5 border-l border-dashed border-border/40 dark:border-border/30"></div>
-              
+
               {/* Render all root branches */}
               {rootBranches.map((branch, idx) => (
                 <motion.div
@@ -521,7 +516,7 @@ export default function ChatBranchesView({
                   className="relative"
                 >
                   {/* Horizontal connector line from vertical guide to branch */}
-                  <div 
+                  <div
                     className="absolute left-0 top-8 w-12 h-0.5 border-t border-dashed border-border/40 dark:border-border/30"
                     style={{ zIndex: 1 }}
                   />
@@ -567,4 +562,3 @@ export default function ChatBranchesView({
     </div>
   )
 }
-

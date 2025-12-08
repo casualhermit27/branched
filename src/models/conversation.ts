@@ -32,6 +32,7 @@ export interface IMessage {
   isStreaming?: boolean
   streamingText?: string
   nodeId?: string // Which node this message belongs to
+  role?: string // New field: role
   // New fields for advanced features
   confidenceScore?: number // Model confidence for this response
   reasoningScore?: number // Quality/reasoning score
@@ -62,6 +63,7 @@ const MessageSchema = new Schema<IMessage>({
   isStreaming: { type: Boolean, default: false },
   streamingText: { type: String },
   nodeId: { type: String },
+  role: { type: String }, // New field: role
   // New fields
   confidenceScore: { type: Number, min: 0, max: 1 },
   reasoningScore: { type: Number, min: 0, max: 1 },

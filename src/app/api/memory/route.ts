@@ -1,7 +1,8 @@
-// API Route: /api/memory
+
 import { NextRequest, NextResponse } from 'next/server'
 import connectDB from '@/lib/mongodb'
-import { MemoryService } from '@/services/memory-service'
+import { memoryService } from '@/services/memory-service'
+import { MemoryEntry } from '@/models/memory'
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,13 +10,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { conversationId, fact, context, importance, tags } = body
 
-    const memory = await MemoryService.addMemory(
-      conversationId,
-      fact,
-      context,
-      importance,
-      tags
-    )
+    const memory = await memoryService.createMemory({
+      branchId: conversationId,
+      content: fact,
+      topic: tags?.[0],
+      relevanceScore: importance,
+      layer: 'branch'
+    })
 
     return NextResponse.json({ success: true, memory })
   } catch (error: any) {
@@ -41,13 +42,21 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    let memories;
     if (query) {
-      const memories = await MemoryService.recallMemories(conversationId, query, limit)
-      return NextResponse.json({ success: true, memories })
+      memories = await MemoryEntry.find({
+        branchId: conversationId,
+        content: { $regex: query, $options: 'i' }
+      })
+        .sort({ relevanceScore: -1 })
+        .limit(limit)
     } else {
-      const memories = await MemoryService.getConversationMemories(conversationId)
-      return NextResponse.json({ success: true, memories })
+      memories = await MemoryEntry.find({ branchId: conversationId })
+        .sort({ updatedAt: -1 })
+        .limit(20)
     }
+
+    return NextResponse.json({ success: true, memories })
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message },
@@ -62,7 +71,11 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { memoryId, importance } = body
 
-    await MemoryService.updateImportance(memoryId, importance)
+    if (!memoryId) {
+      return NextResponse.json({ success: false, error: 'memoryId required' }, { status: 400 })
+    }
+
+    await MemoryEntry.updateOne({ id: memoryId }, { relevanceScore: importance })
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json(
@@ -85,7 +98,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    await MemoryService.deleteMemory(memoryId)
+    await MemoryEntry.deleteOne({ id: memoryId })
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json(
@@ -94,4 +107,3 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
-

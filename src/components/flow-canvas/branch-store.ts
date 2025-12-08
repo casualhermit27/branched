@@ -134,21 +134,21 @@ export const branchStore = (() => {
 		// Return a dummy instance during SSR
 		return {
 			get: () => undefined,
-			set: () => {},
+			set: () => { },
 			has: () => false,
-			delete: () => {},
+			delete: () => { },
 			getAllIds: () => [],
 			getAll: () => [],
 			getByParent: () => [],
-			updateMetadata: () => {},
-			addMessage: () => {},
-			removeMessage: () => {},
-			clear: () => {},
+			updateMetadata: () => { },
+			addMessage: () => { },
+			removeMessage: () => { },
+			clear: () => { },
 			export: () => [],
-			import: () => {}
-		} as BranchStore
+			import: () => { }
+		} as unknown as BranchStore
 	}
-	
+
 	if (!branchStoreInstance) {
 		branchStoreInstance = new BranchStore()
 	}

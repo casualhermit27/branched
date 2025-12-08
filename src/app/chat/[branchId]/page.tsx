@@ -6,7 +6,7 @@ import { useEffect } from 'react'
 export default function BranchPage() {
   const params = useParams()
   const router = useRouter()
-  const branchId = params.branchId as string
+  const branchId = params?.branchId ? String(params.branchId) : null
 
   useEffect(() => {
     if (branchId && branchId !== 'main') {

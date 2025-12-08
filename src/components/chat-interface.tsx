@@ -3,7 +3,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import { ArrowsOut, ArrowsIn, GitBranch, PaperPlaneRight, Stop, Plus } from '@phosphor-icons/react'
+import { ArrowsOut, ArrowsIn, GitBranch, PaperPlaneRight, Stop, Plus, Copy, PencilSimple, Check, X } from '@phosphor-icons/react'
 import AIPills, { allAIOptions } from './ai-pills'
 import { SideBySideComparison } from './side-by-side-comparison'
 
@@ -51,6 +51,7 @@ interface ChatInterfaceProps {
   onMessageSelect?: (messageId: string, isMultiSelect: boolean) => void
   selectedMessageIds?: Set<string>
   tier?: 'free' | 'pro'
+  onEditMessage?: (messageId: string, newText: string) => void
 }
 
 function ChatInterface({
@@ -73,8 +74,13 @@ function ChatInterface({
   readOnly = false,
   onMessageSelect,
   selectedMessageIds,
-  tier = 'free'
+  tier = 'free',
+  onEditMessage
 }: ChatInterfaceProps) {
+
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
 
   const [message, setMessage] = useState('')
   const [isUserScrolling, setIsUserScrolling] = useState(false)
@@ -175,6 +181,30 @@ function ChatInterface({
     const lastUserMessage = [...messages].reverse().find(m => m.isUser)
     if (!lastUserMessage) return
     onBranchFromMessage(lastUserMessage.id, true)
+  }
+
+  const handleCopy = (text: string, messageId: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedMessageId(messageId)
+    setTimeout(() => setCopiedMessageId(null), 2000)
+  }
+
+  const startEditing = (msg: Message) => {
+    setEditingMessageId(msg.id)
+    setEditValue(msg.text)
+  }
+
+  const cancelEditing = () => {
+    setEditingMessageId(null)
+    setEditValue('')
+  }
+
+  const saveEdit = () => {
+    if (editingMessageId && editValue.trim() && onEditMessage) {
+      onEditMessage(editingMessageId, editValue)
+      setEditingMessageId(null)
+      setEditValue('')
+    }
   }
 
   const getAIColor = (aiId: string) => {
@@ -317,38 +347,98 @@ function ChatInterface({
                       {/* User Message */}
                       {msg.isUser ? (
                         <div className="flex flex-col items-end max-w-[85%] relative group/message">
-                          <div
-                            onClick={(e) => {
-                              if (e.ctrlKey || e.metaKey || e.altKey) {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                onMessageSelect?.(msg.id, true)
-                              }
-                            }}
-                            className={`bg-primary text-primary-foreground px-5 py-3 rounded-[1.5rem] rounded-tr-sm transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
-                              ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-                              : 'hover:bg-primary/15'
-                              }`}
-                            title="Ctrl + Click to select"
-                          >
-                            <div className="prose prose-sm dark:prose-invert max-w-none break-words leading-relaxed">
-                              <ReactMarkdown>{msg.text}</ReactMarkdown>
+                          {editingMessageId === msg.id ? (
+                            <div className="w-full bg-primary/5 border border-primary/20 rounded-2xl p-3 min-w-[300px]">
+                              <textarea
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                className="w-full bg-transparent border-none outline-none text-foreground resize-none text-sm p-1"
+                                rows={3}
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault()
+                                    saveEdit()
+                                  }
+                                  if (e.key === 'Escape') cancelEditing()
+                                }}
+                              />
+                              <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-primary/10">
+                                <button
+                                  onClick={cancelEditing}
+                                  className="px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={saveEdit}
+                                  className="px-2.5 py-1 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                                >
+                                  Save & Regenerate
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                          {/* Branch Button for User (Hover/Mobile) - Left side */}
-                          <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 opacity-100 md:opacity-0 md:group-hover/message:opacity-100 transition-opacity duration-200">
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                onBranchFromMessage(msg.id, true)
-                              }}
-                              className="p-1.5 rounded-full bg-background border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/50 shadow-sm transition-all"
-                              title="Branch all models"
-                            >
-                              <GitBranch className="w-4 h-4" />
-                            </button>
-                          </div>
+                          ) : (
+                            <>
+                              <div
+                                onClick={(e) => {
+                                  if (e.ctrlKey || e.metaKey || e.altKey) {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    onMessageSelect?.(msg.id, true)
+                                  }
+                                }}
+                                className={`bg-primary text-primary-foreground px-5 py-3 rounded-[1.5rem] rounded-tr-sm transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
+                                  ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
+                                  : 'hover:bg-primary/15'
+                                  }`}
+                                title="Ctrl + Click to select"
+                              >
+                                <div className="prose prose-sm dark:prose-invert max-w-none break-words leading-relaxed">
+                                  <ReactMarkdown>{msg.text}</ReactMarkdown>
+                                </div>
+                              </div>
+
+                              {/* Floating Toolbar - Left Side */}
+                              <div className="absolute right-full top-1/2 -translate-y-1/2 mr-3 opacity-0 group-hover/message:opacity-100 transition-all duration-200 z-10">
+                                <div className="flex items-center gap-0.5 p-1 rounded-full bg-background border border-border/50 shadow-sm text-muted-foreground backdrop-blur-sm">
+                                  {onEditMessage && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.preventDefault(); e.stopPropagation();
+                                        startEditing(msg)
+                                      }}
+                                      className="p-1.5 rounded-full hover:bg-muted hover:text-foreground transition-colors"
+                                      title="Edit"
+                                    >
+                                      <PencilSimple className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault(); e.stopPropagation();
+                                      handleCopy(msg.text, msg.id)
+                                    }}
+                                    className="p-1.5 rounded-full hover:bg-muted hover:text-foreground transition-colors"
+                                    title="Copy"
+                                  >
+                                    {copiedMessageId === msg.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                                  </button>
+                                  <div className="w-px h-4 bg-border/50 mx-0.5" />
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault(); e.stopPropagation();
+                                      onBranchFromMessage(msg.id, true)
+                                    }}
+                                    className="p-1.5 rounded-full hover:bg-muted hover:text-primary transition-colors"
+                                    title="Branch all models"
+                                  >
+                                    <GitBranch className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </div>
                       ) : (
                         /* AI Message */
@@ -422,19 +512,31 @@ function ChatInterface({
                             </div>
                           </div>
 
-                          {/* Branch Button (Hover/Mobile) - Right side */}
-                          <div className="absolute right-0 top-2 opacity-100 md:opacity-0 md:group-hover/message:opacity-100 transition-opacity duration-200">
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                onBranchFromMessage(msg.id, false)
-                              }}
-                              className="p-1.5 rounded-full bg-background border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/50 shadow-sm transition-all"
-                              title="Branch from here"
-                            >
-                              <GitBranch className="w-4 h-4" />
-                            </button>
+                          {/* Floating Toolbar - Right Side */}
+                          <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 opacity-0 group-hover/message:opacity-100 transition-all duration-200 z-10">
+                            <div className="flex items-center gap-0.5 p-1 rounded-full bg-background border border-border/50 shadow-sm text-muted-foreground backdrop-blur-sm">
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault(); e.stopPropagation();
+                                  handleCopy(msg.text, msg.id)
+                                }}
+                                className="p-1.5 rounded-full hover:bg-muted hover:text-foreground transition-colors"
+                                title="Copy"
+                              >
+                                {copiedMessageId === msg.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                              </button>
+                              <div className="w-px h-4 bg-border/50 mx-0.5" />
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault(); e.stopPropagation();
+                                  onBranchFromMessage(msg.id, false)
+                                }}
+                                className="p-1.5 rounded-full hover:bg-muted hover:text-primary transition-colors"
+                                title="Branch from here"
+                              >
+                                <GitBranch className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )}

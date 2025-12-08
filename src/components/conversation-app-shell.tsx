@@ -114,7 +114,8 @@ export default function ConversationAppShell({
 		handleBranchWarning,
 		handleBranchWarningConfirm,
 		handleBranchWarningCancel,
-		getBestAvailableModel
+		getBestAvailableModel,
+		editMessage
 	} = actions
 
 	// Handle navigation from search
@@ -411,6 +412,7 @@ export default function ConversationAppShell({
 										}
 									}
 								}}
+								onEditMessage={editMessage}
 							/>
 						</div>
 					</>
@@ -470,6 +472,7 @@ export default function ConversationAppShell({
 												onSelectSingle={selectSingleAIById}
 												getBestAvailableModel={getBestAvailableModel}
 												tier={tier}
+												onEditMessage={(msgId, newText) => editMessage(activeBranchId || 'main', msgId, newText)}
 											/>
 										</div>
 									</div>
@@ -521,6 +524,7 @@ export default function ConversationAppShell({
 									}
 								}
 							}}
+							onEditMessage={editMessage}
 						/>
 					)
 				)

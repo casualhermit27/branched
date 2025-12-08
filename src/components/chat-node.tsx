@@ -72,6 +72,7 @@ interface ChatNodeData {
   depth?: number
   onNavigateToMessage?: (messageId: string) => void
   isDragging?: boolean
+  onEditMessage?: (nodeId: string, messageId: string, newText: string) => void
 }
 
 function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
@@ -415,6 +416,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
                   nodeId={data.nodeId || id}
                   onMessageSelect={data.onMessageSelect}
                   selectedMessageIds={data.selectedMessageIds}
+                  onEditMessage={data.onEditMessage ? (messageId, newText) => data.onEditMessage?.(id, messageId, newText) : undefined}
                 />
               </div>
             </motion.div>
