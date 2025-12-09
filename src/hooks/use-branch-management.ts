@@ -7,11 +7,7 @@ import { messageStore } from '@/components/flow-canvas/message-store'
 import { branchStore } from '@/components/flow-canvas/branch-store'
 import type { AI, Message } from '@/components/flow-canvas/types'
 import { createBranchNode } from '@/components/flow-canvas/node-management'
-import {
-	calculateSingleBranchPosition,
-	calculateMultiBranchPositions,
-	calculateNodeDimensions
-} from '@/components/flow-canvas/layout-engine'
+
 import { createEdge } from '@/components/flow-canvas/edge-management'
 import { useSyncStore } from '@/stores/sync-store'
 

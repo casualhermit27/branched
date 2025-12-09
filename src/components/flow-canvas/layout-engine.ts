@@ -174,29 +174,13 @@ export function getLayoutedElements(
 				centerY: nodeWithPosition.y, // Dagre's center Y position
 				parentId: node.data?.parentId
 			})
-
-			// Special handling for main node to prevent jumping
-			if (node.id === 'main' || node.data?.isMain) {
-				// Pin main node to a fixed position or its current position if valid
-				// We override the dagre calculated position for the main node to keep it stable
-				const pinnedX = 400
-				const pinnedY = 50
-
-				// Adjust the offset for all other nodes based on how much main moved
-				const offsetX = pinnedX - x
-				const offsetY = pinnedY - y
-
-				// We'll apply this offset after collecting all positions
-				// For now, just mark this as the anchor
-				// (This logic is simplified; a full implementation would shift everything relative to main)
-			}
 		} catch (error) {
 			console.warn('Error processing node:', node.id, error)
 			invalidNodes.push(node)
 		}
 	})
 
-	// Group nodes by their parent to identify branches at the same level
+	// Group nodes by their parent to align siblings vertically
 	const nodesByParent = new Map<string, PositionedNode[]>()
 
 	nodePositions.forEach((item) => {
@@ -212,100 +196,15 @@ export function getLayoutedElements(
 		nodesByParent.get(parentId)!.push(item)
 	})
 
-	// Align branches at the same level by their top edge and group units
-	nodesByParent.forEach((siblingNodes, parentId) => {
-		if (siblingNodes.length <= 1) return // No alignment needed for single branch
+	// Align tops of siblings
+	nodesByParent.forEach((siblingNodes) => {
+		if (siblingNodes.length <= 1) return
 
-		const parentNode = nodes.find((n) => n.id === parentId)
-		const parentDims = calculateNodeDimensions(
-			parentNode?.data?.messages?.length || 0,
-			parentNode?.data?.isMinimized || false
-		)
-		const parentPosition = dagreGraph.node(parentId)
-		const parentX = parentPosition?.x ?? parentNode?.position?.x ?? 400
-		const parentY = parentPosition?.y ?? parentNode?.position?.y ?? 50
-		const topEdgeY = parentY + parentDims.height / 2 + rankSpacing
+		// Find the highest top position (smallest y) to align all siblings to
+		const topY = Math.min(...siblingNodes.map((n) => n.y))
 
-		type BranchUnit = {
-			type: 'group' | 'single'
-			items: PositionedNode[]
-			groupId?: string
-		}
-
-		const branchUnits: BranchUnit[] = []
-		const groupMap = new Map<string, PositionedNode[]>()
-
-		// Collect grouped branches
-		siblingNodes.forEach((item) => {
-			const groupId = item.node.data?.branchGroupId
-			if (groupId) {
-				if (!groupMap.has(groupId)) {
-					groupMap.set(groupId, [])
-				}
-				groupMap.get(groupId)!.push(item)
-			}
-		})
-
-		// Add grouped units first for consistent ordering
-		Array.from(groupMap.entries())
-			.sort(([a], [b]) => a.localeCompare(b))
-			.forEach(([groupId, items]) => {
-				// Sort items within group by node ID to ensure consistent order
-				items.sort((a, b) => a.node.id.localeCompare(b.node.id))
-				branchUnits.push({ type: 'group', items, groupId })
-			})
-
-		// Add remaining single branches sorted by node ID
-		siblingNodes
-			.filter((item) => !item.node.data?.branchGroupId)
-			.sort((a, b) => a.node.id.localeCompare(b.node.id))
-			.forEach((item) => {
-				branchUnits.push({ type: 'single', items: [item] })
-			})
-
-		if (branchUnits.length === 0) {
-			// Fallback to simple vertical alignment
-			const minTopY = Math.min(...siblingNodes.map((item) => item.y))
-			siblingNodes.forEach((item) => {
-				item.y = minTopY
-			})
-			return
-		}
-
-		const getUnitWidth = (unit: BranchUnit) =>
-			unit.items.reduce((sum, item, idx) => {
-				const spacing = idx > 0 ? nodeSpacing : 0
-				return sum + item.dims.width + spacing
-			}, 0)
-
-		// Total width = sum of unit widths + spacing between units
-		const totalUnitsWidth = branchUnits.reduce((sum, unit, idx) => {
-			const unitWidth = getUnitWidth(unit)
-			const spacing = idx < branchUnits.length - 1 ? nodeSpacing : 0
-			return sum + unitWidth + spacing
-		}, 0)
-
-		const startX = parentX - totalUnitsWidth / 2
-		let currentX = 0
-
-		branchUnits.forEach((unit, unitIndex) => {
-			const unitStartX = startX + currentX
-			let offsetWithinUnit = 0
-
-			unit.items.forEach((item, itemIndex) => {
-				item.x = unitStartX + offsetWithinUnit
-				item.y = topEdgeY
-
-				offsetWithinUnit += item.dims.width
-				if (itemIndex < unit.items.length - 1) {
-					offsetWithinUnit += nodeSpacing
-				}
-			})
-
-			currentX += getUnitWidth(unit)
-			if (unitIndex < branchUnits.length - 1) {
-				currentX += nodeSpacing
-			}
+		siblingNodes.forEach((node) => {
+			node.y = topY
 		})
 	})
 
