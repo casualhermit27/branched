@@ -1669,7 +1669,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					zoomOnScroll={false}
 					panOnDrag={true}
 				>
-					<Background variant={"dots" as BackgroundVariant} gap={24} size={1} color="#cbd5e1" className="opacity-40 dark:opacity-20" />
+					<Background variant={"dots" as BackgroundVariant} gap={24} size={1.5} color="currentColor" className="text-slate-900/30 dark:text-slate-100/30" />
 					<Controls />
 					<MiniMap
 						nodeColor={(node) => {

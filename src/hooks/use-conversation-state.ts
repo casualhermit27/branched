@@ -82,6 +82,8 @@ export function useConversationState() {
 	const currentConversationIdRef = useRef<string | null>(null)
 	const isInitialLoadRef = useRef(true)
 	const [isLoading, setIsLoading] = useState(true)
+	const [loadingStatus, setLoadingStatus] = useState<string>('Initializing environment...')
+
 
 	return {
 		selectedAIs,
@@ -144,7 +146,9 @@ export function useConversationState() {
 		currentConversationIdRef,
 		isInitialLoadRef,
 		isLoading,
-		setIsLoading
+		setIsLoading,
+		loadingStatus,
+		setLoadingStatus
 	}
 }
 

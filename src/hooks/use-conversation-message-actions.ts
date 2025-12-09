@@ -113,6 +113,8 @@ export function useConversationMessageActions({
 			return
 		}
 
+		const targetBranchId = branchId || activeBranchId
+
 		if (checkLimit && !checkLimit('message')) {
 			return
 		}
@@ -132,7 +134,10 @@ export function useConversationMessageActions({
 			children: []
 		}
 
-		setMessages(prev => [...prev, newMessage])
+		// Only update global messages if we are targeting the active branch or main
+		if (!targetBranchId || targetBranchId === activeBranchId) {
+			setMessages(prev => [...prev, newMessage])
+		}
 
 		let memoryContext = ''
 		try {
@@ -147,12 +152,31 @@ export function useConversationMessageActions({
 			console.error('❌ Error fetching memory context:', error)
 		}
 
-		const targetBranchId = branchId || activeBranchId
+
+
+		// Prepare context for AI
+		let contextMessages = [...messages, newMessage] // Default to main messages if no branch
+
+		if (targetBranchId) {
+			const targetNode = conversationNodes.find(n => n.id === targetBranchId)
+			if (targetNode) {
+				const inherited = targetNode.data?.inheritedMessages || []
+				const branchMsgs = targetNode.data?.messages || []
+				// Context should be: Inherited + Branch History + New Message
+				// Note: branchMsgs typically includes the new message already if we updated state correctly, 
+				// but let's be safe and construct it explicitly to ensure order.
+				// However, we just added newMessage to state? No, async state updates might not be ready.
+				// So: inherited + (branchMsgs WITHOUT newMessage if it was added? No, we haven't added it to node yet in this scope properly?)
+				// Wait, we update 'setConversationNodes' below for UI, but here we need 'context' NOW.
+				// So: inherited + existing_branch_messages + newMessage
+				contextMessages = [...inherited, ...branchMsgs, newMessage]
+			}
+		}
 
 		const context: ConversationContext = {
-			messages: [...messages, newMessage],
+			messages: contextMessages,
 			currentBranch: targetBranchId || 'main',
-			parentMessages: messages,
+			parentMessages: messages, // Keeping this for reference if needed, but 'messages' main property is what AI uses
 			memoryContext
 		}
 
@@ -231,7 +255,10 @@ export function useConversationMessageActions({
 						streamingText: ''
 					}
 
-					setMessages(prev => [...prev, streamingMessage])
+					// Only update global messages if viewing the target branch
+					if (!targetBranchId || targetBranchId === activeBranchId) {
+						setMessages(prev => [...prev, streamingMessage])
+					}
 
 					if (targetBranchId) {
 						setSavedBranches(prev =>
@@ -467,7 +494,10 @@ export function useConversationMessageActions({
 						streamingText: ''
 					}
 
-					setMessages(prev => [...prev, streamingMessage])
+					// Only update global messages if viewing the target branch
+					if (!targetBranchId || targetBranchId === activeBranchId) {
+						setMessages(prev => [...prev, streamingMessage])
+					}
 
 					if (targetBranchId) {
 						setConversationNodes(prev => prev.map(node => {

@@ -69,7 +69,8 @@ export default function ConversationPage({ initialConversationId }: Conversation
 			setActiveBranchId: conversationState.setActiveBranchId,
 			currentConversationIdRef: conversationState.currentConversationIdRef,
 			selectedAIs: conversationState.selectedAIs,
-			defaultAI
+			defaultAI,
+			setLoadingStatus: conversationState.setLoadingStatus
 		})
 	}, [conversationState, defaultAI, restoreConversation, setBranches, setConversationNodes, setMessages])
 

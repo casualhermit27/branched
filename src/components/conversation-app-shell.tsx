@@ -348,12 +348,11 @@ export default function ConversationAppShell({
 
 			{
 				state.isLoading ? (
-					<LoadingScreen />
+					<LoadingScreen statusText={state.loadingStatus} />
 				) : viewMode === 'comparison' ? (
 					// Comparison view - show on top, FlowCanvas stays mounted but hidden below
 					<>
 						<ComparisonView
-							key={`compare-${conversationNodes.length}-${conversationNodes.map(n => n.id).join('-')}`}
 							branches={
 								selectedMessageIds.length >= 2
 									? conversationNodes.filter(n => n.id !== 'main' && !n.data?.isMain && n.data?.messages?.some((m: any) => selectedMessageIds.includes(m.id)))

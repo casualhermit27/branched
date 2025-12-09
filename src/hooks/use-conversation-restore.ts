@@ -13,6 +13,7 @@ interface RestoreConversationParams {
 	currentConversationIdRef: React.MutableRefObject<string | null>
 	selectedAIs: AI[]
 	defaultAI: AI
+	setLoadingStatus?: (status: string) => void
 }
 
 export function useConversationRestore() {
@@ -26,7 +27,8 @@ export function useConversationRestore() {
 		setActiveBranchId,
 		currentConversationIdRef,
 		selectedAIs,
-		defaultAI
+		defaultAI,
+		setLoadingStatus
 	}: RestoreConversationParams) => {
 
 
@@ -71,6 +73,10 @@ export function useConversationRestore() {
 
 		if (conversation.branches && conversation.branches.length > 0) {
 			const nonMainBranches = conversation.branches.filter((b: any) => b.id !== 'main' && !b.isMain)
+
+			if (setLoadingStatus) {
+				setLoadingStatus(`Restoring ${nonMainBranches.length} branches...`)
+			}
 
 			if (nonMainBranches.length > 0) {
 				setBranches(nonMainBranches.map((b: any) => ({ id: b.id })))

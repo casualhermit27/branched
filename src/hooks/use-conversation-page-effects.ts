@@ -111,6 +111,8 @@ export function useConversationPageEffects({
 		if (!hasStartedLoadingRef.current) {
 			hasStartedLoadingRef.current = true
 
+			state.setLoadingStatus('Loading local history...')
+
 			loadConversations().then(success => {
 				if (!success) {
 					state.setIsLoading(false)
@@ -118,11 +120,14 @@ export function useConversationPageEffects({
 				}
 
 				if (typeof window !== 'undefined') {
+					state.setLoadingStatus('Syncing branches from cloud...')
 					fetch('/api/conversations')
 						.then(res => res.json())
 						.then(data => {
 							if (data.success && data.data) {
 								setAllConversations(data.data)
+
+								state.setLoadingStatus(`Analyzing ${data.data.length} conversations...`)
 
 								const conversationWithContent = data.data.find((conv: any) => {
 									const hasMessages = (conv.mainMessages && conv.mainMessages.length > 0) ||

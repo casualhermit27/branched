@@ -11,23 +11,34 @@ const steps = [
     "Preparing layout"
 ]
 
-export function LoadingScreen() {
-    const [currentStep, setCurrentStep] = useState(0)
+interface LoadingScreenProps {
+    statusText?: string
+    currentStepIndex?: number
+}
+
+export function LoadingScreen({ statusText, currentStepIndex }: LoadingScreenProps) {
+    const [localStep, setLocalStep] = useState(0)
+
+    // Use prop if provided, otherwise local state
+    const displayStep = currentStepIndex !== undefined ? currentStepIndex : localStep
 
     useEffect(() => {
-        const interval = setInterval(() => {
-            setCurrentStep(prev => (prev < steps.length - 1 ? prev + 1 : prev))
-        }, 600) // Advance fairly quickly to feel responsive
-        return () => clearInterval(interval)
-    }, [])
+        // Only run auto-advance if no manual step provided
+        if (currentStepIndex === undefined) {
+            const interval = setInterval(() => {
+                setLocalStep(prev => (prev < steps.length - 1 ? prev + 1 : prev))
+            }, 600)
+            return () => clearInterval(interval)
+        }
+    }, [currentStepIndex])
 
     return (
         <div className="flex flex-col items-center justify-center h-screen bg-background w-full absolute inset-0 z-50">
             <div className="flex flex-col items-start gap-3 min-w-[200px]">
                 {steps.map((step, index) => {
-                    const isComplete = index < currentStep
-                    const isCurrent = index === currentStep
-                    const isPending = index > currentStep
+                    const isComplete = index < displayStep
+                    const isCurrent = index === displayStep
+                    const isPending = index > displayStep
 
                     return (
                         <motion.div
@@ -57,10 +68,10 @@ export function LoadingScreen() {
                                 )}
                             </div>
                             <span className={`text-sm font-medium transition-colors duration-300 ${isComplete ? 'text-muted-foreground' :
-                                    isCurrent ? 'text-foreground' :
-                                        'text-muted-foreground/30'
+                                isCurrent ? 'text-foreground' :
+                                    'text-muted-foreground/30'
                                 }`}>
-                                {step}...
+                                {isCurrent && statusText ? statusText : step + (isCurrent ? '...' : '')}
                             </span>
                         </motion.div>
                     )
