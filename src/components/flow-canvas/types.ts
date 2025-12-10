@@ -129,6 +129,7 @@ export interface FlowCanvasProps {
 	conversationId?: string | null
 	onActiveNodeChange?: (nodeId: string | null) => void
 	onEditMessage?: (nodeId: string, messageId: string, newText: string) => void
+	activeNodeId?: string | null
 }
 
 export interface LayoutConfig {

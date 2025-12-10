@@ -93,17 +93,7 @@ export function useConversationPageEffects({
 		}
 	}, [currentConversationId, currentConversationIdRef])
 
-	useEffect(() => {
-		const handleKeyDown = (e: KeyboardEvent) => {
-			if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-				e.preventDefault()
-				setShowCommandPalette(true)
-			}
-		}
-
-		window.addEventListener('keydown', handleKeyDown)
-		return () => window.removeEventListener('keydown', handleKeyDown)
-	}, [setShowCommandPalette])
+	// NOTE: Cmd+K keyboard shortcut is now handled by useKeyboardShortcuts hook in ConversationAppShell
 
 	const hasStartedLoadingRef = useRef(false)
 

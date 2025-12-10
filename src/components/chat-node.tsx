@@ -156,7 +156,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
             e.preventDefault()
             setShowMenu(!showMenu)
           }}
-          className="p-2 rounded-lg transition-all duration-200 bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/60 hover:border-border/80 shadow-md hover:shadow-lg backdrop-blur-sm"
+          className="p-2 rounded-lg transition-all duration-200 bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/60 hover:border-border/80 backdrop-blur-sm"
         >
           <DotsThreeVertical className="w-4 h-4" weight="regular" />
         </motion.button>
@@ -167,7 +167,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: -8 }}
               transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-              className="absolute top-full right-0 mt-2 w-48 bg-card border border-border/50 shadow-[0_4px_16px_rgba(0,0,0,0.12)] rounded-lg overflow-hidden z-50"
+              className="absolute top-full right-0 mt-2 w-48 bg-card border border-border/50 rounded-lg overflow-hidden z-50"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="py-1.5">
@@ -250,16 +250,16 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
       </div>
 
       <div
-        className={`bg-card rounded-2xl border transition-[box-shadow,border-color,background-color] duration-300 relative overflow-hidden flex flex-col w-full
-          ${data.isMain ? 'border-2 border-primary/50 shadow-[0_0_30px_-5px_rgba(var(--primary),0.3)]' : ''}
+        className={`bg-card rounded-2xl border transition-[border-color,background-color] duration-300 relative overflow-hidden flex flex-col w-full
+          ${data.isMain ? 'border-2 border-primary/50' : ''}
           ${data.isSelected
-            ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 border-2 border-indigo-500 dark:border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.25)]'
+            ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 border-2 border-indigo-500 dark:border-indigo-400'
             : data.isActive
-              ? 'border-primary shadow-lg shadow-primary/10 ring-2 ring-primary/30'
-              : 'border-border/40 shadow-sm hover:border-border/80 hover:shadow-md'
+              ? 'border-primary ring-2 ring-primary/30'
+              : 'border-slate-300 dark:border-border/60 hover:border-slate-400 dark:hover:border-border/90'
           }
-          ${data.isHighlighted && !data.isSelected ? 'border-primary/30 shadow-2xl shadow-primary/10 ring-1 ring-primary/20' : ''}
-          ${data.isDragging ? '!shadow-none' : ''} 
+          ${data.isHighlighted && !data.isSelected ? 'border-primary/30 ring-1 ring-primary/20' : ''}
+          ${data.isDragging ? '' : ''} 
           ${data.isMinimized ? 'p-3' : 'p-3 md:p-0'}
           ${!data.isMinimized ? 'w-[calc(100vw-2rem)] md:w-[1300px] min-w-[300px] md:min-w-[1300px] max-w-full md:max-w-[1300px]' : ''}
         `}
@@ -363,7 +363,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
                         </span>
                       </span>
                       {/* Tooltip Popup */}
-                      <div className="absolute bottom-full left-0 mb-2 w-[300px] p-3 bg-popover text-popover-foreground text-xs rounded-lg border border-border shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
+                      <div className="absolute bottom-full left-0 mb-2 w-[300px] p-3 bg-popover text-popover-foreground text-xs rounded-lg border border-border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
                         <div className="font-semibold mb-1 text-muted-foreground">Branched from:</div>
                         <div className="leading-relaxed">
                           {(() => {
@@ -378,14 +378,14 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
                 )}
 
                 {data.depth && data.depth > 1 && (
-                  <div className="absolute top-0 left-6 -translate-y-[calc(100%-1px)] px-3 py-1 bg-indigo-100 dark:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 border-b-card rounded-t-lg flex items-center gap-1.5 text-[11px] text-indigo-700 dark:text-indigo-300 font-semibold uppercase tracking-wide shadow-sm z-0">
+                  <div className="absolute top-0 left-6 -translate-y-[calc(100%-1px)] px-3 py-1 bg-indigo-100 dark:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 border-b-card rounded-t-lg flex items-center gap-1.5 text-[11px] text-indigo-700 dark:text-indigo-300 font-semibold uppercase tracking-wide z-0">
                     <GitBranch className="w-3.5 h-3.5" weight="bold" />
                     <span>Level {data.depth}</span>
                   </div>
                 )}
 
                 {data.branchGroupId && (
-                  <div className="absolute top-0 right-12 -translate-y-[calc(100%-1px)] px-3 py-1 bg-fuchsia-100 dark:bg-fuchsia-500/20 border border-fuchsia-200 dark:border-fuchsia-500/30 border-b-card rounded-t-lg flex items-center gap-1.5 text-[11px] text-fuchsia-700 dark:text-fuchsia-300 font-semibold uppercase tracking-wide shadow-sm z-0">
+                  <div className="absolute top-0 right-12 -translate-y-[calc(100%-1px)] px-3 py-1 bg-fuchsia-100 dark:bg-fuchsia-500/20 border border-fuchsia-200 dark:border-fuchsia-500/30 border-b-card rounded-t-lg flex items-center gap-1.5 text-[11px] text-fuchsia-700 dark:text-fuchsia-300 font-semibold uppercase tracking-wide z-0">
                     <ArrowsOut className="w-3.5 h-3.5" weight="bold" />
                     <span>Multi-Model</span>
                   </div>
@@ -436,7 +436,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
           zIndex: 50
         }}
       />
-    </motion.div>
+    </motion.div >
   )
 }
 
@@ -449,6 +449,7 @@ export default React.memo(ChatNode, (prevProps, nextProps) => {
     prevProps.data?.isSelected === nextProps.data?.isSelected &&
     prevProps.data?.isGenerating === nextProps.data?.isGenerating &&
     prevProps.data?.selectedAIs?.length === nextProps.data?.selectedAIs?.length &&
-    prevProps.data?.isDragging === nextProps.data?.isDragging
+    prevProps.data?.isDragging === nextProps.data?.isDragging &&
+    prevProps.data?.isHighlighted === nextProps.data?.isHighlighted
   )
 })

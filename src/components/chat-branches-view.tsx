@@ -198,8 +198,8 @@ export default function ChatBranchesView({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
           className={`border rounded-xl backdrop-blur-sm transition-all duration-200 relative overflow-visible group ${isActive
-            ? 'border-border dark:border-border/60 bg-card dark:bg-card shadow-md'
-            : 'border-border/60 dark:border-border/40 bg-card/95 dark:bg-card/98 shadow-sm hover:shadow-md hover:border-border dark:hover:border-border/50'
+            ? 'border-border dark:border-border/60 bg-card dark:bg-card'
+            : 'border-border/50 dark:border-border/40 bg-card/95 dark:bg-card/98 hover:border-border dark:hover:border-border/50'
             }`}
           style={{ marginLeft: `${branch.depth * 40}px` }}
         >
@@ -399,9 +399,9 @@ export default function ChatBranchesView({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-            className={`border rounded-xl backdrop-blur-sm shadow-lg hover:shadow-xl transition-all duration-200 overflow-hidden relative ${activeBranchId === 'main'
+            className={`border rounded-xl backdrop-blur-sm transition-all duration-200 overflow-hidden relative ${activeBranchId === 'main'
               ? 'border-border dark:border-border/60 bg-card dark:bg-card ring-1 ring-border/50 dark:ring-border/40'
-              : 'border-border/60 dark:border-border/40 bg-card dark:bg-card'
+              : 'border-border/60 dark:border-border/40 bg-card dark:bg-card hover:border-border dark:hover:border-border/50'
               }`}
           >
             {/* Subtle top border accent */}
@@ -492,7 +492,7 @@ export default function ChatBranchesView({
             {/* Clean dotted line separator with "Branches" label */}
             <div className="flex items-center gap-5 mb-8">
               <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border/50 to-border/50 dark:via-border/30 dark:to-border/30 border-t border-dashed"></div>
-              <div className="flex items-center gap-2.5 px-4 py-2 bg-muted/40 dark:bg-muted/30 rounded-full border border-border/40 dark:border-border/30 shadow-sm">
+              <div className="flex items-center gap-2.5 px-4 py-2 bg-muted/40 dark:bg-muted/30 rounded-full border border-border/40 dark:border-border/30">
                 <GitBranch className="w-3.5 h-3.5 text-muted-foreground/60 dark:text-muted-foreground/50" weight="duotone" />
                 <span className="text-xs font-semibold text-foreground/70 tracking-wider">
                   BRANCHES

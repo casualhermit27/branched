@@ -35,16 +35,16 @@ export default function ConversationHistory({
   // Group conversations by date
   const groupedConversations = conversations.reduce((groups: Record<string, Conversation[]>, conversation) => {
     const date = new Date(conversation.updatedAt)
-    const dateKey = date.toLocaleDateString('en-US', { 
-      month: 'short', 
+    const dateKey = date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
       year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
     })
-    
+
     if (!groups[dateKey]) {
       groups[dateKey] = []
     }
-    
+
     groups[dateKey].push(conversation)
     return groups
   }, {})
@@ -54,15 +54,15 @@ export default function ConversationHistory({
     if (conversation.title && conversation.title !== 'New Conversation' && conversation.title !== 'Conversation') {
       return conversation.title
     }
-    
+
     // Find first user message
     const firstUserMessage = conversation.mainMessages?.find(m => m.isUser)
     if (firstUserMessage) {
-      return firstUserMessage.text.length > 40 
-        ? firstUserMessage.text.substring(0, 40) + '...' 
+      return firstUserMessage.text.length > 40
+        ? firstUserMessage.text.substring(0, 40) + '...'
         : firstUserMessage.text
     }
-    
+
     return `Conversation ${conversation._id.substring(0, 6)}`
   }
 
@@ -70,15 +70,15 @@ export default function ConversationHistory({
     <div className="flex flex-col h-full">
       {/* New Conversation Button */}
       <div className="p-4 border-b border-border/80">
-        <button 
+        <button
           onClick={onCreateNewConversation}
-          className="w-full py-2.5 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 text-sm font-medium border border-purple-200/60 shadow-sm hover:shadow-md active:scale-[0.98]"
+          className="w-full py-2.5 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 text-sm font-medium border border-purple-200/60 active:scale-[0.98]"
         >
           <PlusCircle size={16} weight="bold" />
           New Conversation
         </button>
       </div>
-      
+
       {/* Conversation List */}
       <div className="flex-1 overflow-y-auto p-4">
         {conversations.length === 0 ? (
@@ -99,11 +99,10 @@ export default function ConversationHistory({
                     <div key={conversation._id} className="flex items-center gap-2 group relative">
                       <button
                         onClick={() => onSelectConversation(conversation._id)}
-                        className={`flex-1 text-left p-3 rounded-lg text-sm transition-all duration-200 ease-in-out min-w-0 overflow-hidden ${
-                          currentConversationId === conversation._id
+                        className={`flex-1 text-left p-3 rounded-lg text-sm transition-all duration-200 ease-in-out min-w-0 overflow-hidden ${currentConversationId === conversation._id
                             ? 'bg-purple-50 text-purple-700 border border-purple-200/60 shadow-sm pr-10'
                             : 'hover:bg-muted text-foreground border border-transparent hover:border-border/60 group-hover:pr-10 pr-3'
-                        }`}
+                          }`}
                       >
                         <div className="font-medium truncate block whitespace-nowrap overflow-hidden text-ellipsis leading-snug">
                           {getConversationTitle(conversation)}

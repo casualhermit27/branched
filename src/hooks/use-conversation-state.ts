@@ -83,6 +83,7 @@ export function useConversationState() {
 	const isInitialLoadRef = useRef(true)
 	const [isLoading, setIsLoading] = useState(true)
 	const [loadingStatus, setLoadingStatus] = useState<string>('Initializing environment...')
+	const [activeNodeId, setActiveNodeId] = useState<string | null>(null)
 
 
 	return {
@@ -148,7 +149,9 @@ export function useConversationState() {
 		isLoading,
 		setIsLoading,
 		loadingStatus,
-		setLoadingStatus
+		setLoadingStatus,
+		activeNodeId,
+		setActiveNodeId
 	}
 }
 

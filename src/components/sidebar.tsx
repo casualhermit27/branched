@@ -427,7 +427,7 @@ export default function Sidebar({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             onClick={() => setIsOpen(!isOpen)}
-            className="fixed top-7 left-4 z-50 p-2.5 bg-card dark:bg-card border border-border/80 dark:border-border/60 rounded-xl shadow-sm dark:shadow-lg hover:shadow-md dark:hover:shadow-xl transition-all duration-200 hover:bg-muted dark:hover:bg-muted/80"
+            className="fixed top-7 left-4 z-50 p-2.5 bg-card dark:bg-card border-[1.5px] border-slate-300 dark:border-border/80 rounded-xl transition-all duration-200 hover:bg-muted dark:hover:bg-muted/80 hover:border-slate-400 dark:hover:border-border/90"
             aria-label="Open sidebar"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -910,7 +910,7 @@ export default function Sidebar({
                   {tier !== 'pro' && (
                     <button
                       onClick={onUpgrade}
-                      className="w-full py-2.5 px-4 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-zinc-50 dark:text-zinc-900 text-xs font-medium tracking-wide rounded-xl shadow-sm hover:shadow-md transition-all duration-200 mb-3 flex items-center justify-center gap-2"
+                      className="w-full py-2.5 px-4 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-zinc-50 dark:text-zinc-900 text-xs font-medium tracking-wide rounded-xl transition-all duration-200 mb-3 flex items-center justify-center gap-2 border border-zinc-700 dark:border-zinc-300"
                     >
                       <SparklesIcon className="w-3.5 h-3.5" />
                       Upgrade to Pro

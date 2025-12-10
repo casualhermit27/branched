@@ -142,7 +142,7 @@ export function EmptyState({
                                     }, 0)
                                 }
                             }}
-                            className="flex items-center gap-2 px-4 py-2 bg-card border border-border/60 hover:border-primary/30 hover:bg-muted/50 rounded-full text-sm text-muted-foreground hover:text-foreground transition-all duration-200 shadow-sm hover:shadow"
+                            className="flex items-center gap-2 px-4 py-2 bg-card border border-border/60 hover:border-primary/30 hover:bg-muted/50 rounded-full text-sm text-muted-foreground hover:text-foreground transition-all duration-200"
                         >
                             {suggestion.icon}
                             <span>{suggestion.text}</span>

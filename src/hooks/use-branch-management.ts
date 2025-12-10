@@ -631,6 +631,9 @@ export function useBranchManagement({
 
 				// Prevent double-create if branch exists, UNLESS allowing duplicates
 				if (branchExists && !forceDuplicate) {
+					// Track existing branch ID so we can focus on it later
+					allBranchIds.push(existingBranchNode.id)
+
 					// If in multi-branch mode, ensure existing branches join the group
 					if (isMultiBranch && finalBranchGroupId && existingBranchNode.data?.branchGroupId !== finalBranchGroupId) {
 						nodesToUpdate.push({

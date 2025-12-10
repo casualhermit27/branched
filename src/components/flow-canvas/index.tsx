@@ -76,7 +76,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		onMessageSelectionChange,
 		conversationId,
 		onActiveNodeChange,
-		onEditMessage
+		onEditMessage,
+		activeNodeId: navigationTargetId // Renamed to avoid conflict with state
 	} = props
 
 	const state = useFlowCanvasState()
@@ -116,6 +117,37 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	const layoutInProgressRef = useRef(false)
 
 	// Force layout update on mount to fix potential misalignments from tab switching
+	// Handle external navigation (e.g. from Command Palette)
+	useEffect(() => {
+		if (navigationTargetId && nodes.length > 0) {
+			const targetNode = nodes.find(n => n.id === navigationTargetId)
+			if (targetNode) {
+				// 1. Activate the node
+				setNodeActive(navigationTargetId)
+
+				// 2. Teleport logic:
+				// If minimized, maximize it? Or simplified view? For now just focus.
+
+				// 3. Zoom/Pan to node
+				focusOnNode(reactFlowInstance, navigationTargetId, nodes, 0.15)
+
+				// 4. Highlight
+				setNodes(prev => prev.map(n => ({
+					...n,
+					data: { ...n.data, isHighlighted: n.id === navigationTargetId }
+				})))
+
+				// Clear highlight after delay
+				setTimeout(() => {
+					setNodes(prev => prev.map(n => ({
+						...n,
+						data: { ...n.data, isHighlighted: false }
+					})))
+				}, 2000)
+			}
+		}
+	}, [navigationTargetId]) // Only re-run when ID changes explicitly
+
 	useEffect(() => {
 		// Small delay to ensure DOM is ready
 		const timer = setTimeout(() => {
@@ -1397,7 +1429,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			if (activeNode) {
 				// Only auto-focus if we haven't just done a programmatic focus (within last 1s)
 				const timeSinceProgrammaticFocus = Date.now() - (lastProgrammaticFocusRef.current || 0)
-
+	
 				if (timeSinceProgrammaticFocus > 1000) {
 					// Use requestAnimationFrame for smoother timing than setTimeout
 					requestAnimationFrame(() => {
@@ -1669,7 +1701,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					zoomOnScroll={false}
 					panOnDrag={true}
 				>
-					<Background variant={"dots" as BackgroundVariant} gap={24} size={1.5} color="currentColor" className="text-slate-900/30 dark:text-slate-100/30" />
+					<Background variant={"dots" as BackgroundVariant} gap={24} size={2} color="#64748b" className="opacity-40 dark:opacity-30" />
 					<Controls />
 					<MiniMap
 						nodeColor={(node) => {

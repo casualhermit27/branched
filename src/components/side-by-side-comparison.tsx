@@ -81,10 +81,10 @@ export function SideBySideComparison({
 
         {/* Side-by-Side Comparison Grid */}
         <div className={`grid gap-4 ${groupMessages.length === 2
-            ? 'grid-cols-1 md:grid-cols-2'
-            : groupMessages.length === 3
-              ? 'grid-cols-1 md:grid-cols-3'
-              : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+          ? 'grid-cols-1 md:grid-cols-2'
+          : groupMessages.length === 3
+            ? 'grid-cols-1 md:grid-cols-3'
+            : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
           }`}>
           {groupMessages.map((msg, index) => {
             const ai = selectedAIs.find(a => a.id === msg.aiModel)
@@ -99,7 +99,7 @@ export function SideBySideComparison({
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: index * 0.1 }}
-                className="flex flex-col border border-border/20 rounded-2xl bg-card/30 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
+                className="flex flex-col border border-border/30 hover:border-border/60 rounded-2xl bg-card/30 backdrop-blur-sm transition-all duration-300 overflow-hidden"
               >
                 {/* AI Header */}
                 <div className={`px-4 py-3 border-b border-border/10 ${aiColor.replace('border', '')} bg-opacity-5 flex items-center gap-2`}>

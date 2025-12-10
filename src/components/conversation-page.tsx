@@ -103,39 +103,83 @@ export default function ConversationPage({ initialConversationId }: Conversation
 		currentConversationId
 	})
 
+	// Command Palette Helpers
+	const searchNodes = useCallback((query: string) => {
+		if (!query.trim()) return []
+		const lowerQuery = query.toLowerCase()
+		return conversationState.conversationNodes
+			.filter(node => {
+				const label = (node.data?.label || '').toLowerCase()
+				const messages = (node.data?.messages || []).map((m: any) => m.text.toLowerCase()).join(' ')
+				return label.includes(lowerQuery) || messages.includes(lowerQuery)
+			})
+			.map(node => ({
+				id: `node-${node.id}`,
+				title: node.data?.label || 'Untitled Node',
+				description: node.data?.messages?.[0]?.text?.substring(0, 50) + '...',
+				action: () => navigateToNode(node.id),
+				keywords: ['node', 'search', node.id]
+			}))
+	}, [conversationState.conversationNodes])
+
+	const navigateToNode = useCallback((nodeId: string) => {
+		// We need to trigger the focus logic in FlowCanvas
+		// Since we don't have direct access to FlowCanvas ref here,
+		// we'll set the activeNodeId which FlowCanvas watches
+		conversationState.setActiveNodeId(nodeId)
+
+		addToast({
+			type: 'info',
+			title: 'Navigating',
+			message: 'Teleporting to node...'
+		})
+	}, [conversationState, addToast])
+
 	const commandPaletteCommands = [
+		// Search Commands (Dynamic) will be handled by the CommandPalette component's filtering?
+		// No, usually CommandPalette takes a static list. To support dynamic search, we might need a custom search handler in CommandPalette.
+		// For now, let's pre-populate "Recent Nodes" or add a "Search Nodes" command that opens a sub-menu?
+		// Simpler V1: Add ALL nodes as commands (if < 100), or top 20 recent.
+		...conversationState.conversationNodes.slice(-20).reverse().map(node => ({
+			id: `jump-${node.id}`,
+			title: `Go to: ${node.data?.label || (node.data?.messages?.[0]?.text?.substring(0, 30) || 'Untitled')}`,
+			description: 'Jump to this branch node',
+			action: () => navigateToNode(node.id),
+			keywords: ['jump', 'goto', node.data?.label || '', ...(node.data?.messages || []).map((m: any) => m.text.substring(0, 20))]
+		})),
+
+		// Actions
 		{
 			id: 'export-conversation',
 			title: 'Export Conversation',
-			description: 'Export current conversation to file',
-			action: () => setShowExportImport(true)
+			description: 'Save flow as JSON',
+			action: () => setShowExportImport(true),
+			keywords: ['save', 'download']
 		},
 		{
-			id: 'clear-conversation',
-			title: 'Clear Conversation',
-			description: 'Start a new conversation',
+			id: 'new-conversation',
+			title: 'New Conversation',
+			description: 'Clear and start fresh',
 			action: () => {
-				setMessages([])
-				setBranches([])
-				setConversationNodes([])
-				addToast({
-					type: 'success',
-					title: 'Conversation cleared',
-					message: 'Started a new conversation'
-				})
-			}
+				if (window.confirm('Are you sure? Unsaved changes will be lost.')) {
+					setMessages([])
+					setBranches([])
+					setConversationNodes([])
+					addToast({
+						type: 'success',
+						title: 'New Conversation',
+						message: 'Started fresh workspace'
+					})
+				}
+			},
+			keywords: ['clear', 'reset', 'start']
 		},
 		{
-			id: 'focus-mode',
-			title: 'Focus Mode',
-			description: 'Enter focus mode for detailed work',
-			action: () => {
-				addToast({
-					type: 'info',
-					title: 'Focus Mode',
-					message: 'Click on any branch to enter focus mode'
-				})
-			}
+			id: 'toggle-theme',
+			title: 'Toggle Theme',
+			description: 'Switch dark/light mode',
+			action: () => document.getElementById('theme-toggle-btn')?.click(),
+			keywords: ['dark', 'light', 'mode', 'color']
 		}
 	]
 

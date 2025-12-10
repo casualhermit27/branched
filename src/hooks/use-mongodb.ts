@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useSession } from 'next-auth/react'
 import { mongoDBService, ConversationData } from '@/services/mongodb-service'
 import { IConversation } from '@/models/conversation'
 
@@ -37,6 +38,11 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
     onLoad,
     initialConversationId
   } = options
+
+  // Get session to track auth state changes
+  const { data: session, status } = useSession()
+  // Extract userId for stable dependency
+  const userId = session?.user?.id ?? null
 
   // State
   const [conversations, setConversations] = useState<IConversation[]>([])
@@ -313,10 +319,13 @@ export function useMongoDB(options: UseMongoDBOptions = {}): UseMongoDBReturn {
     }, autoSaveDelay)
   }, [autoSave, autoSaveDelay, saveConversation, sanitizeData])
 
-  // Load conversations on mount
+  // Load conversations on mount and when auth state changes
   useEffect(() => {
-    loadConversations()
-  }, [loadConversations])
+    // Only load when session status is not loading
+    if (status !== 'loading') {
+      loadConversations()
+    }
+  }, [loadConversations, userId, status])
 
   // Cleanup timeout on unmount
   useEffect(() => {

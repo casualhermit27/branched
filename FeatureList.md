@@ -1,100 +1,339 @@
-# Feature List
+# Branched - Complete Feature List
 
-## Core Conversation & Branching
+> A powerful multi-model AI conversation platform with visual branching, context management, and collaboration tools.
 
-### Multi-Model Conversations
-- **Simultaneous AI Responses**: Interact with multiple AI models (e.g., Mistral, Gemini) within the same conversation thread.
-- **Model Selection**: Dynamically select which AI models participate in a conversation or specific branch.
-- **AI Pills**: Visual indicators and selectors for active AI models.
-- **Unified Interface**: A single chat interface that aggregates responses from multiple models.
+---
 
-### Advanced Branching System
-- **Infinite Branching**: Create new conversation branches from any message at any point.
-- **Visual Flow Canvas**: A node-based graph visualization of the entire conversation tree.
-- **Auto-Layout**: Automatic positioning of nodes using the Dagre algorithm for a clean, organized view.
-- **Branch Management**:
-    - **Create**: One-click branching from any message.
-    - **Delete**: Remove unwanted branches with confirmation.
-    - **Link**: Connect disparate branches to merge contexts or create references.
-    - **Navigate**: Jump between branches using the sidebar or by clicking nodes on the canvas.
-- **Branch Warning**: Alerts users when creating too many branches from a single node to prevent clutter.
+## 🤖 Multi-Model AI Conversations
 
-### Context & Memory
-- **Context Inheritance**: Branches automatically inherit the conversation history from their parent path.
-- **Context Linking**: Link branches to share context, allowing for complex conversation flows (Merge, Reference, Continuation, Alternative).
-- **Memory Panel**: View and manage the "memory" or context available to the current conversation branch.
-- **Memory Recall**: Mechanisms to recall and display relevant past information.
+### Supported AI Models
+| Provider | Models |
+|----------|--------|
+| **OpenAI** | GPT-4o, GPT-4o Mini, GPT-4 Turbo, GPT-3.5 Turbo |
+| **Anthropic** | Claude 3.5 Sonnet, Claude 3 Haiku |
+| **Google** | Gemini Pro, Gemini Flash |
+| **Mistral** | Mistral Large, Mistral Medium, Mistral Small |
+| **xAI** | Grok |
 
-## Visualization & Navigation
+### Multi-Model Features
+- **Simultaneous Responses**: Send a single prompt and receive responses from multiple AI models at once
+- **AI Pills**: Visual model selector with color-coded indicators showing which models are active
+- **Model Switching**: Easily add, remove, or switch between AI models mid-conversation
+- **BYOK (Bring Your Own Key)**: Use your own API keys for OpenAI, Anthropic, Google, Mistral, and xAI
+- **Model Discovery**: Automatic detection and validation of available models when you enter an API key
+- **Response Streaming**: Real-time token-by-token streaming of AI responses with visual "Thinking..." and "Generating..." indicators
 
-### Flow Canvas
-- **Interactive Graph**: Pan and zoom capability to explore large conversation trees.
-- **Node Minimization**: Collapse nodes to save space and focus on active branches.
-- **Focus Mode**:
-    - **Auto-Focus**: Automatically centers and zooms on newly created branches.
-    - **Smooth Animations**: Fluid transitions when navigating between nodes.
-- **Mini-Map**: A small overview map for quick navigation across large canvases.
-- **Background Controls**: Customizable background patterns (dots, lines, cross).
+---
 
-### View Modes
-- **Canvas View**: The default node-based graph view.
-- **Chat View**: A focused, linear chat interface for the active branch.
-- **Split View**: Side-by-side comparison of different branches or model responses.
+## 🌳 Branching System
 
-### Sidebar & Navigation
-- **Conversation History**: List of all saved conversations.
-- **Branch Tree**: A hierarchical tree view of branches within the current conversation.
-- **Quick Navigation**: Jump to specific nodes or branches directly from the sidebar.
-- **Search**: Filter and find specific conversations or branches.
+### Core Branching
+- **One-Click Branching**: Create a new branch from any message by clicking the branch icon
+- **Multi-Branch Creation**: Use "Create Branches for All" to spawn separate branches for each AI model's response
+- **Infinite Depth**: Branch from branches - create nested conversation trees with unlimited depth
+- **Branch Inheritance**: New branches automatically inherit the full conversation history from their parent
 
-## Comparison & Analysis
+### Branch Management
+- **Branch Labels**: Each branch shows its depth level and multi-model group indicators
+- **Delete Branch**: Remove unwanted branches with a confirmation modal
+- **Branch Warning**: Alert when creating too many branches (6+) from a single message to prevent clutter
+- **Branch Linking**: Connect branches to share context between different conversation paths (reference-based injection)
 
-### Branch Comparison
-- **Side-by-Side Viewer**: Visually compare two or more branches to see differences in AI responses.
-- **Diff Highlighting**: Color-coded text highlighting to show additions, deletions, and modifications.
-- **AI Summary**: Automated generation of summaries highlighting key differences between branches.
-- **Opposing Information**: Detection of contradictory information across different branches.
+### Visual Indicators
+- **Depth Tags**: Visual badge showing "Level 2", "Level 3", etc. for nested branches
+- **Multi-Model Tags**: "Multi-Model" badge for branches created from multi-model responses
+- **Branch Origin**: "Branched from:" indicator showing the source message
 
-### Model Comparison
-- **Performance Metrics**: Compare response times, token usage, and costs (mocked/planned).
-- **Quality Metrics**: User voting (up/down) and feedback on specific model responses.
+---
 
-## Data Management & Utilities
+## 🎨 Visual Flow Canvas
 
-### Persistence
-- **MongoDB Integration**: Robust data storage for conversations, branches, and messages.
-- **Auto-Save**: Changes are automatically saved to the database.
-- **Local Development**: Support for embedded MongoDB for easy local setup.
+### Canvas Features
+- **Node-Based Graph**: Visual representation of your entire conversation tree using React Flow
+- **Pan & Zoom**: Navigate large conversation trees with mouse drag and scroll
+- **Mini-Map**: Small overview map in the corner for quick navigation across large canvases
+- **Background Dots**: Subtle dot pattern background with proper visibility in dark and light modes
+
+### Node States
+- **Minimized Nodes**: Collapse nodes to save space - shows message count and last message preview
+- **Active Node**: Visual highlighting (purple border/ring) for the currently focused node
+- **Selected Nodes**: Multi-select nodes with Ctrl/Cmd+Click for batch operations
+- **Generating State**: Pulsing indicator when a node is actively receiving AI responses
+
+### Layout & Navigation
+- **Auto-Layout**: Automatic node positioning using the Dagre algorithm (top-to-bottom hierarchy)
+- **Smooth Animations**: Animated transitions when navigating between nodes
+- **Focus on Branch**: Double-click a node or use sidebar to focus and center on that branch
+- **Drag & Drop**: Manually reposition nodes on the canvas
+
+---
+
+## 💬 Chat Interface
+
+### Message Display
+- **Markdown Rendering**: Full markdown support including headers, lists, code blocks, and inline formatting
+- **Code Highlighting**: Syntax-highlighted code blocks with proper styling
+- **Streaming Display**: Real-time text appearance as AI generates responses
+- **Message Timestamps**: Time indicators on each message
+
+### Message Actions (Hover Toolbar)
+- **Copy**: Copy message text to clipboard with visual confirmation
+- **Edit**: Edit user messages and regenerate AI responses
+- **Branch**: Create a new branch from this specific message
+
+### User Message Features
+- **Multi-Select**: Ctrl/Cmd+Click to select multiple messages
+- **Edit & Regenerate**: Modify a sent message and get a new AI response
+
+### AI Response Features
+- **Model Indicator**: Shows which AI model generated each response with its logo
+- **Response Grouping**: Multiple AI responses to the same prompt are visually grouped
+- **Compare View**: Toggle between stacked view and side-by-side comparison for grouped responses
+- **Synthesize**: (Planned) Combine multiple AI responses into a unified answer
+
+---
+
+## 📊 Comparison & Analysis
+
+### Side-by-Side Comparison
+- **Multi-Model Comparison**: View responses from different AI models side by side
+- **Branch Comparison**: Compare content between different conversation branches
+- **Expand/Collapse**: Toggle between stacked and comparison views for grouped responses
+
+### Branch Compare Viewer
+- **Full Branch Comparison**: Open a dedicated modal to compare two branches in detail
+- **AI Summary**: Generate an AI-powered summary of differences between branches
+- **Similarity Analysis**: (Planned) Show how similar or different responses are
+
+### 🔀 Synthesize (Merge) Responses
+
+**Purpose**: Merge multiple sibling node responses into a single "Best of" synthesized answer.
+
+#### How It Works
+1. **Selection**: User selects Node A, Node B, Node C (sibling branches) using Ctrl/Cmd+Click
+2. **Action**: Click the "Synthesize" button that appears in the selection toolbar
+3. **AI Processing**:
+   - Constructs a prompt containing the text from all selected nodes
+   - Appends synthesis instructions: "Find consensus, resolve conflicts, combine best elements"
+   - Sends to `/api/chat` using a high-reasoning model (e.g., GPT-4o)
+4. **Graph Update**:
+   - Creates a new Node D (the synthesized response)
+   - Creates edges: A→D, B→D, C→D (marking D as a child of all selected nodes)
+   - Renders Node D with a unique "Synthesis" style (gold border, merge icon)
+
+#### Visual Design
+| Element | Style |
+|---------|-------|
+| Synthesized Node Border | Gold/Amber (#F59E0B) |
+| Node Badge | "Synthesized" with merge icon |
+| Source Indicator | "Merged from N nodes" |
+| Edges | Multiple incoming edges (dashed, gold) |
+
+---
+
+## 🧠 Context & Memory
+
+### Context Management
+- **Full Context Inheritance**: Branches receive complete conversation history from their parent path
+- **Context Snapshot**: Each branch stores a snapshot of its inherited context at branch creation time
+- **Message Store**: Efficient global message storage to avoid duplication
+
+### Memory Panel
+- **Memory Layers**: Three-tier memory system (Global, Branch, Node)
+- **Memory Recall**: View and manage context that influences AI responses
+- **Relevance Scoring**: Memories ranked by relevance to current conversation
+
+---
+
+## 📁 Sidebar & Navigation
+
+### Conversation History Tab
+- **Conversation List**: All saved conversations grouped by date
+- **Conversation Preview**: Shows message count and branch count
+- **Quick Navigation**: Click to load any previous conversation
+- **Delete Conversation**: Remove conversations with confirmation
+
+### Branch Tree Tab
+- **Hierarchical Tree**: Visual tree structure of all branches in current conversation
+- **Expandable Nodes**: Collapse/expand branch groups
+- **Active Indicator**: Highlight showing which branch is currently active
+- **Quick Jump**: Click any branch to navigate and focus on it
+
+### Settings Tab
+- **API Key Management**: Securely enter and store API keys for each provider
+- **Key Visibility Toggle**: Show/hide API keys
+- **Key Validation**: Visual indicators for valid/invalid keys
+- **Model Discovery**: Auto-discover available models after entering a key
+
+---
+
+## 🔍 Search & Command Palette
+
+### Global Search (Cmd/Ctrl + Shift + F)
+- **Full-Text Search**: Search across all messages in all nodes
+- **Node Filtering**: Search results grouped by node/branch
+- **Instant Navigation**: Click a result to focus on that node and highlight the message
+
+### Command Palette (Cmd/Ctrl + K)
+- **Quick Actions**: Access common commands via keyboard
+- **Available Commands**:
+  - Switch between AI models
+  - Export conversation
+  - New conversation
+  - Toggle theme
+  - Navigate to branches
+
+---
+
+## 💾 Data Persistence
+
+### MongoDB Storage
+- **Auto-Save**: Conversations automatically saved after changes (2-second debounce)
+- **User Accounts**: Conversations linked to authenticated users
+- **Guest Mode**: Legacy conversations work without login
+- **Conversation Claiming**: Guest conversations auto-claimed when user logs in
 
 ### Export & Import
-- **Full State Export**: Export entire conversations, including the branching structure, to a JSON file.
-- **Import**: Restore conversations from previously exported files.
-- **Format Support**: Planned support for PDF, Markdown, and other formats.
+- **JSON Export**: Export full conversation state including all branches and positions
+- **JSON Import**: Restore conversations from exported files
+- **Node Positions**: Canvas layout preserved in exports
 
-### Command Palette
-- **Quick Actions**: Access common commands (e.g., "New Conversation", "Export", "Toggle Theme") via a keyboard shortcut (Cmd+K).
-- **Navigation**: Quickly jump to different parts of the application.
+---
 
-## UI/UX & Customization
+## 🔐 Authentication & User Management
+
+### Authentication
+- **Email/Password Login**: Traditional credential-based authentication
+- **Sign Up**: Create new accounts with email and password
+- **Session Management**: Secure session handling via NextAuth.js
+
+### User Experience
+- **Login Modal**: Clean modal interface for login/signup
+- **Session Persistence**: Stay logged in across browser sessions
+- **Auto-Refresh**: Conversation list auto-updates on login/logout
+
+---
+
+## 🎨 UI/UX Features
 
 ### Theming
-- **Dark/Light Mode**: Fully supported dark and light themes.
-- **Responsive Design**: Mobile-friendly layout for chat nodes and interface elements.
+- **Dark Mode**: Premium dark theme with purple accents
+- **Light Mode**: Clean light theme with proper contrast
+- **Theme Toggle**: One-click switching between modes
 
-### Onboarding
-- **Interactive Tour**: Step-by-step guide for new users to understand the interface and features.
+### Animations & Polish
+- **Framer Motion**: Smooth animations throughout the app
+- **Glassmorphism**: Subtle glass effects on cards and modals
+- **Hover States**: Interactive feedback on all clickable elements
+- **Loading States**: Detailed loading screens with status messages
 
-### Pricing & Plans
-- **Pricing Modal**: Display of subscription tiers (Free, Pro, Team) and features.
-- **Subscription Management**: UI for managing user subscriptions (mocked integration).
+### Responsive Design
+- **Desktop Optimized**: Best experience on large screens with full canvas view
+- **Collapsible Sidebar**: Hide/show navigation to maximize workspace
+- **Resizable Nodes**: Consistent node sizing across different screen sizes
 
-## Developer & System Features
+---
 
-### AI Integration
-- **Unified API Wrapper**: Abstraction layer for interacting with different AI providers.
-- **Streaming Support**: Real-time text streaming for AI responses.
-- **Error Handling**: Graceful fallback and error messaging for API failures.
+## 🎓 Onboarding
+
+### Interactive Tour
+- **Step-by-Step Guide**: Introduction to key features for new users
+- **Highlighted Elements**: Visual focus on UI elements being explained
+- **Skip Option**: Users can skip the tour if they're already familiar
+
+---
+
+## 💳 Pricing & Plans
+
+### Tiers
+| Feature | Free | Pro |
+|---------|------|-----|
+| Conversations | 5 | Unlimited |
+| Branches per conversation | 10 | Unlimited |
+| AI Models | 3 | All |
+| Export/Import | ✓ | ✓ |
+| Priority Support | ✗ | ✓ |
+
+### Upsell Experience
+- **Usage Limits**: Clear indicators when approaching free tier limits
+- **Upgrade Prompts**: Contextual prompts to upgrade when hitting limits
+- **Pricing Modal**: Detailed comparison of plan features
+
+---
+
+## ⚙️ Developer Features
+
+### API Architecture
+- **Unified API Wrapper**: Single interface for all AI providers
+- **Server-Side Routing**: API calls routed through Next.js API routes
+- **Error Handling**: Graceful error messages for API failures
+- **Abort Support**: Cancel in-progress AI generations
 
 ### Analytics & Feedback
-- **Usage Analytics**: Tracking of user interactions and feature usage.
-- **Feedback Loop**: Mechanism for users to provide feedback on AI responses.
+- **Usage Analytics**: Track feature usage patterns
+- **Feedback Loop**: Collect user feedback on AI responses
+
+### Caching
+- **Conversation Caching**: Fast restoration of recent conversations
+- **Model Discovery Caching**: Cached model lists for quick provider switching
+
+---
+
+## ⌨️ Keyboard Shortcuts (Core V1)
+
+Essential keyboard shortcuts for power users and developer workflows.
+
+### Core Shortcuts
+| Shortcut | Action | Description |
+|----------|--------|-------------|
+| `Cmd/Ctrl + Enter` | Send Message | Submit the current message |
+| `Cmd/Ctrl + K` | Command Palette | Open quick actions and search |
+| `Cmd/Ctrl + \` | Fork/Branch | Create a branch from current node |
+| `Tab` | Cycle Models | Switch between active AI models |
+| `Cmd/Ctrl + Shift + F` | Global Search | Search across all messages |
+| `Escape` | Close/Cancel | Close modals, cancel selection |
+
+### Navigation Shortcuts
+| Shortcut | Action | Description |
+|----------|--------|-------------|
+| `Cmd/Ctrl + 1` | Canvas View | Switch to flow canvas view |
+| `Cmd/Ctrl + 2` | Chat View | Switch to focused chat view |
+| `Arrow Keys` | Navigate Nodes | Move between nodes on canvas |
+| `Home` | Go to Main | Focus on the main conversation node |
+
+### Selection Shortcuts
+| Shortcut | Action | Description |
+|----------|--------|-------------|
+| `Cmd/Ctrl + Click` | Multi-Select | Select multiple nodes/messages |
+| `Cmd/Ctrl + A` | Select All | Select all nodes in current view |
+| `Cmd/Ctrl + D` | Deselect All | Clear current selection |
+
+---
+
+## 🚀 Planned Features
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Diff Highlighting | Planned | Color-coded changes between branches |
+| PDF/Markdown Export | Planned | Export in additional formats |
+| Team Collaboration | Planned | Share conversations with team members |
+| Voice Input | Planned | Speech-to-text message input |
+| Image Attachments | Planned | Send images to vision-capable models |
+| Custom Themes | Planned | User-defined color schemes |
+
+---
+
+## 📝 Technical Stack
+
+- **Framework**: Next.js 15 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **UI Components**: Custom components with Framer Motion
+- **Canvas**: React Flow for node-based visualization
+- **Database**: MongoDB with Mongoose
+- **Authentication**: NextAuth.js
+- **AI Integration**: Direct API calls to OpenAI, Anthropic, Google, Mistral, xAI
+
+---
+
+*Last Updated: December 10, 2024*

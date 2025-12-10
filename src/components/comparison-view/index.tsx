@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, Reorder } from 'framer-motion'
-import { XMarkIcon, ArrowDownTrayIcon, ArrowsRightLeftIcon, ArrowPathIcon, CheckIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, ArrowDownTrayIcon, ArrowsRightLeftIcon, ArrowPathIcon, CheckIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { ReactFlowNode } from '@/components/flow-canvas/types'
 import { IMessage } from '@/models/conversation'
 import { allAIOptions } from '@/components/ai-pills'
@@ -136,6 +136,16 @@ export function ComparisonView({
                     >
                         <ArrowPathIcon className="w-4 h-4" />
                         Reset
+                    </button>
+                    <button
+                        onClick={() => {
+                            // Synthesize logic to be implemented
+                            alert("Synthesize feature: Coming soon! This will combine the active branches into a final response.")
+                        }}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-300 dark:hover:bg-purple-900/30 rounded-lg transition-colors border border-purple-200 dark:border-purple-800"
+                    >
+                        <SparklesIcon className="w-4 h-4" />
+                        Synthesize
                     </button>
                     <button
                         onClick={handleExport}
