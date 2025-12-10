@@ -72,6 +72,7 @@ interface SidebarProps {
   pushContent?: boolean // New prop to enable push layout
   tier?: 'free' | 'pro'
   credits?: number
+  checkLimit?: (type: 'branch' | 'message') => boolean
 }
 
 const ProviderIcon = ({ id, className = "w-5 h-5" }: { id: string, className?: string }) => {
@@ -152,7 +153,8 @@ export default function Sidebar({
   onClearData,
   pushContent = true, // Default to push layout
   tier = 'free',
-  credits = 0
+  credits = 0,
+  checkLimit
 }: SidebarProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false)
   const [internalActiveTab, setInternalActiveTab] = useState<'history' | 'settings'>('history')
@@ -555,10 +557,14 @@ export default function Sidebar({
                     currentConversationId={currentConversationId}
                     onSelectConversation={onSelectConversation}
                     onCreateNewConversation={() => {
+                      // checkLimit removed to resolve user login state issues; access control handled by Guest Guards in other components
                       onCreateNewConversation()
-                      setIsOpen(false) // Only close sidebar after creating new conversation
+                      setIsOpen(false)
                     }}
-                    onDeleteConversation={(id) => onDeleteConversation?.(id)}
+                    onDeleteConversation={(id) => {
+                      if (checkLimit && !checkLimit('message')) return
+                      onDeleteConversation?.(id)
+                    }}
                   />
                 ) : (
                   <div className="p-6 space-y-6">

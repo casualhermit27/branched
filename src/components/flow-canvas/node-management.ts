@@ -28,6 +28,7 @@ export function createMainNode(
 		getBestAvailableModel?: () => string
 		onSelectSingle?: (aiId: string) => void
 		onToggleMultiModel?: (nodeId: string) => void
+		checkLimit?: (type: 'branch' | 'message') => boolean
 	},
 	state: {
 		isMinimized: boolean
@@ -52,6 +53,7 @@ export function createMainNode(
 			onToggleMultiModel: handlers.onToggleMultiModel,
 			getBestAvailableModel: handlers.getBestAvailableModel,
 			onExportImport: handlers.onExportImport,
+			checkLimit: handlers.checkLimit,
 			isMain: true,
 			showAIPill: true,
 			isMinimized: state.isMinimized,
@@ -83,6 +85,7 @@ export function createBranchNode(
 		onToggleMultiModel: (nodeId: string) => void
 		getBestAvailableModel?: () => string
 		onDeleteBranch?: (nodeId: string) => void
+		checkLimit?: (type: 'branch' | 'message') => boolean
 	},
 	state: {
 		isMinimized: boolean
@@ -203,7 +206,8 @@ export function createBranchNode(
 			onToggleMinimize: state.onToggleMinimize,
 			branchGroupId: (typeof branchGroupId === 'string' ? branchGroupId : undefined) ||
 				(typeof branchContext.metadata?.branchGroupId === 'string' ? branchContext.metadata.branchGroupId : undefined), // Use passed ID or retrieve from store
-			depth: (parentNode.data?.depth || 0) + 1
+			depth: (parentNode.data?.depth || 0) + 1,
+			checkLimit: handlers.checkLimit
 		}
 	}
 }

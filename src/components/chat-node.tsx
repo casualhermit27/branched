@@ -73,6 +73,7 @@ interface ChatNodeData {
   onNavigateToMessage?: (messageId: string) => void
   isDragging?: boolean
   onEditMessage?: (nodeId: string, messageId: string, newText: string) => void
+  checkLimit?: (type: 'branch' | 'message') => boolean
 }
 
 function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
@@ -199,6 +200,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
+                        if (data.checkLimit && !data.checkLimit('branch')) return
                         data.onLinkBranch?.(id)
                         setShowMenu(false)
                       }}
@@ -230,6 +232,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
+                        if (data.checkLimit && !data.checkLimit('branch')) return
                         if (data.onDeleteBranch) {
                           setShowDeleteConfirm(true)
                           setShowMenu(false)
@@ -417,6 +420,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
                   onMessageSelect={data.onMessageSelect}
                   selectedMessageIds={data.selectedMessageIds}
                   onEditMessage={data.onEditMessage ? (messageId, newText) => data.onEditMessage?.(id, messageId, newText) : undefined}
+                  checkLimit={data.checkLimit}
                 />
               </div>
             </motion.div>

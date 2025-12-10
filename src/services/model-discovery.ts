@@ -196,6 +196,38 @@ async function fetchGrokModels(apiKey: string): Promise<DiscoveredModel[]> {
     }
 }
 
+// Fetch available models from OpenRouter
+async function fetchOpenRouterModels(apiKey: string): Promise<DiscoveredModel[]> {
+    try {
+        const response = await fetch('https://openrouter.ai/api/v1/models', {
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+            }
+        })
+
+        if (!response.ok) {
+            console.error('OpenRouter models fetch failed:', response.status)
+            return []
+        }
+
+        const data = await response.json()
+        const models = data.data
+            .map((m: any) => ({
+                id: m.id,
+                name: m.name,
+                provider: 'openrouter',
+                description: m.description,
+                contextWindow: m.context_length
+            }))
+            .sort((a: DiscoveredModel, b: DiscoveredModel) => a.name.localeCompare(b.name))
+
+        return models.length > 0 ? models : []
+    } catch (error) {
+        console.error('Error fetching OpenRouter models:', error)
+        return []
+    }
+}
+
 // Main function to discover models for a provider
 export async function discoverModels(provider: string, apiKey: string): Promise<DiscoveredModel[]> {
     switch (provider) {
@@ -209,6 +241,8 @@ export async function discoverModels(provider: string, apiKey: string): Promise<
             return fetchMistralModels(apiKey)
         case 'grok':
             return fetchGrokModels(apiKey)
+        case 'openrouter':
+            return fetchOpenRouterModels(apiKey)
         default:
             return []
     }

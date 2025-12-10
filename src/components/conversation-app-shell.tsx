@@ -143,11 +143,13 @@ export default function ConversationAppShell({
         stopGeneration,
         sendMessage,
         branchFromMessage,
+
         handleBranchWarning,
         handleBranchWarningConfirm,
         handleBranchWarningCancel,
         getBestAvailableModel,
-        editMessage
+        editMessage,
+        checkLimit
     } = actions
 
     // Cycle through AI models
@@ -161,12 +163,13 @@ export default function ConversationAppShell({
 
     // Branch from current active node
     const handleBranchCurrentNode = useCallback(() => {
+        if (checkLimit && !checkLimit('branch')) return
         // Get the last user message from the current context
         const lastUserMessage = [...messages].reverse().find(m => m.isUser)
         if (lastUserMessage) {
             branchFromMessage(lastUserMessage.id, false)
         }
-    }, [messages, branchFromMessage])
+    }, [messages, branchFromMessage, checkLimit])
 
     // Close all modals/overlays
     const handleEscape = useCallback(() => {
@@ -382,7 +385,7 @@ export default function ConversationAppShell({
                 ) : (
                     <button
                         onClick={onLoginClick}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:bg-primary/90 transition-all duration-200"
+                        className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:bg-primary/90 transition-all duration-200"
                     >
                         <User className="w-4 h-4" weight="bold" />
                         <span>Login</span>
@@ -425,6 +428,7 @@ export default function ConversationAppShell({
                 onExportData={() => setShowExportImport(true)}
                 tier={tier}
                 credits={credits}
+                checkLimit={checkLimit}
             />
 
             <PricingModal
@@ -507,6 +511,7 @@ export default function ConversationAppShell({
                                     }
                                 }}
                                 onEditMessage={editMessage}
+                                checkLimit={checkLimit}
                             />
                         </div>
                     </>
@@ -522,6 +527,7 @@ export default function ConversationAppShell({
                                 onSelectSingle={selectSingleAI}
                                 getBestAvailableModel={getBestAvailableModel}
                                 tier={tier}
+                                checkLimit={checkLimit}
                             />
                         ) : (
                             <div className="flex items-center justify-center h-screen p-4">
@@ -567,6 +573,7 @@ export default function ConversationAppShell({
                                                 getBestAvailableModel={getBestAvailableModel}
                                                 tier={tier}
                                                 onEditMessage={(msgId, newText) => editMessage(activeBranchId || 'main', msgId, newText)}
+                                                checkLimit={checkLimit}
                                             />
                                         </div>
                                     </div>
@@ -620,6 +627,7 @@ export default function ConversationAppShell({
                             }}
                             onEditMessage={editMessage}
                             activeNodeId={state.activeNodeId} // Pass navigation target
+                            checkLimit={checkLimit}
                         />
                     )
                 )
@@ -654,7 +662,10 @@ export default function ConversationAppShell({
 
                             {/* Synthesize Button */}
                             <button
-                                onClick={() => setShowSynthesizeModal(true)}
+                                onClick={() => {
+                                    if (checkLimit && !checkLimit('branch')) return
+                                    setShowSynthesizeModal(true)
+                                }}
                                 className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-white rounded-full hover:bg-amber-600 transition-all duration-200 font-medium"
                             >
                                 <GitMerge className="w-4 h-4" />

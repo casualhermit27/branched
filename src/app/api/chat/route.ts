@@ -13,6 +13,19 @@ export async function POST(req: NextRequest) {
         const { model, message, context, provider = 'openai' } = body
         const messages = context?.messages || []
 
+        // Debug logging
+        console.log('[Chat API] Received request:', {
+            model,
+            provider,
+            messageCount: messages.length,
+            messageSummary: messages.map((m: any) => ({
+                isUser: m.isUser,
+                textLength: m.text?.length || 0,
+                hasText: !!m.text,
+                streamingTextLength: m.streamingText?.length || 0
+            }))
+        })
+
         // 1. BYOK Check (Header)
         const apiKey = req.headers.get('x-api-key')
         if (apiKey) {

@@ -178,15 +178,20 @@ export class MistralAPI extends BaseAIAPI {
 
   constructor() { super(); this.initKey(); }
 
+  protected initKey() {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(`api_key_${this.provider}`)
+      if (stored) { this.apiKey = stored; return }
+    }
+    this.apiKey = process.env.NEXT_PUBLIC_MISTRAL_API_KEY || ''
+  }
+
   async generateResponse(model: string, message: string, context: ConversationContext, onChunk?: (chunk: string) => void, signal?: AbortSignal): Promise<AIResponse> {
     const response = await this.callGateway(model, message, context, signal)
     // Mistral uses same SSE format as OpenAI
-    if (onChunk) return new OpenAIAPI().generateResponse(model, message, context, onChunk, signal).catch(() => this.handleStreamingResponse(response, onChunk, signal))
-    // Actually, just reuse the logic directly
     return this.handleStreamingResponse(response, onChunk, signal)
   }
 
-  // Reuse OpenAI parser for Mistral as it's compatible
   private async handleStreamingResponse(response: Response, onChunk?: (chunk: string) => void, signal?: AbortSignal): Promise<AIResponse> {
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
@@ -212,10 +217,13 @@ export class MistralAPI extends BaseAIAPI {
                 fullResponse += content
                 if (onChunk) onChunk(content)
               }
-            } catch (e) { }
+            } catch (e) {
+              console.log('[MistralAPI] Parse error or non-content chunk:', data.substring(0, 100))
+            }
           }
         }
       }
+      console.log('[MistralAPI] Final response length:', fullResponse.length)
       return { text: fullResponse, model: this.provider, timestamp: Date.now() }
     } finally { reader.releaseLock() }
   }
@@ -281,6 +289,14 @@ export class GeminiAPI extends BaseAIAPI {
 
   constructor() { super(); this.initKey(); }
 
+  protected initKey() {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(`api_key_${this.provider}`)
+      if (stored) { this.apiKey = stored; return }
+    }
+    this.apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
+  }
+
   async generateResponse(model: string, message: string, context: ConversationContext, onChunk?: (chunk: string) => void, signal?: AbortSignal): Promise<AIResponse> {
     const response = await this.callGateway(model, message, context, signal)
     // Server returns raw Google stream (JSON Array)
@@ -319,8 +335,31 @@ export class GeminiAPI extends BaseAIAPI {
           onChunk(content)
         }
       }
+      console.log('[GeminiAPI] Final response length:', fullResponse.length)
       return { text: fullResponse, model: this.provider, timestamp: Date.now() }
     } finally { reader.releaseLock() }
+  }
+}
+
+// OpenRouter (OpenAI Compatible)
+export class OpenRouterAPI extends OpenAIAPI {
+  protected provider = 'openrouter'
+  protected envKey = 'NEXT_PUBLIC_OPENROUTER_API_KEY'
+  constructor() {
+    super();
+    this.initKey();
+  }
+
+  protected initKey() {
+    // Explicit access is required for Next.js build-time inlining
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(`api_key_${this.provider}`)
+      if (stored) {
+        this.apiKey = stored
+        return
+      }
+    }
+    this.apiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || ''
   }
 }
 
@@ -331,6 +370,7 @@ export class AIService {
   private openaiAPI: OpenAIAPI
   private claudeAPI: ClaudeAPI
   private grokAPI: GrokAPI
+  private openrouterAPI: OpenRouterAPI
 
   constructor() {
     this.mistralAPI = new MistralAPI()
@@ -338,6 +378,7 @@ export class AIService {
     this.openaiAPI = new OpenAIAPI()
     this.claudeAPI = new ClaudeAPI()
     this.grokAPI = new GrokAPI()
+    this.openrouterAPI = new OpenRouterAPI()
   }
 
   public getMistralAPI(): MistralAPI { return this.mistralAPI }
@@ -352,6 +393,7 @@ export class AIService {
   ): Promise<AIResponse> {
     const normalizedModel = model.toLowerCase()
 
+    if (normalizedModel.includes('openrouter')) return this.openrouterAPI.generateResponse(model, message, context, onChunk, signal)
     if (normalizedModel.includes('mistral') || normalizedModel.includes('codestral') || normalizedModel.includes('ministral')) return this.mistralAPI.generateResponse(model, message, context, onChunk, signal)
     if (normalizedModel.includes('gemini')) return this.geminiAPI.generateResponse(model, message, context, onChunk, signal)
     if (normalizedModel.includes('gpt') || normalizedModel.includes('openai')) return this.openaiAPI.generateResponse(model, message, context, onChunk, signal)
@@ -370,7 +412,20 @@ export class AIService {
   isModelAvailable(model: string): boolean {
     const normalizedModel = model.toLowerCase()
 
-    // Check local keys
+    // Always allow Free Tier / System models
+    // This allows the Client to try calling the Server even if the Client Logic 
+    // doesn't have the API Key (e.g. Build Time env var missing).
+    // The Server will then use its Runtime Env Vars to fulfill the request.
+    const freeModels = [
+      'gemini-1.5-flash',
+      'mistral-small-latest',
+      'openrouter/google/gemini-2.0-flash-exp:free',
+      'openrouter/meta-llama/llama-3.1-8b-instruct:free'
+    ].map(id => id.toLowerCase())
+    if (freeModels.some(id => normalizedModel.includes(id))) return true
+
+    // Check local keys for other models
+    if (normalizedModel.includes('openrouter')) return this.openrouterAPI.hasKey()
     if (normalizedModel.includes('mistral') || normalizedModel.includes('codestral') || normalizedModel.includes('ministral')) return this.mistralAPI.hasKey()
     if (normalizedModel.includes('gemini')) return this.geminiAPI.hasKey()
     if (normalizedModel.includes('gpt') || normalizedModel.includes('openai')) return this.openaiAPI.hasKey()
@@ -382,6 +437,7 @@ export class AIService {
 
   updateKey(provider: string, key: string) {
     switch (provider.toLowerCase()) {
+      case 'openrouter': this.openrouterAPI.setApiKey(key); break;
       case 'mistral': this.mistralAPI.setApiKey(key); break;
       case 'gemini': this.geminiAPI.setApiKey(key); break;
       case 'openai': this.openaiAPI.setApiKey(key); break;
@@ -397,7 +453,7 @@ export class AIService {
   // Get the best available model based on keys and discovered models
   getBestModel(): string {
     // Priority 1: Discovered models from keys
-    const providers = ['openai', 'claude', 'gemini', 'mistral', 'grok']
+    const providers = ['openai', 'claude', 'gemini', 'mistral', 'grok', 'openrouter']
 
     for (const provider of providers) {
       if (this.getKey(provider)) {
@@ -410,6 +466,7 @@ export class AIService {
     }
 
     // Priority 2: Fallback to known free/available models if keys exist but no cache yet (or hardcoded fallback)
+    if (this.openrouterAPI.hasKey()) return 'openrouter/google/gemini-2.0-flash-exp:free'
     if (this.mistralAPI.hasKey()) return 'mistral-large-latest'
     if (this.geminiAPI.hasKey()) return 'gemini-2.0-flash-exp'
     if (this.openaiAPI.hasKey()) return 'gpt-4o'

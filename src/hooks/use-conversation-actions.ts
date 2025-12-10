@@ -40,7 +40,8 @@ export function useConversationActions({
 
 	return {
 		...messageActions,
-		...branchActions
+		...branchActions,
+		checkLimit
 	}
 }
 

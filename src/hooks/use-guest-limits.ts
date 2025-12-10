@@ -6,29 +6,18 @@ const MAX_GUEST_BRANCHES = 5
 const MAX_GUEST_MESSAGES = 10
 
 export function useGuestLimits(branches: any[], messages: any[]) {
-    const { data: session } = useSession()
+    const { data: session, status } = useSession()
     const [showLoginModal, setShowLoginModal] = useState(false)
     const [limitReachedType, setLimitReachedType] = useState<'branch' | 'message' | null>(null)
 
     const checkLimit = (type: 'branch' | 'message') => {
-        if (session) return true
+        // If user is logged in, they can do everything (Free Tier limits handled by server/other logic)
+        // Check both session existence and explicit authenticated status
+        if (session?.user || status === 'authenticated') return true
 
-        if (type === 'branch') {
-            if (branches.length >= MAX_GUEST_BRANCHES) {
-                setLimitReachedType('branch')
-                setShowLoginModal(true)
-                return false
-            }
-        } else if (type === 'message') {
-            // Count user messages
-            const userMessageCount = messages.filter(m => m.isUser).length
-            if (userMessageCount >= MAX_GUEST_MESSAGES) {
-                setLimitReachedType('message')
-                setShowLoginModal(true)
-                return false
-            }
-        }
-        return true
+        // If not logged in, BLOCK EVERYTHING and show login modal
+        setShowLoginModal(true)
+        return false
     }
 
     return {

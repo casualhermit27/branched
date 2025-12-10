@@ -77,7 +77,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		conversationId,
 		onActiveNodeChange,
 		onEditMessage,
-		activeNodeId: navigationTargetId // Renamed to avoid conflict with state
+		activeNodeId: navigationTargetId, // Renamed to avoid conflict with state
+		checkLimit
 	} = props
 
 	const state = useFlowCanvasState()
@@ -384,7 +385,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		activeNodeId,
 		toggleNodeMinimize,
 		onDeleteBranch: handleDeleteBranch,
-		setNodeActive
+		setNodeActive,
+		checkLimit
 	})
 
 	// ============================================
@@ -981,7 +983,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					onBranch: handleBranch,
 					onExportImport,
 					getBestAvailableModel,
-					onSelectSingle
+					onSelectSingle,
+					checkLimit
 				},
 				{
 					isMinimized: minimizedNodes.has('main'),
@@ -1058,7 +1061,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					onBranch: handleBranch,
 					onExportImport,
 					getBestAvailableModel,
-					onSelectSingle
+					onSelectSingle,
+					checkLimit
 				},
 				{
 					isMinimized: false,

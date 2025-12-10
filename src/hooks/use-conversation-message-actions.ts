@@ -230,13 +230,18 @@ export function useConversationMessageActions({
 					if (ai.id === 'best') {
 						modelName = getBestAvailableModel()
 					} else {
-						modelName = ai.id === 'gemini-2.5-pro' ? 'gemini'
-							: ai.id === 'mistral-large' ? 'mistral'
-								: ai.id.includes('gpt') ? 'openai'
-									: ai.id.includes('claude') ? 'claude'
-										: ai.id.includes('grok') ? 'grok'
-											: ai.id.includes('gemini') ? 'gemini'
-												: ai.id
+						// Direct mapping for OpenRouter or other specific provider-prefix models
+						if (ai.id.includes('openrouter')) {
+							modelName = ai.id
+						} else {
+							modelName = ai.id === 'gemini-2.5-pro' ? 'gemini'
+								: ai.id === 'mistral-large' ? 'mistral'
+									: ai.id.includes('gpt') ? 'openai'
+										: ai.id.includes('claude') ? 'claude'
+											: ai.id.includes('grok') ? 'grok'
+												: ai.id.includes('gemini') ? 'gemini'
+													: ai.id
+						}
 					}
 
 					// Check if API key is available for this model
@@ -291,7 +296,15 @@ export function useConversationMessageActions({
 					if (hasApiKey) {
 						// Use real API with streaming
 						const context: ConversationContext = {
-							messages: messages,
+							messages: (() => {
+								const seenIds = new Set<string>()
+								return messages.filter((m: Message) => {
+									if (!m.text || m.text.trim().length === 0) return false
+									if (seenIds.has(m.id)) return false
+									seenIds.add(m.id)
+									return true
+								})
+							})(),
 							currentBranch: targetBranchId || 'main'
 						}
 
@@ -466,13 +479,18 @@ export function useConversationMessageActions({
 				if (selectedAI?.id === 'best') {
 					modelName = getBestAvailableModel()
 				} else {
-					modelName = selectedAI?.id === 'gemini-2.5-pro' ? 'gemini'
-						: selectedAI?.id === 'mistral-large' ? 'mistral'
-							: selectedAI?.id?.includes('gpt') ? 'openai'
-								: selectedAI?.id?.includes('claude') ? 'claude'
-									: selectedAI?.id?.includes('grok') ? 'grok'
-										: selectedAI?.id?.includes('gemini') ? 'gemini'
-											: selectedAI?.id || 'openai'
+					// Direct mapping for OpenRouter or other specific provider-prefix models
+					if (selectedAI?.id?.includes('openrouter')) {
+						modelName = selectedAI.id
+					} else {
+						modelName = selectedAI?.id === 'gemini-2.5-pro' ? 'gemini'
+							: selectedAI?.id === 'mistral-large' ? 'mistral'
+								: selectedAI?.id?.includes('gpt') ? 'openai'
+									: selectedAI?.id?.includes('claude') ? 'claude'
+										: selectedAI?.id?.includes('grok') ? 'grok'
+											: selectedAI?.id?.includes('gemini') ? 'gemini'
+												: selectedAI?.id || 'openai'
+					}
 				}
 
 				// Check if API key is available for this model
@@ -523,7 +541,15 @@ export function useConversationMessageActions({
 					if (hasApiKey) {
 						// Use real API with streaming
 						const context: ConversationContext = {
-							messages: messages,
+							messages: (() => {
+								const seenIds = new Set<string>()
+								return messages.filter((m: Message) => {
+									if (!m.text || m.text.trim().length === 0) return false
+									if (seenIds.has(m.id)) return false
+									seenIds.add(m.id)
+									return true
+								})
+							})(),
 							currentBranch: targetBranchId || 'main'
 						}
 

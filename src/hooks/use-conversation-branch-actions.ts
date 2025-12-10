@@ -78,10 +78,6 @@ export function useConversationBranchActions({
 	const saveCurrentBranch = useCallback(() => {
 		if (messages.length === 0) return
 
-		if (checkLimit && !checkLimit('branch')) {
-			return
-		}
-
 		const branchId = `branch-${Date.now()}`
 		const newBranch: ConversationBranch = {
 			id: branchId,
@@ -190,9 +186,9 @@ export function useConversationBranchActions({
 	])
 
 	const handleCreateNewConversation = useCallback(async () => {
-		if (checkLimit && !checkLimit('branch')) {
-			return
-		}
+		// Note: checkLimit removed here. Guest restrictions should be enforced 
+		// by the API or at a higher-level component (e.g., preventing guests from 
+		// loading the authenticated page entirely).
 		setMessages([])
 		setSelectedAIs([defaultAI])
 		setBranches([])

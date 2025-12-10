@@ -82,6 +82,7 @@ export interface ChatNodeData {
 	onNavigateToMessage?: (messageId: string) => void
 	isDragging?: boolean
 	onEditMessage?: (nodeId: string, messageId: string, newText: string) => void
+	checkLimit?: (type: 'branch' | 'message') => boolean
 }
 
 export interface FlowCanvasProps {
@@ -130,6 +131,7 @@ export interface FlowCanvasProps {
 	onActiveNodeChange?: (nodeId: string | null) => void
 	onEditMessage?: (nodeId: string, messageId: string, newText: string) => void
 	activeNodeId?: string | null
+	checkLimit?: (type: 'branch' | 'message') => boolean
 }
 
 export interface LayoutConfig {

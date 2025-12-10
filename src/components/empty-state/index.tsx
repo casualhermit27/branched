@@ -13,6 +13,7 @@ interface EmptyStateProps {
     onSelectSingle: (ai: AI) => void
     getBestAvailableModel: () => string
     tier?: 'free' | 'pro'
+    checkLimit?: (type: 'branch' | 'message') => boolean
 }
 
 export function EmptyState({
@@ -23,7 +24,8 @@ export function EmptyState({
     onRemoveAI,
     onSelectSingle,
     getBestAvailableModel,
-    tier = 'free'
+    tier = 'free',
+    checkLimit
 }: EmptyStateProps) {
     const [input, setInput] = useState('')
     const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -31,6 +33,8 @@ export function EmptyState({
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
+            if (checkLimit && !checkLimit('message')) return
+
             if (input.trim()) {
                 onSendMessage(input)
                 setInput('')
@@ -80,6 +84,11 @@ export function EmptyState({
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKeyDown}
+                            onFocus={() => {
+                                if (checkLimit && !checkLimit('message')) {
+                                    textareaRef.current?.blur()
+                                }
+                            }}
                             placeholder="Start a new conversation..."
                             className="w-full bg-transparent border-none outline-none p-6 text-lg placeholder:text-muted-foreground/40 min-h-[120px] resize-none"
                             style={{ maxHeight: '300px' }}
@@ -90,9 +99,18 @@ export function EmptyState({
                             <div className="flex items-center gap-4">
                                 <AIPills
                                     selectedAIs={selectedAIs}
-                                    onAddAI={onAddAI}
-                                    onRemoveAI={onRemoveAI}
-                                    onSelectSingle={onSelectSingle}
+                                    onAddAI={(ai) => {
+                                        if (checkLimit && !checkLimit('branch')) return
+                                        onAddAI(ai)
+                                    }}
+                                    onRemoveAI={(id) => {
+                                        if (checkLimit && !checkLimit('branch')) return
+                                        onRemoveAI(id)
+                                    }}
+                                    onSelectSingle={(ai) => {
+                                        if (checkLimit && !checkLimit('branch')) return
+                                        onSelectSingle(ai)
+                                    }}
                                     showAddButton={true}
                                     getBestAvailableModel={getBestAvailableModel}
                                     tier={tier}
@@ -106,6 +124,7 @@ export function EmptyState({
 
                             <button
                                 onClick={() => {
+                                    if (checkLimit && !checkLimit('message')) return
                                     if (input.trim()) {
                                         onSendMessage(input)
                                         setInput('')
@@ -130,6 +149,7 @@ export function EmptyState({
                         <button
                             key={index}
                             onClick={() => {
+                                if (checkLimit && !checkLimit('message')) return
                                 setInput(suggestion.text)
                                 if (textareaRef.current) {
                                     textareaRef.current.focus()

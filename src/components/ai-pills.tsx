@@ -19,100 +19,32 @@ export interface AI {
 export const availableAIs: AI[] = [
   // Functional AIs (with API integration)
   {
-    id: 'mistral-large-latest',
-    name: 'Mistral Large 3',
+    id: 'mistral-small-latest',
+    name: 'Mistral Small',
     color: 'bg-purple-100 text-purple-800 border-purple-200',
     logo: <img src="/logos/mistral-ai_logo.svg" alt="Mistral" width="16" height="16" />,
     functional: true
   },
   {
-    id: 'gemini-3.0-pro-preview',
-    name: 'Gemini 3.0 Pro',
+    id: 'gemini-1.5-flash',
+    name: 'Gemini 1.5 Flash',
     color: 'bg-blue-100 text-blue-800 border-blue-200',
     logo: <img src="/logos/gemini.svg" alt="Gemini" width="16" height="16" />,
     functional: true
   },
-
-  // Non-functional AIs (greyed out but visible)
   {
-    id: 'gpt-5.1-thinking',
-    name: 'GPT-5.1 Thinking',
-    color: 'bg-gray-100 text-gray-500 border-gray-200',
-    logo: <img src="/logos/openai.svg" alt="OpenAI" width="16" height="16" />,
-    functional: false
+    id: 'openrouter/google/gemini-2.0-flash-exp:free',
+    name: 'Gemini 2.0 Flash',
+    color: 'bg-green-100 text-green-800 border-green-200',
+    logo: <Sparkle className="w-4 h-4 text-green-600" />,
+    functional: true
   },
   {
-    id: 'claude-4-5-opus-20251124',
-    name: 'Claude 4.5 Opus',
-    color: 'bg-gray-100 text-gray-500 border-gray-200',
-    logo: <img src="/logos/claude-ai-icon.svg" alt="Claude" width="16" height="16" />,
-    functional: false
-  },
-  {
-    id: 'gpt-4o',
-    name: 'GPT-4o',
-    color: 'bg-gray-100 text-gray-500 border-gray-200',
-    logo: <img src="/logos/openai.svg" alt="OpenAI" width="16" height="16" />,
-    functional: false
-  },
-  {
-    id: 'claude-3-5-sonnet-20241022',
-    name: 'Claude 3.5 Sonnet',
-    color: 'bg-gray-100 text-gray-500 border-gray-200',
-    logo: <img src="/logos/claude-ai-icon.svg" alt="Claude" width="16" height="16" />,
-    functional: false
-  },
-  {
-    id: 'grok-2',
-    name: 'Grok-2',
-    color: 'bg-gray-100 text-gray-500 border-gray-200',
-    logo: <img src="/logos/xai_light.svg" alt="Grok" width="16" height="16" />,
-    functional: false
-  },
-  {
-    id: 'perplexity-pro',
-    name: 'Perplexity Pro',
-    color: 'bg-gray-100 text-gray-500 border-gray-200',
-    logo: <Robot size={16} />,
-    functional: false
-  },
-  {
-    id: 'llama-3-1',
-    name: 'LLaMA 3.1',
-    color: 'bg-gray-100 text-gray-500 border-gray-200',
-    logo: <img src="/logos/ollama_light.svg" alt="LLaMA" width="16" height="16" />,
-    functional: false
-  },
-  {
-    id: 'cohere-command',
-    name: 'Cohere Command',
-    color: 'bg-gray-100 text-gray-500 border-gray-200',
-    logo: <Robot size={16} />,
-    functional: false
-  },
-  {
-    id: 'pi',
-    name: 'Pi',
-    color: 'bg-teal-100 text-teal-800 border-teal-200',
-    logo: <Robot size={16} />
-  },
-  {
-    id: 'o1-preview',
-    name: 'o1 Preview',
-    color: 'bg-violet-100 text-violet-800 border-violet-200',
-    logo: <img src="/logos/openai.svg" alt="OpenAI" width="16" height="16" />
-  },
-  {
-    id: 'deepseek-v2',
-    name: 'DeepSeek V2',
-    color: 'bg-slate-100 text-slate-800 border-slate-200',
-    logo: <Robot size={16} />
-  },
-  {
-    id: 'qwen-max',
-    name: 'Qwen Max',
-    color: 'bg-rose-100 text-rose-800 border-rose-200',
-    logo: <Robot size={16} />
+    id: 'openrouter/meta-llama/llama-3.1-8b-instruct:free',
+    name: 'Llama 3.1 8B',
+    color: 'bg-blue-100 text-blue-800 border-blue-200',
+    logo: <img src="/logos/ollama_light.svg" alt="Llama" width="16" height="16" />,
+    functional: true
   }
 ]
 
@@ -124,6 +56,7 @@ const getProviderLogo = (provider: string) => {
     case 'openai': return <img src="/logos/openai.svg" alt="OpenAI" width="16" height="16" />
     case 'claude': return <img src="/logos/claude-ai-icon.svg" alt="Claude" width="16" height="16" />
     case 'grok': return <img src="/logos/xai_light.svg" alt="Grok" width="16" height="16" />
+    case 'openrouter': return <Sparkle className="w-4 h-4" />
     default: return <Robot size={16} />
   }
 }
@@ -135,12 +68,14 @@ const getProviderColor = (provider: string) => {
     case 'openai': return 'bg-green-100 text-green-800 border-green-200'
     case 'claude': return 'bg-orange-100 text-orange-800 border-orange-200'
     case 'grok': return 'bg-gray-100 text-gray-800 border-gray-200'
+    case 'openrouter': return 'bg-indigo-100 text-indigo-800 border-indigo-200'
     default: return 'bg-slate-100 text-slate-800 border-slate-200'
   }
 }
 
 
 const getProviderForId = (id: string) => {
+  if (id.includes('openrouter')) return 'openrouter'
   if (id.includes('gpt')) return 'openai'
   if (id.includes('claude')) return 'anthropic'
   if (id.includes('gemini')) return 'google'
@@ -185,7 +120,7 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
   useEffect(() => {
     const fetchModels = async () => {
       // Check for keys
-      const providers = ['gemini', 'mistral', 'openai', 'claude', 'grok']
+      const providers = ['gemini', 'mistral', 'openai', 'claude', 'grok', 'openrouter']
       let newAIs: AI[] = []
 
       for (const provider of providers) {
@@ -328,26 +263,33 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
     }
   })
 
-  // 2. Add hardcoded models ONLY if:
-  //    a) We haven't discovered models for their provider yet (e.g. no key entered)
-  //    b) AND they are marked as functional OR they are premium upsell targets
-  //    c) AND they aren't already in the list
+  // 2. Add hardcoded models
+  // We prioritize discovered models, but we also want to ensure specific "Free/System" models 
+  // (like Gemini Flash or OpenRouter free models) show up even if discovery returns a huge list 
+  // but happens to exclude them, OR if they are the special free ones we system-configure.
   availableAIs.forEach(ai => {
+    // If it's already in the combined list (e.g. from discovery), skip it
+    if (combinedAIs.find(a => a.id === ai.id)) return
+
     const provider = getProviderForId(ai.id)
     const hasKey = aiService.getKey(provider).length > 0
-
-    // If we have a key, we trust the discovered list for this provider. 
-    // Don't add hardcoded ones (unless they were somehow discovered, which is handled above).
-    if (hasKey) return
-
-    // If no key, we show "functional" ones (free tier) or specific Premium ones for upsell
     const modelConfig = MODELS[ai.id]
     const isPremium = modelConfig?.tier === 'pro'
 
-    if (ai.functional || isPremium) {
-      if (!combinedAIs.find(a => a.id === ai.id)) {
-        combinedAIs.push(ai)
-      }
+    // Condition A: If it's functional and NOT premium (i.e. Free Tier System Model), add it!
+    // This ensures our manually curated "Free" models always appear.
+    if (ai.functional && !isPremium) {
+      combinedAIs.push(ai)
+      return
+    }
+
+    // Condition B: If we HAVE a key, we generally trust discovery and don't add hardcoded stuff.
+    // EXCEPT for the Free ones handled above.
+    if (hasKey) return
+
+    // Condition C: No Key. Show functional ones (handled in A) or Premium Upsells.
+    if (isPremium) {
+      combinedAIs.push(ai)
     }
   })
 
@@ -405,7 +347,10 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
                 className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 border transition-all duration-200 ${freshAI.color}`}
               >
                 {freshAI.logo}
-                <span className="font-medium">{getAIDisplayName(ai)}</span>
+                <span className="font-medium">
+                  {getAIDisplayName(ai)}
+                  {ai.id.includes('openrouter') && <span className="ml-1 opacity-60 font-normal">OpenRouter</span>}
+                </span>
                 <button
                   onClick={() => onRemoveAI(ai.id)}
                   className="hover:bg-black/10 rounded-full p-1 transition-all duration-150 active:scale-90 ml-1"
@@ -524,7 +469,7 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
                               </div>
                               {ai.functional && !isLocked && (
                                 <span className="text-[10px] text-muted-foreground/70 truncate">
-                                  {ai.id}
+                                  {ai.id.includes('openrouter') ? 'OpenRouter Free' : ai.id}
                                 </span>
                               )}
                               {isLocked && (

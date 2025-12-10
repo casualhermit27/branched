@@ -23,6 +23,7 @@ export async function generateServerResponse(
         else if (provider === 'google' || provider === 'gemini') key = process.env.NEXT_PUBLIC_GEMINI_API_KEY
         else if (provider === 'mistral') key = process.env.NEXT_PUBLIC_MISTRAL_API_KEY
         else if (provider === 'xai' || provider === 'grok') key = process.env.NEXT_PUBLIC_XAI_API_KEY
+        else if (provider === 'openrouter') key = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY
     }
 
     if (!key) {
@@ -33,7 +34,9 @@ export async function generateServerResponse(
     switch (provider) {
         case 'openai':
         case 'grok': // Grok is OpenAI compatible
-            return streamOpenAI(key, model, messages, systemPrompt, provider === 'grok')
+        case 'openrouter':
+            return streamOpenAI(key, model, messages, systemPrompt, provider === 'grok', provider === 'openrouter')
+
 
         case 'anthropic':
         case 'claude':
@@ -51,24 +54,37 @@ export async function generateServerResponse(
     }
 }
 
-// OpenAI / Grok
-async function streamOpenAI(key: string, model: string, messages: any[], system: string | undefined, isGrok = false) {
-    const url = isGrok ? 'https://api.x.ai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions'
+// OpenAI / Grok / OpenRouter
+async function streamOpenAI(key: string, model: string, messages: any[], system: string | undefined, isGrok = false, isOpenRouter = false) {
+    let url = 'https://api.openai.com/v1/chat/completions'
+    if (isGrok) url = 'https://api.x.ai/v1/chat/completions'
+    if (isOpenRouter) url = 'https://openrouter.ai/api/v1/chat/completions'
+
+    // Filter out messages without text content (can happen with streaming leftovers)
+    const validMessages = messages.filter(m => m.text && m.text.trim().length > 0)
 
     const formattedMessages = [
         { role: 'system', content: system || 'You are a helpful assistant.' },
-        ...messages.map(m => ({
+        ...validMessages.map(m => ({
             role: m.isUser ? 'user' : 'assistant',
             content: m.text
         }))
     ]
 
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`
+    }
+
+    if (isOpenRouter) {
+        headers['HTTP-Referer'] = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+        headers['X-Title'] = 'Antigravity Chat'
+    }
+
+    console.log(`[Server-AI] Calling ${url} with model: ${model}`)
     const res = await fetch(url, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${key}`
-        },
+        headers,
         body: JSON.stringify({
             model: model,
             messages: formattedMessages,
@@ -76,12 +92,22 @@ async function streamOpenAI(key: string, model: string, messages: any[], system:
         })
     })
 
+    if (!res.ok) {
+        const errorText = await res.text()
+        console.error(`[Server-AI] Error from ${url}: ${res.status} - ${errorText}`)
+        throw new Error(`API error: ${res.status} - ${errorText}`)
+    }
+
+    console.log(`[Server-AI] Response status: ${res.status}`)
     return res
 }
 
 // Anthropic
 async function streamAnthropic(key: string, model: string, messages: any[], system: string | undefined) {
-    const formattedMessages = messages.map(m => ({
+    // Filter out messages without text content
+    const validMessages = messages.filter(m => m.text && m.text.trim().length > 0)
+
+    const formattedMessages = validMessages.map(m => ({
         role: m.isUser ? 'user' : 'assistant',
         content: m.text
     }))
@@ -107,11 +133,19 @@ async function streamAnthropic(key: string, model: string, messages: any[], syst
 
 // Gemini
 async function streamGemini(key: string, model: string, messages: any[], system: string | undefined) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${key}`
+    // Normalize model name - if just "gemini" is passed, use the full model name
+    const modelName = model === 'gemini' ? 'gemini-1.5-flash' : model
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:streamGenerateContent?key=${key}`
+
+    console.log(`[Gemini] Using model: ${modelName}`)
+
+
+    // Filter out messages without text content
+    const validMessages = messages.filter(m => m.text && m.text.trim().length > 0)
 
     const contents = [
         ...(system ? [{ role: 'user', parts: [{ text: `System: ${system}` }] }] : []),
-        ...messages.map(m => ({
+        ...validMessages.map(m => ({
             role: m.isUser ? 'user' : 'model',
             parts: [{ text: m.text }]
         }))
@@ -128,9 +162,12 @@ async function streamGemini(key: string, model: string, messages: any[], system:
 
 // Mistral
 async function streamMistral(key: string, model: string, messages: any[], system: string | undefined) {
+    // Filter out messages without text content
+    const validMessages = messages.filter(m => m.text && m.text.trim().length > 0)
+
     const formattedMessages = [
         { role: 'system', content: system || 'You are a helpful assistant.' },
-        ...messages.map(m => ({
+        ...validMessages.map(m => ({
             role: m.isUser ? 'user' : 'assistant',
             content: m.text
         }))

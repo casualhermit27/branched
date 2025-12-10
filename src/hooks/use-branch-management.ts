@@ -49,6 +49,7 @@ interface UseBranchManagementParams {
 	toggleNodeMinimize: (nodeId: string) => void
 	onDeleteBranch?: (nodeId: string) => void
 	setNodeActive?: (nodeId: string) => void
+	checkLimit?: (type: 'branch' | 'message') => boolean
 }
 
 /**
@@ -78,7 +79,8 @@ export function useBranchManagement({
 	activeNodeId,
 	toggleNodeMinimize,
 	onDeleteBranch,
-	setNodeActive
+	setNodeActive,
+	checkLimit
 }: UseBranchManagementParams) {
 	// Initialize ContextManager with stores
 	const contextManager = new ContextManager(
@@ -327,7 +329,8 @@ export function useBranchManagement({
 						handleBranchSelectSingle(nodeId, aiId),
 					getBestAvailableModel,
 					onDeleteBranch,
-					onToggleMultiModel: () => { }
+					onToggleMultiModel: () => { },
+					checkLimit
 				},
 				{
 					isMinimized: minimizedNodes.has(branchId),

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import ReactMarkdown from 'react-markdown'
+import { MarkdownRenderer } from './markdown-renderer'
 import { ArrowsOut, ArrowsIn, GitBranch, PaperPlaneRight, Stop, Plus, Copy, PencilSimple, Check, X, Sparkle as SparklesIcon } from '@phosphor-icons/react'
 import AIPills, { allAIOptions } from './ai-pills'
 import { SideBySideComparison } from './side-by-side-comparison'
@@ -52,6 +52,7 @@ interface ChatInterfaceProps {
     selectedMessageIds?: Set<string>
     tier?: 'free' | 'pro'
     onEditMessage?: (messageId: string, newText: string) => void
+    checkLimit?: (type: 'branch' | 'message') => boolean
 }
 
 function ChatInterface({
@@ -75,7 +76,8 @@ function ChatInterface({
     onMessageSelect,
     selectedMessageIds,
     tier = 'free',
-    onEditMessage
+    onEditMessage,
+    checkLimit
 }: ChatInterfaceProps) {
 
     const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
@@ -96,6 +98,10 @@ function ChatInterface({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
         if (!message.trim()) return
+
+        if (checkLimit && !checkLimit('message')) {
+            return
+        }
 
         onSendMessage(message, currentBranch || undefined)
         setMessage('')
@@ -135,6 +141,9 @@ function ChatInterface({
             // Auto-focus if it's a new empty branch (UX improvement)
             if (messages.length === 0) {
                 setTimeout(() => {
+                    // Check limit before focusing if we want to be strict, but usually programmatic focus is OK.
+                    // However, we want to block interactions.
+                    // If we just focus, onFocus will trigger.
                     textareaRef.current?.focus()
                 }, 100)
             }
@@ -178,6 +187,7 @@ function ChatInterface({
 
     // Handle multi-branch creation
     const handleCreateBranches = () => {
+        if (checkLimit && !checkLimit('branch')) return
         const lastUserMessage = [...messages].reverse().find(m => m.isUser)
         if (!lastUserMessage) return
         onBranchFromMessage(lastUserMessage.id, true)
@@ -190,6 +200,7 @@ function ChatInterface({
     }
 
     const startEditing = (msg: Message) => {
+        if (checkLimit && !checkLimit('message')) return
         setEditingMessageId(msg.id)
         setEditValue(msg.text)
     }
@@ -200,6 +211,7 @@ function ChatInterface({
     }
 
     const saveEdit = () => {
+        if (checkLimit && !checkLimit('message')) return
         if (editingMessageId && editValue.trim() && onEditMessage) {
             onEditMessage(editingMessageId, editValue)
             setEditingMessageId(null)
@@ -320,7 +332,10 @@ function ChatInterface({
                                         )}
                                     </button>
                                     <button
-                                        onClick={() => alert("Synthesize feature: Coming soon! This will combine these responses into a final summary.")}
+                                        onClick={() => {
+                                            if (checkLimit && !checkLimit('branch')) return
+                                            alert("Synthesize feature: Coming soon! This will combine these responses into a final summary.")
+                                        }}
                                         className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-full text-[10px] font-medium text-purple-500 transition-all"
                                     >
                                         <SparklesIcon className="w-3 h-3" />
@@ -395,15 +410,13 @@ function ChatInterface({
                                                                         onMessageSelect?.(msg.id, true)
                                                                     }
                                                                 }}
-                                                                className={`bg-primary text-primary-foreground px-5 py-3 rounded-[1.5rem] rounded-tr-sm transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
-                                                                    ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-                                                                    : 'hover:bg-primary/15'
+                                                                className={`bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white px-5 py-3 rounded-[1.5rem] rounded-tr-sm shadow-sm ${selectedMessageIds?.has(msg.id)
+                                                                    ? 'ring-2 ring-zinc-400 dark:ring-zinc-500 ring-offset-2 ring-offset-background'
+                                                                    : ''
                                                                     }`}
                                                                 title="Ctrl + Click to select"
                                                             >
-                                                                <div className="prose prose-sm dark:prose-invert max-w-none break-words leading-relaxed">
-                                                                    <ReactMarkdown>{msg.text}</ReactMarkdown>
-                                                                </div>
+                                                                <MarkdownRenderer content={msg.text} />
                                                             </div>
 
                                                             {/* Floating Toolbar - Left Side */}
@@ -435,6 +448,7 @@ function ChatInterface({
                                                                     <button
                                                                         onClick={(e) => {
                                                                             e.preventDefault(); e.stopPropagation();
+                                                                            if (checkLimit && !checkLimit('branch')) return;
                                                                             onBranchFromMessage(msg.id, true)
                                                                         }}
                                                                         className="p-1.5 rounded-full hover:bg-muted hover:text-primary transition-colors"
@@ -460,68 +474,18 @@ function ChatInterface({
                                                     </div>
 
                                                     <div className="flex flex-col flex-1 min-w-0">
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <span className="text-sm font-semibold text-foreground">
-                                                                {msg.aiModel ? selectedAIs.find(ai => ai.id === msg.aiModel)?.name || msg.aiModel : 'AI'}
-                                                            </span>
-                                                            <span className="text-[10px] text-muted-foreground/60">
-                                                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                            </span>
-                                                        </div>
-
-                                                        {/* Message bubble + Toolbar row */}
-                                                        <div className="flex items-center gap-2">
-                                                            <div
-                                                                onClick={(e) => {
-                                                                    if (e.ctrlKey || e.metaKey || e.altKey) {
-                                                                        e.preventDefault()
-                                                                        e.stopPropagation()
-                                                                        onMessageSelect?.(msg.id, true)
-                                                                    }
-                                                                }}
-                                                                className={`flex-1 text-foreground/90 leading-relaxed bg-slate-100 dark:bg-muted/50 rounded-2xl p-4 border border-slate-200 dark:border-border/10 shadow-sm transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
-                                                                    ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-                                                                    : 'hover:bg-slate-200/50 dark:hover:bg-muted/80'
-                                                                    }`}
-                                                                title="Ctrl + Click to select"
-                                                            >
-                                                                {msg.isStreaming ? (
-                                                                    (!msg.streamingText || msg.streamingText.trim() === '') ? (
-                                                                        <div className="flex items-center gap-3 py-2 pl-1">
-                                                                            <div className="flex space-x-1">
-                                                                                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                                                                                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                                                                                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"></div>
-                                                                            </div>
-                                                                            <span className="text-sm text-muted-foreground/80 font-medium animate-pulse">Thinking...</span>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="space-y-2">
-                                                                            <div className="prose prose-sm dark:prose-invert max-w-none">
-                                                                                <ReactMarkdown>{msg.streamingText}</ReactMarkdown>
-                                                                            </div>
-                                                                            <div className="flex items-center gap-1.5 text-muted-foreground/70 pt-1">
-                                                                                <div className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-pulse" />
-                                                                                <span className="text-xs font-medium">Generating...</span>
-                                                                            </div>
-                                                                        </div>
-                                                                    )
-                                                                ) : (
-                                                                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                                                                        <ReactMarkdown
-                                                                            components={{
-                                                                                code: ({ children }) => <code className="bg-muted/50 px-1.5 py-0.5 rounded text-sm font-mono text-foreground/90 border border-border/30">{children}</code>,
-                                                                                pre: ({ children }) => <pre className="bg-muted/50 p-4 rounded-xl overflow-x-auto text-sm font-mono text-foreground/90 border border-border/30 my-3">{children}</pre>,
-                                                                            }}
-                                                                        >
-                                                                            {msg.text}
-                                                                        </ReactMarkdown>
-                                                                    </div>
-                                                                )}
+                                                        <div className="flex items-center justify-between gap-2 mb-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm font-semibold text-foreground">
+                                                                    {msg.aiModel ? selectedAIs.find(ai => ai.id === msg.aiModel)?.name || msg.aiModel : 'AI'}
+                                                                </span>
+                                                                <span className="text-[10px] text-muted-foreground/60">
+                                                                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                </span>
                                                             </div>
 
-                                                            {/* Toolbar - Right side of message, horizontal */}
-                                                            <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover/message:opacity-100 transition-all duration-200">
+                                                            {/* Toolbar in header - always accessible */}
+                                                            <div className="flex items-center gap-0.5 opacity-0 group-hover/message:opacity-100 transition-all duration-200">
                                                                 <div className="flex items-center gap-0.5 p-1 rounded-full bg-background border border-border/50 text-muted-foreground backdrop-blur-sm">
                                                                     <button
                                                                         onClick={(e) => {
@@ -537,6 +501,7 @@ function ChatInterface({
                                                                     <button
                                                                         onClick={(e) => {
                                                                             e.preventDefault(); e.stopPropagation();
+                                                                            if (checkLimit && !checkLimit('branch')) return;
                                                                             onBranchFromMessage(msg.id, false)
                                                                         }}
                                                                         className="p-1.5 rounded-full hover:bg-muted hover:text-primary transition-colors"
@@ -545,6 +510,47 @@ function ChatInterface({
                                                                         <GitBranch className="w-4 h-4" />
                                                                     </button>
                                                                 </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Message bubble + Toolbar row */}
+                                                        <div className="relative">
+                                                            <div
+                                                                onClick={(e) => {
+                                                                    if (e.ctrlKey || e.metaKey || e.altKey) {
+                                                                        e.preventDefault()
+                                                                        e.stopPropagation()
+                                                                        onMessageSelect?.(msg.id, true)
+                                                                    }
+                                                                }}
+                                                                className={`leading-relaxed bg-white dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-100 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-700/50 shadow-sm ${selectedMessageIds?.has(msg.id)
+                                                                    ? 'ring-2 ring-zinc-400 dark:ring-zinc-500 ring-offset-2 ring-offset-background'
+                                                                    : ''
+                                                                    }`}
+                                                                title="Ctrl + Click to select"
+                                                            >
+                                                                {msg.isStreaming ? (
+                                                                    (!msg.streamingText || msg.streamingText.trim() === '') ? (
+                                                                        <div className="flex items-center gap-3 py-2 pl-1">
+                                                                            <div className="flex space-x-1">
+                                                                                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                                                                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                                                                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"></div>
+                                                                            </div>
+                                                                            <span className="text-sm text-muted-foreground/80 font-medium animate-pulse">Thinking...</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="space-y-2">
+                                                                            <MarkdownRenderer content={msg.streamingText} />
+                                                                            <div className="flex items-center gap-1.5 text-muted-foreground/70 pt-1">
+                                                                                <div className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-pulse" />
+                                                                                <span className="text-xs font-medium">Generating...</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    )
+                                                                ) : (
+                                                                    <MarkdownRenderer content={msg.text} />
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -599,6 +605,11 @@ function ChatInterface({
                                         }
                                     }}
                                     onFocus={() => {
+                                        if (checkLimit && !checkLimit('message')) {
+                                            // Immediately blur if limit reached to prevent typing (since limit is 0 for guest)
+                                            textareaRef.current?.blur()
+                                            return
+                                        }
                                         setShouldAutoScroll(true)
                                         setTimeout(() => {
                                             if (messagesContainerRef.current) {
@@ -623,9 +634,18 @@ function ChatInterface({
                                         {onAddAI && onRemoveAI && (
                                             <AIPills
                                                 selectedAIs={selectedAIs}
-                                                onAddAI={onAddAI}
-                                                onRemoveAI={onRemoveAI}
-                                                onSelectSingle={onSelectSingle ? (ai) => onSelectSingle(ai.id) : undefined}
+                                                onAddAI={(ai) => {
+                                                    if (checkLimit && !checkLimit('branch')) return
+                                                    onAddAI(ai)
+                                                }}
+                                                onRemoveAI={(id) => {
+                                                    if (checkLimit && !checkLimit('branch')) return
+                                                    onRemoveAI(id)
+                                                }}
+                                                onSelectSingle={onSelectSingle ? (ai) => {
+                                                    if (checkLimit && !checkLimit('branch')) return
+                                                    onSelectSingle(ai.id)
+                                                } : undefined}
                                                 showAddButton={true}
                                                 getBestAvailableModel={getBestAvailableModel}
                                                 tier={tier}
