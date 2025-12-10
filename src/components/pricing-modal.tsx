@@ -31,11 +31,11 @@ export function PricingModal({ isOpen, onClose, currentPlan = 'free' }: PricingM
         {
             id: 'pro',
             name: 'Pro',
-            price: '$29',
+            price: '$19.99',
             period: '/month',
             description: 'For professionals who need power.',
             features: [
-                'Unlimited messages',
+                '1,000,000 Credits per month',
                 'Access to ALL AI models',
                 'Unlimited branching',
                 'Comparison Dashboard',

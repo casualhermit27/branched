@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { discoverModels, DiscoveredModel, getCachedModels, setCachedModels } from '../services/model-discovery'
 import { aiService } from '../services/ai-api'
 import { UpsellModal } from './upsell-modal'
+import { MODELS } from '@/config/models'
 
 
 export interface AI {
@@ -340,7 +341,9 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
     if (hasKey) return
 
     // If no key, we show "functional" ones (free tier) or specific Premium ones for upsell
-    const isPremium = premiumModels.includes(ai.id)
+    const modelConfig = MODELS[ai.id]
+    const isPremium = modelConfig?.tier === 'pro'
+
     if (ai.functional || isPremium) {
       if (!combinedAIs.find(a => a.id === ai.id)) {
         combinedAIs.push(ai)
@@ -365,7 +368,8 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
 
   const handleAISelection = (ai: AI) => {
     // Check if model is premium and needs unlocking
-    const isPremium = premiumModels.includes(ai.id)
+    const modelConfig = MODELS[ai.id]
+    const isPremium = modelConfig?.tier === 'pro'
     const provider = getProviderForId(ai.id)
     const hasKey = aiService.getKey(provider)
 
@@ -485,7 +489,8 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
                     {combinedAIs
                       .filter(ai => !selectedAIs.find(selected => selected.id === ai.id))
                       .map((ai, index) => {
-                        const isPremium = premiumModels.includes(ai.id)
+                        const modelConfig = MODELS[ai.id]
+                        const isPremium = modelConfig?.tier === 'pro'
                         const provider = getProviderForId(ai.id)
                         const hasKey = aiService.getKey(provider)
                         const isLocked = isPremium && tier === 'free' && !hasKey

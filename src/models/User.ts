@@ -7,6 +7,7 @@ export interface IUser extends Document {
   image?: string
   tier: 'free' | 'pro'
   credits: number
+  subscriptionStatus?: 'active' | 'inactive' | 'canceled' | 'past_due'
   dailyFreeUsage: number
   lastDailyReset: Date
   createdAt: Date
@@ -20,6 +21,7 @@ const UserSchema = new Schema<IUser>({
   image: { type: String },
   tier: { type: String, enum: ['free', 'pro'], default: 'free' },
   credits: { type: Number, default: 0 },
+  subscriptionStatus: { type: String, enum: ['active', 'inactive', 'canceled', 'past_due'], default: 'inactive' },
   dailyFreeUsage: { type: Number, default: 0 },
   lastDailyReset: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now },

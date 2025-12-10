@@ -143,7 +143,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
           width: 5,
           height: 5,
           border: '1.5px solid hsl(var(--background))',
-          opacity: 0.6,
+          opacity: 0.8,
           zIndex: 50
         }}
       />
@@ -250,16 +250,16 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
       </div>
 
       <div
-        className={`bg-card rounded-2xl border transition-[border-color,background-color] duration-300 relative overflow-hidden flex flex-col w-full
-          ${data.isMain ? 'border-2 border-primary/50' : ''}
+        className={`bg-card rounded-2xl border transition-[border-color,background-color,box-shadow] duration-300 relative overflow-hidden flex flex-col w-full
+          ${data.isMain ? 'border-2 border-primary/80 shadow-md' : 'shadow-sm'}
           ${data.isSelected
-            ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 border-2 border-indigo-500 dark:border-indigo-400'
+            ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 border-2 border-indigo-500 dark:border-indigo-400 shadow-lg'
             : data.isActive
-              ? 'border-primary ring-2 ring-primary/30'
-              : 'border-slate-300 dark:border-border/60 hover:border-slate-400 dark:hover:border-border/90'
+              ? 'border-primary ring-2 ring-primary/30 shadow-md'
+              : 'border-slate-400 dark:border-border/60 hover:border-slate-500 dark:hover:border-border/90 hover:shadow-md'
           }
           ${data.isHighlighted && !data.isSelected ? 'border-primary/30 ring-1 ring-primary/20' : ''}
-          ${data.isDragging ? '' : ''} 
+          ${data.isDragging ? 'shadow-xl cursor-grabbing' : ''} 
           ${data.isMinimized ? 'p-3' : 'p-3 md:p-0'}
           ${!data.isMinimized ? 'w-[calc(100vw-2rem)] md:w-[1300px] min-w-[300px] md:min-w-[1300px] max-w-full md:max-w-[1300px]' : ''}
         `}
@@ -432,7 +432,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
           width: 5,
           height: 5,
           border: '1.5px solid hsl(var(--background))',
-          opacity: 0.6,
+          opacity: 0.8,
           zIndex: 50
         }}
       />

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import Image from 'next/image'
 import { useSession, signOut } from 'next-auth/react'
 import { User, SignOut } from '@phosphor-icons/react'
@@ -96,10 +96,37 @@ export default function ConversationAppShell({
     const [currentAIIndex, setCurrentAIIndex] = useState(0)
     const [showSynthesizeModal, setShowSynthesizeModal] = useState(false)
 
-    // Tiered Access State (Default Free)
-    // ToDo: Fetch from /api/user/me or similar
-    const tier = 'free'
-    const credits = 0
+    // Tiered Access State
+    const [userProfile, setUserProfile] = useState<{
+        tier: 'free' | 'pro'
+        credits: number
+        dailyFreeUsage: number
+    }>({
+        tier: 'free',
+        credits: 0,
+        dailyFreeUsage: 0
+    })
+
+    // Fetch user profile on mount and when session changes
+    useEffect(() => {
+        if (session?.user) {
+            fetch('/api/user/me')
+                .then(res => res.json())
+                .then(data => {
+                    if (data && !data.error) {
+                        setUserProfile({
+                            tier: data.tier || 'free',
+                            credits: data.credits || 0,
+                            dailyFreeUsage: data.dailyFreeUsage || 0
+                        })
+                    }
+                })
+                .catch(err => console.error('Failed to fetch user profile:', err))
+        }
+    }, [session])
+
+    const tier = userProfile.tier
+    const credits = userProfile.credits
 
     const {
         addAI,
@@ -388,7 +415,7 @@ export default function ConversationAppShell({
                 currentConversationId={currentConversationIdRef.current}
                 onSelectConversation={handleSelectConversation}
                 onCreateNewConversation={handleCreateNewConversation}
-                messageCount={messages.length}
+                messageCount={tier === 'free' ? userProfile.dailyFreeUsage : messages.length}
                 onUpgrade={() => setShowPricingModal(true)}
                 onDeleteConversation={handleDeleteConversation}
                 isOpen={sidebarOpen}
@@ -499,7 +526,7 @@ export default function ConversationAppShell({
                         ) : (
                             <div className="flex items-center justify-center h-screen p-4">
                                 {/* Optional: Add a loading spinner here if needed */}
-                                <div className="w-full max-w-4xl rounded-2xl p-[1px] bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10 dark:from-indigo-500/20 dark:via-purple-500/20 dark:to-pink-500/20 h-auto max-h-[85vh] flex flex-col">
+                                <div className="w-full max-w-4xl rounded-2xl p-[1px] bg-gradient-to-br from-indigo-500/30 via-purple-500/30 to-pink-500/30 dark:from-indigo-500/20 dark:via-purple-500/20 dark:to-pink-500/20 shadow-md h-auto max-h-[85vh] flex flex-col">
                                     <div className="flex-1 w-full bg-card rounded-2xl flex flex-col overflow-hidden relative">
                                         {conversationNodes.length > 0 && (
                                             <BranchNavigation

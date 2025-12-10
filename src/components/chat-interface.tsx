@@ -479,9 +479,9 @@ function ChatInterface({
                                                                         onMessageSelect?.(msg.id, true)
                                                                     }
                                                                 }}
-                                                                className={`flex-1 text-foreground/90 leading-relaxed bg-muted/50 rounded-2xl p-4 border border-border/10 transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
+                                                                className={`flex-1 text-foreground/90 leading-relaxed bg-slate-100 dark:bg-muted/50 rounded-2xl p-4 border border-slate-200 dark:border-border/10 shadow-sm transition-all cursor-pointer ${selectedMessageIds?.has(msg.id)
                                                                     ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-                                                                    : 'hover:bg-muted/80'
+                                                                    : 'hover:bg-slate-200/50 dark:hover:bg-muted/80'
                                                                     }`}
                                                                 title="Ctrl + Click to select"
                                                             >
@@ -522,26 +522,29 @@ function ChatInterface({
 
                                                             {/* Toolbar - Right side of message, horizontal */}
                                                             <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover/message:opacity-100 transition-all duration-200">
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.preventDefault(); e.stopPropagation();
-                                                                        handleCopy(msg.text, msg.id)
-                                                                    }}
-                                                                    className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                                                                    title="Copy"
-                                                                >
-                                                                    {copiedMessageId === msg.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                                                                </button>
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.preventDefault(); e.stopPropagation();
-                                                                        onBranchFromMessage(msg.id, false)
-                                                                    }}
-                                                                    className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
-                                                                    title="Branch from here"
-                                                                >
-                                                                    <GitBranch className="w-4 h-4" />
-                                                                </button>
+                                                                <div className="flex items-center gap-0.5 p-1 rounded-full bg-background border border-border/50 text-muted-foreground backdrop-blur-sm">
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault(); e.stopPropagation();
+                                                                            handleCopy(msg.text, msg.id)
+                                                                        }}
+                                                                        className="p-1.5 rounded-full hover:bg-muted hover:text-foreground transition-colors"
+                                                                        title="Copy"
+                                                                    >
+                                                                        {copiedMessageId === msg.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                                                                    </button>
+                                                                    <div className="w-px h-4 bg-border/50 mx-0.5" />
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault(); e.stopPropagation();
+                                                                            onBranchFromMessage(msg.id, false)
+                                                                        }}
+                                                                        className="p-1.5 rounded-full hover:bg-muted hover:text-primary transition-colors"
+                                                                        title="Branch from here"
+                                                                    >
+                                                                        <GitBranch className="w-4 h-4" />
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>

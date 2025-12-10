@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { generateServerResponse } from '@/lib/server-ai'
 import connectDB from '@/lib/mongodb'
 import { User } from '@/models/User'
+import { MODELS, FREE_DAILY_LIMIT } from '@/config/models'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -46,13 +47,14 @@ export async function POST(req: NextRequest) {
                 }
 
                 // Logic
-                const isProModel = ['gpt-4', 'claude-3-5-sonnet', 'claude-3-opus'].some(m => model.includes(m))
+                const modelConfig = MODELS[model]
+                const isProModel = modelConfig?.tier === 'pro'
 
                 if (user.tier === 'free') {
                     if (isProModel) {
                         return NextResponse.json({ error: 'Pro model requires upgrade' }, { status: 403 })
                     }
-                    if (user.dailyFreeUsage >= 50) {
+                    if (user.dailyFreeUsage >= FREE_DAILY_LIMIT) {
                         return NextResponse.json({ error: 'Daily limit reached' }, { status: 402 })
                     }
                     // Increment usage
@@ -60,7 +62,7 @@ export async function POST(req: NextRequest) {
                     await user.save()
                 } else if (user.tier === 'pro') {
                     // Deduction logic
-                    const cost = isProModel ? 1 : 0
+                    const cost = modelConfig?.costPerMessage || 0
                     if (user.credits < cost) {
                         return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 })
                     }
@@ -73,7 +75,8 @@ export async function POST(req: NextRequest) {
             // User asked for "Tier 1: Guest (No Login)". Limits handled on client.
             // Server should ideally block or have a rate limit.
             // For zero-risk, we only allow "Free" models for guests.
-            const isProModel = ['gpt-4', 'claude-3-5-sonnet', 'claude-3-opus'].some(m => model.includes(m))
+            const modelConfig = MODELS[model]
+            const isProModel = modelConfig?.tier === 'pro'
             if (isProModel) {
                 return NextResponse.json({ error: 'Login required for Pro models' }, { status: 401 })
             }

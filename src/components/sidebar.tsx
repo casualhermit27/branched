@@ -7,6 +7,7 @@ import { List, X, ArrowsOut, ArrowsIn, Clock, GitBranch, Trash, Gear, Sparkle as
 import ConversationHistory from './conversation-history'
 import { aiService } from '@/services/ai-api'
 import { detectProviderFromKey, discoverModels, validateApiKey, setCachedModels, type DiscoveredModel } from '@/services/model-discovery'
+import { FREE_DAILY_LIMIT, PRO_MONTHLY_CREDITS } from '@/config/models'
 
 
 
@@ -877,9 +878,9 @@ export default function Sidebar({
                         {tier === 'pro' ? 'Pro Plan' : 'Free Plan'}
                       </span>
                       {tier === 'pro' ? (
-                        <span className="text-muted-foreground dark:text-muted-foreground/70">{credits} Credits</span>
+                        <span className="text-muted-foreground dark:text-muted-foreground/70">{credits.toLocaleString()} Credits</span>
                       ) : (
-                        <span className="text-muted-foreground dark:text-muted-foreground/70">{messageCount}/50 msgs</span>
+                        <span className="text-muted-foreground dark:text-muted-foreground/70">{messageCount}/{FREE_DAILY_LIMIT} msgs</span>
                       )}
                     </div>
 
@@ -887,22 +888,22 @@ export default function Sidebar({
                       <div className="h-1.5 bg-muted dark:bg-muted/50 rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full bg-gradient-to-r from-purple-500 to-indigo-500"
-                          style={{ width: `${Math.min((credits / 1000) * 100, 100)}%` }}
+                          style={{ width: `${Math.min((credits / PRO_MONTHLY_CREDITS) * 100, 100)}%` }}
                         />
                       </div>
                     ) : (
                       <div className="h-1.5 bg-muted dark:bg-muted/50 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all duration-500 ${messageCount >= 50 ? 'bg-red-500' : 'bg-gradient-to-r from-zinc-600 to-zinc-400 dark:from-zinc-400 dark:to-zinc-300'
+                          className={`h-full rounded-full transition-all duration-500 ${messageCount >= FREE_DAILY_LIMIT ? 'bg-red-500' : 'bg-gradient-to-r from-zinc-600 to-zinc-400 dark:from-zinc-400 dark:to-zinc-300'
                             }`}
-                          style={{ width: `${Math.min((messageCount / 50) * 100, 100)}%` }}
+                          style={{ width: `${Math.min((messageCount / FREE_DAILY_LIMIT) * 100, 100)}%` }}
                         />
                       </div>
                     )}
 
-                    {tier === 'free' && messageCount >= 40 && (
+                    {tier === 'free' && messageCount >= (FREE_DAILY_LIMIT * 0.8) && (
                       <p className="text-[10px] text-destructive mt-1 font-medium">
-                        {messageCount >= 50 ? 'Limit reached' : 'Approaching limit'}
+                        {messageCount >= FREE_DAILY_LIMIT ? 'Limit reached' : 'Approaching limit'}
                       </p>
                     )}
                   </div>
