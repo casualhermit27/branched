@@ -357,207 +357,214 @@ function ChatInterface({
                             ) : (
                                 /* Standard Stack View */
                                 <div className={`${isMultiModel ? 'bg-muted/10 rounded-3xl p-4 space-y-8 border border-border/10' : 'space-y-8'}`}>
-                                    {groupMessages.map((msg) => (
-                                        <motion.div
-                                            key={msg.id}
-                                            id={`message-${msg.id}`}
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ duration: 0.3 }}
-                                            className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'} relative`}
-                                        >
-                                            {/* User Message */}
-                                            {msg.isUser ? (
-                                                <div className="flex flex-col items-end max-w-[85%] relative group/message">
-                                                    {editingMessageId === msg.id ? (
-                                                        <div className="w-full bg-primary/5 border border-primary/20 rounded-2xl p-3 min-w-[300px]">
-                                                            <textarea
-                                                                value={editValue}
-                                                                onChange={(e) => setEditValue(e.target.value)}
-                                                                className="w-full bg-transparent border-none outline-none text-foreground resize-none text-sm p-1"
-                                                                rows={3}
-                                                                autoFocus
-                                                                onKeyDown={(e) => {
-                                                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                                                        e.preventDefault()
-                                                                        saveEdit()
-                                                                    }
-                                                                    if (e.key === 'Escape') cancelEditing()
-                                                                }}
-                                                            />
-                                                            <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-primary/10">
-                                                                <button
-                                                                    onClick={cancelEditing}
-                                                                    className="px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                                                                >
-                                                                    Cancel
-                                                                </button>
-                                                                <button
-                                                                    onClick={saveEdit}
-                                                                    className="px-2.5 py-1 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-                                                                >
-                                                                    Save & Regenerate
-                                                                </button>
+                                    {groupMessages
+                                        .filter((msg) => {
+                                            // Keep streaming messages, user messages, and AI messages with content
+                                            if (msg.isStreaming) return true
+                                            if (msg.isUser) return true
+                                            return msg.text && msg.text.trim().length > 0
+                                        })
+                                        .map((msg) => (
+                                            <motion.div
+                                                key={msg.id}
+                                                id={`message-${msg.id}`}
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ duration: 0.3 }}
+                                                className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'} relative`}
+                                            >
+                                                {/* User Message */}
+                                                {msg.isUser ? (
+                                                    <div className="flex flex-col items-end max-w-[85%] relative group/message">
+                                                        {editingMessageId === msg.id ? (
+                                                            <div className="w-full bg-primary/5 border border-primary/20 rounded-2xl p-3 min-w-[300px]">
+                                                                <textarea
+                                                                    value={editValue}
+                                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                                    className="w-full bg-transparent border-none outline-none text-foreground resize-none text-sm p-1"
+                                                                    rows={3}
+                                                                    autoFocus
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                                                            e.preventDefault()
+                                                                            saveEdit()
+                                                                        }
+                                                                        if (e.key === 'Escape') cancelEditing()
+                                                                    }}
+                                                                />
+                                                                <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-primary/10">
+                                                                    <button
+                                                                        onClick={cancelEditing}
+                                                                        className="px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={saveEdit}
+                                                                        className="px-2.5 py-1 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                                                                    >
+                                                                        Save & Regenerate
+                                                                    </button>
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            <div
-                                                                onClick={(e) => {
-                                                                    if (e.ctrlKey || e.metaKey || e.altKey) {
-                                                                        e.preventDefault()
-                                                                        e.stopPropagation()
-                                                                        onMessageSelect?.(msg.id, true)
-                                                                    }
-                                                                }}
-                                                                className={`bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white px-5 py-3 rounded-[1.5rem] rounded-tr-sm shadow-sm ${selectedMessageIds?.has(msg.id)
-                                                                    ? 'ring-2 ring-zinc-400 dark:ring-zinc-500 ring-offset-2 ring-offset-background'
-                                                                    : ''
-                                                                    }`}
-                                                                title="Ctrl + Click to select"
-                                                            >
-                                                                <MarkdownRenderer content={msg.text} />
-                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <div
+                                                                    onClick={(e) => {
+                                                                        if (e.ctrlKey || e.metaKey || e.altKey) {
+                                                                            e.preventDefault()
+                                                                            e.stopPropagation()
+                                                                            onMessageSelect?.(msg.id, true)
+                                                                        }
+                                                                    }}
+                                                                    className={`bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white px-5 py-3 rounded-[1.5rem] rounded-tr-sm shadow-sm ${selectedMessageIds?.has(msg.id)
+                                                                        ? 'ring-2 ring-zinc-400 dark:ring-zinc-500 ring-offset-2 ring-offset-background'
+                                                                        : ''
+                                                                        }`}
+                                                                    title="Ctrl + Click to select"
+                                                                >
+                                                                    <MarkdownRenderer content={msg.text} />
+                                                                </div>
 
-                                                            {/* Floating Toolbar - Left Side */}
-                                                            <div className="absolute right-full top-1/2 -translate-y-1/2 mr-3 opacity-0 group-hover/message:opacity-100 transition-all duration-200 z-10">
-                                                                <div className="flex items-center gap-0.5 p-1 rounded-full bg-background border border-border/50 text-muted-foreground backdrop-blur-sm">
-                                                                    {onEditMessage && (
+                                                                {/* Floating Toolbar - Left Side */}
+                                                                <div className="absolute right-full top-1/2 -translate-y-1/2 mr-3 opacity-0 group-hover/message:opacity-100 transition-all duration-200 z-10">
+                                                                    <div className="flex items-center gap-0.5 p-1 rounded-full bg-background border border-border/50 text-muted-foreground backdrop-blur-sm">
+                                                                        {onEditMessage && (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.preventDefault(); e.stopPropagation();
+                                                                                    startEditing(msg)
+                                                                                }}
+                                                                                className="p-1.5 rounded-full hover:bg-muted hover:text-foreground transition-colors"
+                                                                                title="Edit"
+                                                                            >
+                                                                                <PencilSimple className="w-4 h-4" />
+                                                                            </button>
+                                                                        )}
                                                                         <button
                                                                             onClick={(e) => {
                                                                                 e.preventDefault(); e.stopPropagation();
-                                                                                startEditing(msg)
+                                                                                handleCopy(msg.text, msg.id)
                                                                             }}
                                                                             className="p-1.5 rounded-full hover:bg-muted hover:text-foreground transition-colors"
-                                                                            title="Edit"
+                                                                            title="Copy"
                                                                         >
-                                                                            <PencilSimple className="w-4 h-4" />
+                                                                            {copiedMessageId === msg.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                                                                         </button>
-                                                                    )}
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.preventDefault(); e.stopPropagation();
-                                                                            handleCopy(msg.text, msg.id)
-                                                                        }}
-                                                                        className="p-1.5 rounded-full hover:bg-muted hover:text-foreground transition-colors"
-                                                                        title="Copy"
-                                                                    >
-                                                                        {copiedMessageId === msg.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                                                                    </button>
-                                                                    <div className="w-px h-4 bg-border/50 mx-0.5" />
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.preventDefault(); e.stopPropagation();
-                                                                            if (checkLimit && !checkLimit('branch')) return;
-                                                                            onBranchFromMessage(msg.id, true)
-                                                                        }}
-                                                                        className="p-1.5 rounded-full hover:bg-muted hover:text-primary transition-colors"
-                                                                        title="Branch all models"
-                                                                    >
-                                                                        <GitBranch className="w-4 h-4" />
-                                                                    </button>
+                                                                        <div className="w-px h-4 bg-border/50 mx-0.5" />
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault(); e.stopPropagation();
+                                                                                if (checkLimit && !checkLimit('branch')) return;
+                                                                                onBranchFromMessage(msg.id, true)
+                                                                            }}
+                                                                            className="p-1.5 rounded-full hover:bg-muted hover:text-primary transition-colors"
+                                                                            title="Branch all models"
+                                                                        >
+                                                                            <GitBranch className="w-4 h-4" />
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                /* AI Message */
-                                                <div className="flex gap-4 max-w-[95%] group/message">
-                                                    {/* AI Logo */}
-                                                    <div className="flex-shrink-0 mt-1">
-                                                        {msg.aiModel && (
-                                                            <div className="w-8 h-8 flex items-center justify-center bg-background rounded-full border border-border/10">
-                                                                {getAILogo(msg.aiModel)}
-                                                            </div>
+                                                            </>
                                                         )}
                                                     </div>
+                                                ) : (
+                                                    /* AI Message */
+                                                    <div className="flex gap-4 max-w-[95%] group/message">
+                                                        {/* AI Logo */}
+                                                        <div className="flex-shrink-0 mt-1">
+                                                            {msg.aiModel && (
+                                                                <div className="w-8 h-8 flex items-center justify-center bg-background rounded-full border border-border/10">
+                                                                    {getAILogo(msg.aiModel)}
+                                                                </div>
+                                                            )}
+                                                        </div>
 
-                                                    <div className="flex flex-col flex-1 min-w-0">
-                                                        <div className="flex items-center justify-between gap-2 mb-1">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-sm font-semibold text-foreground">
-                                                                    {msg.aiModel ? selectedAIs.find(ai => ai.id === msg.aiModel)?.name || msg.aiModel : 'AI'}
-                                                                </span>
-                                                                <span className="text-[10px] text-muted-foreground/60">
-                                                                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                                </span>
+                                                        <div className="flex flex-col flex-1 min-w-0">
+                                                            <div className="flex items-center justify-between gap-2 mb-1">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-sm font-semibold text-foreground">
+                                                                        {msg.aiModel ? selectedAIs.find(ai => ai.id === msg.aiModel)?.name || msg.aiModel : 'AI'}
+                                                                    </span>
+                                                                    <span className="text-[10px] text-muted-foreground/60">
+                                                                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                    </span>
+                                                                </div>
+
+                                                                {/* Toolbar in header - always accessible */}
+                                                                <div className="flex items-center gap-0.5 opacity-0 group-hover/message:opacity-100 transition-all duration-200">
+                                                                    <div className="flex items-center gap-0.5 p-1 rounded-full bg-background border border-border/50 text-muted-foreground backdrop-blur-sm">
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault(); e.stopPropagation();
+                                                                                handleCopy(msg.text, msg.id)
+                                                                            }}
+                                                                            className="p-1.5 rounded-full hover:bg-muted hover:text-foreground transition-colors"
+                                                                            title="Copy"
+                                                                        >
+                                                                            {copiedMessageId === msg.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                                                                        </button>
+                                                                        <div className="w-px h-4 bg-border/50 mx-0.5" />
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault(); e.stopPropagation();
+                                                                                if (checkLimit && !checkLimit('branch')) return;
+                                                                                onBranchFromMessage(msg.id, false)
+                                                                            }}
+                                                                            className="p-1.5 rounded-full hover:bg-muted hover:text-primary transition-colors"
+                                                                            title="Branch from here"
+                                                                        >
+                                                                            <GitBranch className="w-4 h-4" />
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
                                                             </div>
 
-                                                            {/* Toolbar in header - always accessible */}
-                                                            <div className="flex items-center gap-0.5 opacity-0 group-hover/message:opacity-100 transition-all duration-200">
-                                                                <div className="flex items-center gap-0.5 p-1 rounded-full bg-background border border-border/50 text-muted-foreground backdrop-blur-sm">
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.preventDefault(); e.stopPropagation();
-                                                                            handleCopy(msg.text, msg.id)
-                                                                        }}
-                                                                        className="p-1.5 rounded-full hover:bg-muted hover:text-foreground transition-colors"
-                                                                        title="Copy"
-                                                                    >
-                                                                        {copiedMessageId === msg.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                                                                    </button>
-                                                                    <div className="w-px h-4 bg-border/50 mx-0.5" />
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.preventDefault(); e.stopPropagation();
-                                                                            if (checkLimit && !checkLimit('branch')) return;
-                                                                            onBranchFromMessage(msg.id, false)
-                                                                        }}
-                                                                        className="p-1.5 rounded-full hover:bg-muted hover:text-primary transition-colors"
-                                                                        title="Branch from here"
-                                                                    >
-                                                                        <GitBranch className="w-4 h-4" />
-                                                                    </button>
+                                                            {/* Message bubble + Toolbar row */}
+                                                            <div className="relative">
+                                                                <div
+                                                                    onClick={(e) => {
+                                                                        if (e.ctrlKey || e.metaKey || e.altKey) {
+                                                                            e.preventDefault()
+                                                                            e.stopPropagation()
+                                                                            onMessageSelect?.(msg.id, true)
+                                                                        }
+                                                                    }}
+                                                                    className={`leading-relaxed bg-white dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-100 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-700/50 shadow-sm ${selectedMessageIds?.has(msg.id)
+                                                                        ? 'ring-2 ring-zinc-400 dark:ring-zinc-500 ring-offset-2 ring-offset-background'
+                                                                        : ''
+                                                                        }`}
+                                                                    title="Ctrl + Click to select"
+                                                                >
+                                                                    {msg.isStreaming ? (
+                                                                        (!msg.streamingText || msg.streamingText.trim() === '') ? (
+                                                                            <div className="flex items-center gap-3 py-2 pl-1">
+                                                                                <div className="flex space-x-1">
+                                                                                    <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                                                                    <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                                                                    <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"></div>
+                                                                                </div>
+                                                                                <span className="text-sm text-muted-foreground/80 font-medium animate-pulse">Thinking...</span>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="space-y-2">
+                                                                                <MarkdownRenderer content={msg.streamingText} />
+                                                                                <div className="flex items-center gap-1.5 text-muted-foreground/70 pt-1">
+                                                                                    <div className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-pulse" />
+                                                                                    <span className="text-xs font-medium">Generating...</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        )
+                                                                    ) : (
+                                                                        <MarkdownRenderer content={msg.text} />
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         </div>
-
-                                                        {/* Message bubble + Toolbar row */}
-                                                        <div className="relative">
-                                                            <div
-                                                                onClick={(e) => {
-                                                                    if (e.ctrlKey || e.metaKey || e.altKey) {
-                                                                        e.preventDefault()
-                                                                        e.stopPropagation()
-                                                                        onMessageSelect?.(msg.id, true)
-                                                                    }
-                                                                }}
-                                                                className={`leading-relaxed bg-white dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-100 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-700/50 shadow-sm ${selectedMessageIds?.has(msg.id)
-                                                                    ? 'ring-2 ring-zinc-400 dark:ring-zinc-500 ring-offset-2 ring-offset-background'
-                                                                    : ''
-                                                                    }`}
-                                                                title="Ctrl + Click to select"
-                                                            >
-                                                                {msg.isStreaming ? (
-                                                                    (!msg.streamingText || msg.streamingText.trim() === '') ? (
-                                                                        <div className="flex items-center gap-3 py-2 pl-1">
-                                                                            <div className="flex space-x-1">
-                                                                                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                                                                                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                                                                                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"></div>
-                                                                            </div>
-                                                                            <span className="text-sm text-muted-foreground/80 font-medium animate-pulse">Thinking...</span>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="space-y-2">
-                                                                            <MarkdownRenderer content={msg.streamingText} />
-                                                                            <div className="flex items-center gap-1.5 text-muted-foreground/70 pt-1">
-                                                                                <div className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-pulse" />
-                                                                                <span className="text-xs font-medium">Generating...</span>
-                                                                            </div>
-                                                                        </div>
-                                                                    )
-                                                                ) : (
-                                                                    <MarkdownRenderer content={msg.text} />
-                                                                )}
-                                                            </div>
-                                                        </div>
                                                     </div>
-                                                </div>
-                                            )}
-                                        </motion.div>
-                                    ))}
+                                                )}
+                                            </motion.div>
+                                        ))}
 
                                     {/* Multi-model Actions */}
                                     {/* Multi-model Actions - Only show for the last group */}
