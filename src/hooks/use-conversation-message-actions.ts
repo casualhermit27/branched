@@ -108,8 +108,44 @@ export function useConversationMessageActions({
 		}))
 	}, [mainAbortControllerRef, setIsGenerating, setMessages])
 
+	// Helper: Build clean conversation context for AI
+	// This ensures we have a single source of truth like ChatGPT/Claude
+	const buildCleanContext = useCallback((
+		existingMessages: Message[],
+		newUserMessage: Message,
+		branchId?: string
+	): Message[] => {
+		let allMessages: Message[] = []
+
+		if (branchId) {
+			const targetNode = conversationNodes.find(n => n.id === branchId)
+			if (targetNode) {
+				const inherited = targetNode.data?.inheritedMessages || []
+				const branchMsgs = targetNode.data?.messages || []
+				allMessages = [...inherited, ...branchMsgs, newUserMessage]
+			} else {
+				allMessages = [...existingMessages, newUserMessage]
+			}
+		} else {
+			allMessages = [...existingMessages, newUserMessage]
+		}
+
+		// Deduplicate by ID and ensure all messages have content
+		const seenIds = new Set<string>()
+		return allMessages.filter(msg => {
+			// Must have text content
+			if (!msg.text || msg.text.trim().length === 0) return false
+			// Must be unique
+			if (seenIds.has(msg.id)) return false
+			seenIds.add(msg.id)
+			return true
+		})
+	}, [conversationNodes])
+
 	const sendMessage = useCallback(async (text: string, branchId?: string) => {
-		if (!text.trim()) {
+		// Validate input - like ChatGPT, we don't allow empty messages
+		const trimmedText = text.trim()
+		if (!trimmedText) {
 			return
 		}
 
@@ -125,20 +161,22 @@ export function useConversationMessageActions({
 		}
 		setMessageCount(prev => prev + 1)
 
+		// Create user message with validated text
 		const newMessage: Message = {
 			id: `msg-${Date.now()}`,
-			text,
+			text: trimmedText, // Use trimmed text to ensure no whitespace-only messages
 			isUser: true,
 			timestamp: Date.now(),
 			parentId: branchId || undefined,
 			children: []
 		}
 
-		// Only update global messages if we are targeting the active branch or main
+		// Add user message to UI immediately
 		if (!targetBranchId || targetBranchId === activeBranchId) {
 			setMessages(prev => [...prev, newMessage])
 		}
 
+		// Fetch memory context (optional enhancement)
 		let memoryContext = ''
 		try {
 			const memoryResponse = await fetch(`/api/memory/context?branchId=${activeBranchId || 'main'}&depth=3&maxMemories=50`)
@@ -152,31 +190,14 @@ export function useConversationMessageActions({
 			console.error('❌ Error fetching memory context:', error)
 		}
 
+		// Build clean context ONCE - single source of truth like ChatGPT/Claude
+		const cleanMessages = buildCleanContext(messages, newMessage, targetBranchId || undefined)
 
-
-		// Prepare context for AI
-		let contextMessages = [...messages, newMessage] // Default to main messages if no branch
-
-		if (targetBranchId) {
-			const targetNode = conversationNodes.find(n => n.id === targetBranchId)
-			if (targetNode) {
-				const inherited = targetNode.data?.inheritedMessages || []
-				const branchMsgs = targetNode.data?.messages || []
-				// Context should be: Inherited + Branch History + New Message
-				// Note: branchMsgs typically includes the new message already if we updated state correctly, 
-				// but let's be safe and construct it explicitly to ensure order.
-				// However, we just added newMessage to state? No, async state updates might not be ready.
-				// So: inherited + (branchMsgs WITHOUT newMessage if it was added? No, we haven't added it to node yet in this scope properly?)
-				// Wait, we update 'setConversationNodes' below for UI, but here we need 'context' NOW.
-				// So: inherited + existing_branch_messages + newMessage
-				contextMessages = [...inherited, ...branchMsgs, newMessage]
-			}
-		}
-
+		// This context will be used for ALL AI calls
 		const context: ConversationContext = {
-			messages: contextMessages,
+			messages: cleanMessages,
 			currentBranch: targetBranchId || 'main',
-			parentMessages: messages, // Keeping this for reference if needed, but 'messages' main property is what AI uses
+			parentMessages: messages,
 			memoryContext
 		}
 
@@ -230,18 +251,9 @@ export function useConversationMessageActions({
 					if (ai.id === 'best') {
 						modelName = getBestAvailableModel()
 					} else {
-						// Direct mapping for OpenRouter or other specific provider-prefix models
-						if (ai.id.includes('openrouter')) {
-							modelName = ai.id
-						} else {
-							modelName = ai.id === 'gemini-2.5-pro' ? 'gemini'
-								: ai.id === 'mistral-large' ? 'mistral'
-									: ai.id.includes('gpt') ? 'openai'
-										: ai.id.includes('claude') ? 'claude'
-											: ai.id.includes('grok') ? 'grok'
-												: ai.id.includes('gemini') ? 'gemini'
-													: ai.id
-						}
+						// Pass the actual model ID directly - don't normalize to provider names
+						// This ensures we use the exact model version (e.g., gemini-2.5-flash)
+						modelName = ai.id
 					}
 
 					// Check if API key is available for this model
@@ -294,19 +306,7 @@ export function useConversationMessageActions({
 					let finalResponse = ''
 
 					if (hasApiKey) {
-						// Use real API with streaming
-						const context: ConversationContext = {
-							messages: (() => {
-								const seenIds = new Set<string>()
-								return messages.filter((m: Message) => {
-									if (!m.text || m.text.trim().length === 0) return false
-									if (seenIds.has(m.id)) return false
-									seenIds.add(m.id)
-									return true
-								})
-							})(),
-							currentBranch: targetBranchId || 'main'
-						}
+						// Use the context built at the start of sendMessage (single source of truth)
 
 						const onChunk = (chunk: string) => {
 							setMessages(prev => prev.map((msg: Message) =>
@@ -479,18 +479,9 @@ export function useConversationMessageActions({
 				if (selectedAI?.id === 'best') {
 					modelName = getBestAvailableModel()
 				} else {
-					// Direct mapping for OpenRouter or other specific provider-prefix models
-					if (selectedAI?.id?.includes('openrouter')) {
-						modelName = selectedAI.id
-					} else {
-						modelName = selectedAI?.id === 'gemini-2.5-pro' ? 'gemini'
-							: selectedAI?.id === 'mistral-large' ? 'mistral'
-								: selectedAI?.id?.includes('gpt') ? 'openai'
-									: selectedAI?.id?.includes('claude') ? 'claude'
-										: selectedAI?.id?.includes('grok') ? 'grok'
-											: selectedAI?.id?.includes('gemini') ? 'gemini'
-												: selectedAI?.id || 'openai'
-					}
+					// Pass the actual model ID directly - don't normalize to provider names
+					// This ensures we use the exact model version (e.g., gemini-2.5-flash)
+					modelName = selectedAI?.id || 'gemini-2.5-flash'
 				}
 
 				// Check if API key is available for this model
@@ -539,19 +530,7 @@ export function useConversationMessageActions({
 					let finalResponse = ''
 
 					if (hasApiKey) {
-						// Use real API with streaming
-						const context: ConversationContext = {
-							messages: (() => {
-								const seenIds = new Set<string>()
-								return messages.filter((m: Message) => {
-									if (!m.text || m.text.trim().length === 0) return false
-									if (seenIds.has(m.id)) return false
-									seenIds.add(m.id)
-									return true
-								})
-							})(),
-							currentBranch: targetBranchId || 'main'
-						}
+						// Use the context built at the start of sendMessage (single source of truth)
 
 						const onChunk = (chunk: string) => {
 							setMessages(prev => prev.map(msg =>
@@ -754,8 +733,11 @@ export function useConversationMessageActions({
 		}
 	}, [
 		activeBranchId,
+		buildCleanContext,
+		checkLimit,
 		conversationNodes,
 		getBestAvailableModel,
+		mainAbortControllerRef,
 		messageCount,
 		messages,
 		selectedAIs,

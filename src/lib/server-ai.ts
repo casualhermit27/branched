@@ -78,15 +78,21 @@ async function streamOpenAI(key: string, model: string, messages: any[], system:
 
     if (isOpenRouter) {
         headers['HTTP-Referer'] = process.env.NEXTAUTH_URL || 'http://localhost:3000'
-        headers['X-Title'] = 'Antigravity Chat'
+        headers['X-Title'] = 'Branched Chat'
     }
 
-    console.log(`[Server-AI] Calling ${url} with model: ${model}`)
+    // For OpenRouter, strip the 'openrouter/' prefix if present
+    // Our internal model IDs use 'openrouter/provider/model' format, but the API expects 'provider/model'
+    const actualModel = isOpenRouter && model.startsWith('openrouter/')
+        ? model.replace('openrouter/', '')
+        : model
+
+    console.log(`[Server-AI] Calling ${url} with model: ${actualModel}`)
     const res = await fetch(url, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-            model: model,
+            model: actualModel,
             messages: formattedMessages,
             stream: true
         })
@@ -133,8 +139,8 @@ async function streamAnthropic(key: string, model: string, messages: any[], syst
 
 // Gemini
 async function streamGemini(key: string, model: string, messages: any[], system: string | undefined) {
-    // Normalize model name - if just "gemini" is passed, use the full model name
-    const modelName = model === 'gemini' ? 'gemini-1.5-flash' : model
+    // Normalize model name - if just "gemini" is passed, use the default model
+    const modelName = model === 'gemini' ? 'gemini-2.5-flash' : model
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:streamGenerateContent?key=${key}`
 
     console.log(`[Gemini] Using model: ${modelName}`)
@@ -157,6 +163,13 @@ async function streamGemini(key: string, model: string, messages: any[], system:
         body: JSON.stringify({ contents })
     })
 
+    if (!res.ok) {
+        const errorText = await res.text()
+        console.error(`[Gemini] API Error: ${res.status} - ${errorText}`)
+        throw new Error(`Gemini API error: ${res.status} - ${errorText}`)
+    }
+
+    console.log(`[Gemini] Response status: ${res.status}, streaming response...`)
     return res
 }
 

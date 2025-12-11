@@ -112,8 +112,8 @@ export function EmptyState({
                                         onSelectSingle(ai)
                                     }}
                                     showAddButton={true}
-                                    getBestAvailableModel={getBestAvailableModel}
                                     tier={tier}
+                                    checkLimit={checkLimit}
                                 />
                                 <div className="h-6 w-px bg-border/50 mx-2"></div>
                                 <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">

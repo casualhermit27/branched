@@ -14,10 +14,20 @@ export async function GET() {
         }
 
         await connectDB()
-        const user = await User.findOne({ email: session.user.email })
+        let user = await User.findOne({ email: session.user.email })
 
+        // If user doesn't exist, create a new one with default free tier
         if (!user) {
-            return NextResponse.json({ error: 'User not found' }, { status: 404 })
+            user = new User({
+                email: session.user.email,
+                name: session.user.name || '',
+                tier: 'free',
+                credits: 0,
+                dailyFreeUsage: 0,
+                lastDailyReset: new Date()
+            })
+            await user.save()
+            console.log(`[User API] Created new user for: ${session.user.email}`)
         }
 
         // Check for daily reset logic here too, to be safe/consistent

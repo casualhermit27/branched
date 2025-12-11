@@ -270,10 +270,10 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
           width: data.isMinimized ? '280px' : undefined,
           minWidth: data.isMinimized ? '280px' : undefined,
           maxWidth: data.isMinimized ? '280px' : undefined,
-          // Fixed max-height: 650px is safe for most laptop screens (768px height) and handles zoom better than vh
+          // Max-height uses viewport height for responsive sizing
           height: data.isMinimized ? '200px' : 'auto',
           minHeight: data.isMinimized ? '200px' : '450px',
-          maxHeight: data.isMinimized ? '200px' : '650px',
+          maxHeight: data.isMinimized ? '200px' : '85vh',
         }}
       >
         <DeleteConfirmModal

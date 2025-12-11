@@ -654,8 +654,8 @@ function ChatInterface({
                                                     onSelectSingle(ai.id)
                                                 } : undefined}
                                                 showAddButton={true}
-                                                getBestAvailableModel={getBestAvailableModel}
                                                 tier={tier}
+                                                checkLimit={checkLimit}
                                             />
                                         )}
 

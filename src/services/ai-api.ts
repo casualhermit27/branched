@@ -319,20 +319,27 @@ export class GeminiAPI extends BaseAIAPI {
         const { done, value } = await reader.read()
         if (done) break
         const chunk = decoder.decode(value)
-        // Gemini returns a JSON array stream like "[{...},\n,{...}]"
-        // This is complex to parse streamingly without a proper parser.
-        // For now, simpler text extraction or just accumulating.
 
-        // Quick hack for Gemini Stream from REST:
-        // content comes in "text": "..." fields inside the JSON structure.
-        const text = chunk
-        // We might get partial JSON.
-        // Regex is safer for specific field extraction on raw stream
-        const matches = text.matchAll(/"text":\s*"([^"]*)"/g)
+        // Debug: Log raw chunk to see what Gemini is returning
+        console.log('[GeminiAPI] Raw chunk received:', chunk.substring(0, 200))
+
+        // Gemini returns a JSON array stream like "[{...},\n,{...}]"
+        // Extract text content from the JSON structure
+        // The regex matches "text": "..." patterns and handles escaped characters
+        const matches = chunk.matchAll(/"text":\s*"((?:[^"\\]|\\.)*)"/g)
         for (const match of matches) {
-          const content = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"')
-          fullResponse += content
-          onChunk(content)
+          // Unescape the content
+          const content = match[1]
+            .replace(/\\n/g, '\n')
+            .replace(/\\r/g, '\r')
+            .replace(/\\t/g, '\t')
+            .replace(/\\"/g, '"')
+            .replace(/\\\\/g, '\\')
+
+          if (content) {
+            fullResponse += content
+            onChunk(content)
+          }
         }
       }
       console.log('[GeminiAPI] Final response length:', fullResponse.length)
@@ -412,17 +419,16 @@ export class AIService {
   isModelAvailable(model: string): boolean {
     const normalizedModel = model.toLowerCase()
 
-    // Always allow Free Tier / System models
+    // Always allow these models (they use env keys on the server)
     // This allows the Client to try calling the Server even if the Client Logic 
     // doesn't have the API Key (e.g. Build Time env var missing).
     // The Server will then use its Runtime Env Vars to fulfill the request.
-    const freeModels = [
-      'gemini-1.5-flash',
-      'mistral-small-latest',
-      'openrouter/google/gemini-2.0-flash-exp:free',
-      'openrouter/meta-llama/llama-3.1-8b-instruct:free'
+    const allowedModels = [
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      'mistral-small-latest'
     ].map(id => id.toLowerCase())
-    if (freeModels.some(id => normalizedModel.includes(id))) return true
+    if (allowedModels.some(id => normalizedModel.includes(id))) return true
 
     // Check local keys for other models
     if (normalizedModel.includes('openrouter')) return this.openrouterAPI.hasKey()
@@ -452,28 +458,29 @@ export class AIService {
 
   // Get the best available model based on keys and discovered models
   getBestModel(): string {
-    // Priority 1: Discovered models from keys
-    const providers = ['openai', 'claude', 'gemini', 'mistral', 'grok', 'openrouter']
+    // Priority 1: Check for Gemini key first (most likely configured)
+    if (this.geminiAPI.hasKey()) {
+      return 'gemini-2.5-flash'
+    }
 
+    // Priority 2: Check for Mistral key
+    if (this.mistralAPI.hasKey()) {
+      return 'mistral-small-latest'
+    }
+
+    // Priority 3: Check discovered models from other providers
+    const providers = ['openai', 'claude', 'grok']
     for (const provider of providers) {
       if (this.getKey(provider)) {
         const cached = getCachedModels(provider)
         if (cached && cached.length > 0) {
-          // Return the first (usually best/newest) model from the discovered list
           return cached[0].id
         }
       }
     }
 
-    // Priority 2: Fallback to known free/available models if keys exist but no cache yet (or hardcoded fallback)
-    if (this.openrouterAPI.hasKey()) return 'openrouter/google/gemini-2.0-flash-exp:free'
-    if (this.mistralAPI.hasKey()) return 'mistral-large-latest'
-    if (this.geminiAPI.hasKey()) return 'gemini-2.0-flash-exp'
-    if (this.openaiAPI.hasKey()) return 'gpt-4o'
-    if (this.claudeAPI.hasKey()) return 'claude-3-5-sonnet-20241022'
-
-    // Priority 3: Default fallback (likely to fail or mock)
-    return 'gpt-4o'
+    // Priority 4: Default fallback to Gemini 2.5 Flash (will use server key)
+    return 'gemini-2.5-flash'
   }
 }
 

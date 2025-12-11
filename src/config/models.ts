@@ -8,14 +8,22 @@ export interface ModelConfig {
 }
 
 export const MODELS: Record<string, ModelConfig> = {
-    // Free Tier Models (Mistral & Gemini only)
-    'gemini-1.5-flash': {
-        id: 'gemini-1.5-flash',
-        name: 'Gemini 1.5 Flash',
+    // Free Tier Models (Gemini 2.5 & Mistral)
+    'gemini-2.5-flash': {
+        id: 'gemini-2.5-flash',
+        name: 'Gemini 2.5 Flash',
         provider: 'google',
         tier: 'free',
         costPerMessage: 0,
-        description: 'Fast, efficient, and multimodal'
+        description: 'Fast, efficient, next-gen multimodal'
+    },
+    'gemini-2.5-pro': {
+        id: 'gemini-2.5-pro',
+        name: 'Gemini 2.5 Pro',
+        provider: 'google',
+        tier: 'free',
+        costPerMessage: 0,
+        description: 'Advanced reasoning and multimodal'
     },
     'mistral-small-latest': {
         id: 'mistral-small-latest',
@@ -24,23 +32,6 @@ export const MODELS: Record<string, ModelConfig> = {
         tier: 'free',
         costPerMessage: 0,
         description: 'Efficient and low-latency'
-    },
-
-    'openrouter/google/gemini-2.0-flash-exp:free': {
-        id: 'openrouter/google/gemini-2.0-flash-exp:free',
-        name: 'Gemini 2.0 Flash',
-        provider: 'openrouter',
-        tier: 'free',
-        costPerMessage: 0,
-        description: 'Next-gen fast model via OpenRouter'
-    },
-    'openrouter/meta-llama/llama-3.1-8b-instruct:free': {
-        id: 'openrouter/meta-llama/llama-3.1-8b-instruct:free',
-        name: 'Llama 3.1 8B',
-        provider: 'openrouter',
-        tier: 'free',
-        costPerMessage: 0,
-        description: 'Open source capable model via OpenRouter'
     },
 
     // Pro Tier Models

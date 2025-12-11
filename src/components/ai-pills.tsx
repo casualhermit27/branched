@@ -17,33 +17,27 @@ export interface AI {
 }
 
 export const availableAIs: AI[] = [
-  // Functional AIs (with API integration)
+  // Gemini Models (using your API key)
   {
-    id: 'mistral-small-latest',
-    name: 'Mistral Small',
-    color: 'bg-purple-100 text-purple-800 border-purple-200',
-    logo: <img src="/logos/mistral-ai_logo.svg" alt="Mistral" width="16" height="16" />,
-    functional: true
-  },
-  {
-    id: 'gemini-1.5-flash',
-    name: 'Gemini 1.5 Flash',
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
     color: 'bg-blue-100 text-blue-800 border-blue-200',
     logo: <img src="/logos/gemini.svg" alt="Gemini" width="16" height="16" />,
     functional: true
   },
   {
-    id: 'openrouter/google/gemini-2.0-flash-exp:free',
-    name: 'Gemini 2.0 Flash',
-    color: 'bg-green-100 text-green-800 border-green-200',
-    logo: <Sparkle className="w-4 h-4 text-green-600" />,
+    id: 'gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro',
+    color: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    logo: <img src="/logos/gemini.svg" alt="Gemini" width="16" height="16" />,
     functional: true
   },
+  // Mistral Model
   {
-    id: 'openrouter/meta-llama/llama-3.1-8b-instruct:free',
-    name: 'Llama 3.1 8B',
-    color: 'bg-blue-100 text-blue-800 border-blue-200',
-    logo: <img src="/logos/ollama_light.svg" alt="Llama" width="16" height="16" />,
+    id: 'mistral-small-latest',
+    name: 'Mistral Small',
+    color: 'bg-purple-100 text-purple-800 border-purple-200',
+    logo: <img src="/logos/mistral-ai_logo.svg" alt="Mistral" width="16" height="16" />,
     functional: true
   }
 ]
@@ -82,16 +76,8 @@ const getProviderForId = (id: string) => {
   return 'openai'
 }
 
-// Add "Best" as the first option
-export const allAIOptions: AI[] = [
-  {
-    id: 'best',
-    name: 'Best',
-    color: 'bg-purple-100 text-purple-800 border-purple-200',
-    logo: <Sparkle weight="fill" className="w-4 h-4" />
-  },
-  ...availableAIs
-]
+// Just export available AIs directly - no "Best" option, users see actual models
+export const allAIOptions: AI[] = availableAIs
 
 interface AIPillsProps {
   selectedAIs: AI[]
@@ -99,11 +85,11 @@ interface AIPillsProps {
   onRemoveAI: (aiId: string) => void
   onSelectSingle?: (ai: AI) => void
   showAddButton?: boolean
-  getBestAvailableModel?: () => string
   tier?: 'free' | 'pro'
+  checkLimit?: (type: 'branch' | 'message') => boolean
 }
 
-export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSingle, showAddButton = true, getBestAvailableModel, tier = 'free' }: AIPillsProps) {
+export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSingle, showAddButton = true, tier = 'free', checkLimit }: AIPillsProps) {
   const [showDropdown, setShowDropdown] = useState(false)
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
   const [placement, setPlacement] = useState<'top' | 'bottom'>('bottom')
@@ -207,17 +193,8 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
     }
   }, [showDropdown])
 
-  // Get display name for AI, showing actual model for "Best"
+  // Get display name for AI
   const getAIDisplayName = (ai: AI): string => {
-    if (ai.id === 'best' && getBestAvailableModel) {
-      const actualModel = getBestAvailableModel()
-      const modelNames: { [key: string]: string } = {
-        'gemini': 'Gemini 2.0 Flash',
-        'mistral': 'Mistral Large',
-        'gpt-4': 'GPT-4'
-      }
-      return `${ai.name} (${modelNames[actualModel] || actualModel})`
-    }
     return ai.name
   }
 
@@ -248,13 +225,11 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
   // Premium models that need locking
   const premiumModels = ['gpt-4', 'gpt-4o', 'claude-3-5-sonnet', 'claude-3-opus', 'gemini-1.5-pro']
 
-  // STRICT MODE: Only show discovered AIs + Best
-  const combinedAIs: AI[] = []
+  // Check if quota is exceeded (free tier limit check)
+  const isQuotaExceeded = checkLimit ? !checkLimit('message') : false
 
-  const bestOption = allAIOptions.find(a => a.id === 'best')
-  if (bestOption) {
-    combinedAIs.push(bestOption)
-  }
+  // Build list of available AIs
+  const combinedAIs: AI[] = []
 
   // 1. Add all discovered models (these are definitely usable)
   discoveredAIs.forEach(discovered => {
@@ -264,9 +239,6 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
   })
 
   // 2. Add hardcoded models
-  // We prioritize discovered models, but we also want to ensure specific "Free/System" models 
-  // (like Gemini Flash or OpenRouter free models) show up even if discovery returns a huge list 
-  // but happens to exclude them, OR if they are the special free ones we system-configure.
   availableAIs.forEach(ai => {
     // If it's already in the combined list (e.g. from discovery), skip it
     if (combinedAIs.find(a => a.id === ai.id)) return
@@ -277,27 +249,22 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
     const isPremium = modelConfig?.tier === 'pro'
 
     // Condition A: If it's functional and NOT premium (i.e. Free Tier System Model), add it!
-    // This ensures our manually curated "Free" models always appear.
     if (ai.functional && !isPremium) {
       combinedAIs.push(ai)
       return
     }
 
-    // Condition B: If we HAVE a key, we generally trust discovery and don't add hardcoded stuff.
-    // EXCEPT for the Free ones handled above.
+    // Condition B: If we HAVE a key, we generally trust discovery
     if (hasKey) return
 
-    // Condition C: No Key. Show functional ones (handled in A) or Premium Upsells.
+    // Condition C: No Key. Show Premium Upsells.
     if (isPremium) {
       combinedAIs.push(ai)
     }
   })
 
-  combinedAIs.sort((a, b) => {
-    if (a.id === 'best') return -1
-    if (b.id === 'best') return 1
-    return a.name.localeCompare(b.name)
-  })
+  // Sort alphabetically
+  combinedAIs.sort((a, b) => a.name.localeCompare(b.name))
 
   const [upsellModel, setUpsellModel] = useState<{ isOpen: boolean; model: string; provider: string }>({
     isOpen: false,
@@ -344,19 +311,34 @@ export default function AIPills({ selectedAIs, onAddAI, onRemoveAI, onSelectSing
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 border transition-all duration-200 ${freshAI.color}`}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 border transition-all duration-200 ${isQuotaExceeded
+                  ? 'bg-gray-100 text-gray-400 border-gray-200 dark:bg-gray-800 dark:text-gray-500 dark:border-gray-700'
+                  : freshAI.color
+                  }`}
+                title={isQuotaExceeded ? 'Daily quota exceeded. Please wait until tomorrow.' : ''}
               >
                 {freshAI.logo}
                 <span className="font-medium">
-                  {getAIDisplayName(ai)}
-                  {ai.id.includes('openrouter') && <span className="ml-1 opacity-60 font-normal">OpenRouter</span>}
+                  {isQuotaExceeded ? (
+                    <>
+                      {getAIDisplayName(ai)}
+                      <span className="ml-1.5 text-[10px] opacity-70">Quota Exceeded</span>
+                    </>
+                  ) : (
+                    <>
+                      {getAIDisplayName(ai)}
+                      {ai.id.includes('openrouter') && <span className="ml-1 opacity-60 font-normal">OpenRouter</span>}
+                    </>
+                  )}
                 </span>
-                <button
-                  onClick={() => onRemoveAI(ai.id)}
-                  className="hover:bg-black/10 rounded-full p-1 transition-all duration-150 active:scale-90 ml-1"
-                >
-                  <X size={12} />
-                </button>
+                {!isQuotaExceeded && (
+                  <button
+                    onClick={() => onRemoveAI(ai.id)}
+                    className="hover:bg-black/10 rounded-full p-1 transition-all duration-150 active:scale-90 ml-1"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
               </motion.div>
             )
           })}
