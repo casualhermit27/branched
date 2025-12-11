@@ -375,7 +375,7 @@ function ChatInterface({
                                             >
                                                 {/* User Message */}
                                                 {msg.isUser ? (
-                                                    <div className="flex flex-col items-end max-w-[85%] relative group/message">
+                                                    <div className="flex flex-col items-end max-w-[85%] overflow-hidden relative group/message">
                                                         {editingMessageId === msg.id ? (
                                                             <div className="w-full bg-primary/5 border border-primary/20 rounded-2xl p-3 min-w-[300px]">
                                                                 <textarea
@@ -417,13 +417,14 @@ function ChatInterface({
                                                                             onMessageSelect?.(msg.id, true)
                                                                         }
                                                                     }}
-                                                                    className={`bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white px-5 py-3 rounded-[1.5rem] rounded-tr-sm shadow-sm ${selectedMessageIds?.has(msg.id)
+                                                                    className={`bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white px-5 py-3 rounded-[1.5rem] rounded-tr-sm shadow-sm overflow-hidden max-w-full ${selectedMessageIds?.has(msg.id)
                                                                         ? 'ring-2 ring-zinc-400 dark:ring-zinc-500 ring-offset-2 ring-offset-background'
                                                                         : ''
                                                                         }`}
                                                                     title="Ctrl + Click to select"
                                                                 >
-                                                                    <MarkdownRenderer content={msg.text} />
+                                                                    {/* User messages shown as plain text - no markdown rendering */}
+                                                                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{msg.text}</p>
                                                                 </div>
 
                                                                 {/* Floating Toolbar - Left Side */}
@@ -470,7 +471,7 @@ function ChatInterface({
                                                     </div>
                                                 ) : (
                                                     /* AI Message */
-                                                    <div className="flex gap-4 max-w-[95%] group/message">
+                                                    <div className="flex gap-4 max-w-[95%] overflow-hidden group/message">
                                                         {/* AI Logo */}
                                                         <div className="flex-shrink-0 mt-1">
                                                             {msg.aiModel && (
@@ -530,7 +531,7 @@ function ChatInterface({
                                                                             onMessageSelect?.(msg.id, true)
                                                                         }
                                                                     }}
-                                                                    className={`leading-relaxed bg-white dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-100 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-700/50 shadow-sm ${selectedMessageIds?.has(msg.id)
+                                                                    className={`leading-relaxed bg-white dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-100 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-700/50 shadow-sm overflow-hidden ${selectedMessageIds?.has(msg.id)
                                                                         ? 'ring-2 ring-zinc-400 dark:ring-zinc-500 ring-offset-2 ring-offset-background'
                                                                         : ''
                                                                         }`}

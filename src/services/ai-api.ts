@@ -83,6 +83,16 @@ abstract class BaseAIAPI {
       if (userId) headers['x-user-id'] = userId
     }
 
+    // DEBUG: Log what we're sending to the API
+    console.log(`[callGateway] Sending to /api/chat:`, {
+      model,
+      messageCount: context.messages?.length || 0,
+      messagesPreview: context.messages?.slice(-3).map(m => ({
+        isUser: m.isUser,
+        textPreview: m.text?.substring(0, 40) + '...'
+      }))
+    })
+
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers,
@@ -320,21 +330,23 @@ export class GeminiAPI extends BaseAIAPI {
         if (done) break
         const chunk = decoder.decode(value)
 
-        // Debug: Log raw chunk to see what Gemini is returning
-        console.log('[GeminiAPI] Raw chunk received:', chunk.substring(0, 200))
-
         // Gemini returns a JSON array stream like "[{...},\n,{...}]"
         // Extract text content from the JSON structure
         // The regex matches "text": "..." patterns and handles escaped characters
         const matches = chunk.matchAll(/"text":\s*"((?:[^"\\]|\\.)*)"/g)
         for (const match of matches) {
-          // Unescape the content
-          const content = match[1]
+          // Unescape the content - handle all escape sequences including Unicode
+          let content = match[1]
             .replace(/\\n/g, '\n')
             .replace(/\\r/g, '\r')
             .replace(/\\t/g, '\t')
             .replace(/\\"/g, '"')
             .replace(/\\\\/g, '\\')
+
+          // Unescape Unicode sequences like \u003e to >
+          content = content.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
+            String.fromCharCode(parseInt(hex, 16))
+          )
 
           if (content) {
             fullResponse += content
@@ -342,7 +354,6 @@ export class GeminiAPI extends BaseAIAPI {
           }
         }
       }
-      console.log('[GeminiAPI] Final response length:', fullResponse.length)
       return { text: fullResponse, model: this.provider, timestamp: Date.now() }
     } finally { reader.releaseLock() }
   }

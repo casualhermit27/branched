@@ -144,10 +144,16 @@ async function streamGemini(key: string, model: string, messages: any[], system:
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:streamGenerateContent?key=${key}`
 
     console.log(`[Gemini] Using model: ${modelName}`)
-
+    console.log(`[Gemini] Received ${messages.length} messages`)
 
     // Filter out messages without text content
     const validMessages = messages.filter(m => m.text && m.text.trim().length > 0)
+
+    console.log(`[Gemini] Valid messages: ${validMessages.length}`)
+    console.log(`[Gemini] Message roles:`, validMessages.map(m => ({
+        isUser: m.isUser,
+        textPreview: m.text?.substring(0, 50) + '...'
+    })))
 
     const contents = [
         ...(system ? [{ role: 'user', parts: [{ text: `System: ${system}` }] }] : []),

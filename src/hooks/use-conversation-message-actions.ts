@@ -193,6 +193,16 @@ export function useConversationMessageActions({
 		// Build clean context ONCE - single source of truth like ChatGPT/Claude
 		const cleanMessages = buildCleanContext(messages, newMessage, targetBranchId || undefined)
 
+		// DEBUG: Log context building
+		console.log(`[sendMessage] Context built:`, {
+			existingMessagesCount: messages.length,
+			cleanMessagesCount: cleanMessages.length,
+			cleanMessagesPreview: cleanMessages.slice(-3).map(m => ({
+				isUser: m.isUser,
+				textPreview: m.text?.substring(0, 40) + '...'
+			}))
+		})
+
 		// This context will be used for ALL AI calls
 		const context: ConversationContext = {
 			messages: cleanMessages,
@@ -243,61 +253,58 @@ export function useConversationMessageActions({
 		if (selectedAIs.length > 1) {
 			const groupId = `group-${Date.now()}`
 
-			const aiPromises = selectedAIs.map(async (ai, index) => {
+			// Step 1: Create ALL streaming messages upfront (so they all appear at once)
+			const streamingMessagesData = selectedAIs.map((ai, index) => {
 				const streamingMessageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${ai.id}-${index}`
+				let modelName: string
+				if (ai.id === 'best') {
+					modelName = getBestAvailableModel()
+				} else {
+					modelName = ai.id
+				}
 
-				try {
-					let modelName: string
-					if (ai.id === 'best') {
-						modelName = getBestAvailableModel()
-					} else {
-						// Pass the actual model ID directly - don't normalize to provider names
-						// This ensures we use the exact model version (e.g., gemini-2.5-flash)
-						modelName = ai.id
-					}
+				const streamingMessage: Message = {
+					id: streamingMessageId,
+					text: '',
+					isUser: false,
+					timestamp: Date.now() + index, // Small offset to maintain order
+					parentId: newMessage.id,
+					children: [],
+					aiModel: ai.id,
+					groupId,
+					isStreaming: true,
+					streamingText: ''
+				}
 
-					// Check if API key is available for this model
-					const hasApiKey = aiService.isModelAvailable(modelName)
+				return { ai, modelName, streamingMessageId, streamingMessage }
+			})
 
-					const streamingMessage: Message = {
-						id: streamingMessageId,
-						text: '',
-						isUser: false,
-						timestamp: Date.now(),
-						parentId: newMessage.id,
-						children: [],
-						aiModel: ai.id,
-						groupId,
-						isStreaming: true,
-						streamingText: ''
-					}
+			// Step 2: Add ALL streaming messages to UI at once (batch update)
+			const allStreamingMessages = streamingMessagesData.map(d => d.streamingMessage)
 
-					// Only update global messages if viewing the target branch
-					if (!targetBranchId || targetBranchId === activeBranchId) {
-						setMessages(prev => [...prev, streamingMessage])
-					}
+			if (!targetBranchId || targetBranchId === activeBranchId) {
+				setMessages(prev => [...prev, ...allStreamingMessages])
+			}
 
-					if (targetBranchId) {
-						setSavedBranches(prev =>
-							prev.map(b => b.id === targetBranchId
-								? { ...b, messages: [...b.messages, streamingMessage] }
-								: b
-							)
-						)
-
-						setConversationNodes(prev => prev.map(node => {
-							if (node.id === targetBranchId) {
-								return {
-									...node,
-									data: {
-										...node.data,
-										messages: [...(node.data.messages || []), streamingMessage]
-									}
-								}
+			if (targetBranchId) {
+				setConversationNodes(prev => prev.map(node => {
+					if (node.id === targetBranchId) {
+						return {
+							...node,
+							data: {
+								...node.data,
+								messages: [...(node.data.messages || []), ...allStreamingMessages]
 							}
-							return node
-						}))
+						}
 					}
+					return node
+				}))
+			}
+
+			// Step 3: Now run ALL API calls in parallel
+			const aiPromises = streamingMessagesData.map(async ({ ai, modelName, streamingMessageId }) => {
+				try {
+					const hasApiKey = aiService.isModelAvailable(modelName)
 
 					if (abortController.signal.aborted) {
 						throw new Error('Generation aborted')
@@ -451,7 +458,7 @@ export function useConversationMessageActions({
 					}
 
 					return {
-						id: `msg-${Date.now()}-${ai.id}-${index}`,
+						id: `error-${streamingMessageId}`,
 						text: `${ai.name} error: ${error instanceof Error ? error.message : 'Unknown error'}`,
 						isUser: false,
 						timestamp: Date.now(),
@@ -699,21 +706,33 @@ export function useConversationMessageActions({
 			} catch (error) {
 				console.error('Error generating AI response:', error)
 
-				const wasAborted = error instanceof Error && (error.message.includes('aborted') || error.message.includes('AbortError'))
+				// Detect if this was an abort/stop - check for various abort error patterns
+				const errorMsg = error instanceof Error ? error.message.toLowerCase() : ''
+				const wasAborted = errorMsg.includes('aborted') ||
+					errorMsg.includes('abort') ||
+					errorMsg.includes('bodystreaambuffer') ||
+					errorMsg.includes('cancel')
+
 				mainAbortControllerRef.current = null
 
 				if (wasAborted) {
+					// When aborted, keep whatever text was streamed so far
 					setMessages(prev => prev.map(msg => {
-						if (msg.isStreaming && msg.streamingText) {
-							return {
-								...msg,
-								text: msg.streamingText || '[Generation stopped]',
-								isStreaming: false,
-								streamingText: undefined
+						if (msg.isStreaming) {
+							// If we have streamed text, keep it
+							if (msg.streamingText && msg.streamingText.trim().length > 0) {
+								return {
+									...msg,
+									text: msg.streamingText,
+									isStreaming: false,
+									streamingText: undefined
+								}
 							}
+							// If no text was streamed, remove the message entirely
+							return null
 						}
 						return msg
-					}).filter(msg => !(msg.isStreaming && !msg.streamingText)))
+					}).filter((msg): msg is Message => msg !== null))
 				} else {
 					const errorResponse: Message = {
 						id: `msg-${Date.now()}`,
