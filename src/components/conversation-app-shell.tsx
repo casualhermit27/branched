@@ -17,7 +17,7 @@ import { CommandPalette } from '@/components/command-palette'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { BranchWarningModal } from '@/components/branch-warning-modal'
 import { BranchNavigation } from '@/components/branch-navigation'
-import { ArrowsIn, ArrowsOut, DotsThree, ArrowsLeftRight, MagnifyingGlass, Gear, GitMerge, X } from '@phosphor-icons/react'
+import { ArrowsIn, ArrowsOut, DotsThree, ArrowsLeftRight, MagnifyingGlass, Gear, GitMerge, X, CaretLeft, CaretRight } from '@phosphor-icons/react'
 import { GlobalSearch } from '@/components/global-search'
 import type { ConversationState } from '@/hooks/use-conversation-state'
 import type { ConversationActions } from '@/hooks/use-conversation-actions'
@@ -92,6 +92,7 @@ export default function ConversationAppShell({
 
     const [showGlobalSearch, setShowGlobalSearch] = useState(false)
     const [sidebarOpen, setSidebarOpen] = useState(false)
+    const [isControlsCollapsed, setIsControlsCollapsed] = useState(false)
     const [sidebarTab, setSidebarTab] = useState<'history' | 'settings'>('history')
     const [currentAIIndex, setCurrentAIIndex] = useState(0)
     const [showSynthesizeModal, setShowSynthesizeModal] = useState(false)
@@ -252,101 +253,106 @@ export default function ConversationAppShell({
             }}
         >
             {/* Floating Controls */}
-            <div className="fixed top-6 right-4 z-50 flex items-center gap-2 p-1.5 bg-card/80 backdrop-blur-md border-[1.5px] border-slate-300 dark:border-border rounded-2xl">
-                <button
-                    onClick={() => setShowGlobalSearch(true)}
-                    className="p-2 rounded-xl transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-muted/80"
-                    title="Search messages (Cmd+K)"
-                >
-                    <MagnifyingGlass className="w-5 h-5" weight="bold" />
-                </button>
+            {/* Floating Controls */}
+            <div className="fixed top-4 right-4 z-50 flex items-center gap-2 p-1.5 bg-card border border-border shadow-sm rounded-2xl transition-all duration-300">
+                {/* Collapsable Content */}
+                <div className={`flex items-center gap-2 overflow-hidden transition-all duration-300 ${isControlsCollapsed ? 'w-0 opacity-0 scale-95' : 'w-auto opacity-100 scale-100'}`}>
+                    <button
+                        onClick={() => setShowGlobalSearch(true)}
+                        className="p-2 rounded-xl transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-muted/80"
+                        title="Search messages (Cmd+K)"
+                    >
+                        <MagnifyingGlass className="w-5 h-5" weight="bold" />
+                    </button>
 
-                {viewMode === 'map' && conversationNodes.length > 0 && (
-                    <div className="relative" ref={menuRef}>
-                        <button
-                            onClick={() => setShowMenu(!showMenu)}
-                            className="p-2 rounded-xl transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-muted/80"
-                            title="More options"
-                        >
-                            <DotsThree className="w-5 h-5" weight="bold" />
-                        </button>
+                    {viewMode === 'map' && conversationNodes.length > 0 && (
+                        <div className="relative" ref={menuRef}>
+                            <button
+                                onClick={() => setShowMenu(!showMenu)}
+                                className="p-2 rounded-xl transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-muted/80"
+                                title="More options"
+                            >
+                                <DotsThree className="w-5 h-5" weight="bold" />
+                            </button>
 
-                        {showMenu && (
-                            <div className="absolute top-full right-0 mt-2 bg-card dark:bg-card border border-border dark:border-border/60 z-50 min-w-[180px] rounded-xl backdrop-blur-sm overflow-hidden">
-                                <button
-                                    onClick={() => {
-                                        if (allNodesMinimized) {
-                                            maximizeAllRef.current?.()
-                                        } else {
-                                            minimizeAllRef.current?.()
-                                        }
-                                        setShowMenu(false)
-                                    }}
-                                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${allNodesMinimized
-                                        ? 'bg-primary/10 hover:bg-primary/20 text-primary dark:bg-primary/20 dark:hover:bg-primary/30'
-                                        : 'hover:bg-muted dark:hover:bg-muted/80 text-foreground'
-                                        }`}
-                                >
-                                    {allNodesMinimized ? (
-                                        <>
-                                            <ArrowsOut className="w-4 h-4" weight="bold" />
-                                            <span>Maximize All</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ArrowsIn className="w-4 h-4" weight="bold" />
-                                            <span>Minimize All</span>
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                )}
+                            {showMenu && (
+                                <div className="absolute top-full right-0 mt-2 bg-card dark:bg-card border border-border dark:border-border/60 z-50 min-w-[180px] rounded-xl shadow-lg overflow-hidden">
+                                    <button
+                                        onClick={() => {
+                                            if (allNodesMinimized) {
+                                                maximizeAllRef.current?.()
+                                            } else {
+                                                minimizeAllRef.current?.()
+                                            }
+                                            setShowMenu(false)
+                                        }}
+                                        className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${allNodesMinimized
+                                            ? 'bg-primary/10 hover:bg-primary/20 text-primary dark:bg-primary/20 dark:hover:bg-primary/30'
+                                            : 'hover:bg-muted dark:hover:bg-muted/80 text-foreground'
+                                            }`}
+                                    >
+                                        {allNodesMinimized ? (
+                                            <>
+                                                <ArrowsOut className="w-4 h-4" weight="bold" />
+                                                <span>Maximize All</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <ArrowsIn className="w-4 h-4" weight="bold" />
+                                                <span>Minimize All</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
-                {conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length > 0 && (
-                    <div className="flex items-center gap-1 pl-2 border-l border-border/50">
-                        <button
-                            onClick={() => setViewMode('map')}
-                            className={`p-2 rounded-xl transition-all duration-200 ${viewMode === 'map'
-                                ? 'bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400'
-                                : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground hover:bg-muted dark:hover:bg-muted/80'
-                                }`}
-                            title="Map View"
-                        >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M3 3h18v18H3zM3 9h18M9 3v18" />
-                            </svg>
-                        </button>
-                        <button
-                            onClick={() => setViewMode('comparison')}
-                            className={`p-2 rounded-xl transition-colors ${viewMode === 'comparison'
-                                ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400'
-                                : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground hover:bg-muted dark:hover:bg-muted/80'
-                                }`}
-                            title="Comparison View"
-                        >
-                            <ArrowsLeftRight className="w-5 h-5" />
-                        </button>
-                    </div>
-                )}
+                    {conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length > 0 && (
+                        <div className="flex items-center gap-2 pl-2 border-l border-border/50">
+                            <button
+                                onClick={() => setViewMode('map')}
+                                className={`p-2 rounded-xl transition-all duration-200 ${viewMode === 'map'
+                                    ? 'bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400'
+                                    : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground hover:bg-muted dark:hover:bg-muted/80'
+                                    }`}
+                                title="Map View"
+                            >
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M3 3h18v18H3zM3 9h18M9 3v18" />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={() => setViewMode('comparison')}
+                                className={`p-2 rounded-xl transition-colors ${viewMode === 'comparison'
+                                    ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400'
+                                    : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground hover:bg-muted dark:hover:bg-muted/80'
+                                    }`}
+                                title="Comparison View"
+                            >
+                                <ArrowsLeftRight className="w-5 h-5" />
+                            </button>
+                        </div>
+                    )}
 
-                <div className="w-px h-4 bg-border/50 mx-1"></div>
+                    <div className="w-px h-4 bg-border/50 mx-0.5"></div>
 
-                <button
-                    onClick={() => {
-                        setSidebarTab('settings')
-                        setSidebarOpen(true)
-                    }}
-                    className="p-2 rounded-xl transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-muted/80"
-                    title="Settings"
-                >
-                    <Gear className="w-5 h-5" weight="bold" />
-                </button>
-                <ThemeToggle />
+                    <button
+                        onClick={() => {
+                            setSidebarTab('settings')
+                            setSidebarOpen(true)
+                        }}
+                        className="p-2 rounded-xl transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-muted/80"
+                        title="Settings"
+                    >
+                        <Gear className="w-5 h-5" weight="bold" />
+                    </button>
+                    <ThemeToggle />
 
-                <div className="w-px h-4 bg-border/50 mx-1"></div>
+                    <div className="w-px h-4 bg-border/50 mx-0.5"></div>
+                </div>
 
+                {/* Always Visible Profile */}
                 {session?.user ? (
                     <div className="relative group">
                         <button
@@ -391,6 +397,15 @@ export default function ConversationAppShell({
                         <span>Login</span>
                     </button>
                 )}
+
+                {/* Collapse/Expand Toggle */}
+                <button
+                    onClick={() => setIsControlsCollapsed(!isControlsCollapsed)}
+                    className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-muted/80 transition-all duration-200"
+                    title={isControlsCollapsed ? "Expand controls" : "Collapse controls"}
+                >
+                    {isControlsCollapsed ? <CaretLeft className="w-4 h-4" weight="bold" /> : <CaretRight className="w-4 h-4" weight="bold" />}
+                </button>
             </div>
 
             <BranchWarningModal

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, Reorder } from 'framer-motion'
-import { XMarkIcon, ArrowDownTrayIcon, ArrowsRightLeftIcon, ArrowPathIcon, CheckIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, ArrowDownTrayIcon, ArrowsRightLeftIcon, ArrowPathIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { ReactFlowNode } from '@/components/flow-canvas/types'
 import { IMessage } from '@/models/conversation'
 import { allAIOptions } from '@/components/ai-pills'
@@ -24,26 +24,31 @@ export function ComparisonView({
 }: ComparisonViewProps) {
     const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>(initialSelectedBranchIds)
     const [orderedBranchIds, setOrderedBranchIds] = useState<string[]>([])
+    const [hasInitialized, setHasInitialized] = useState(false)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
 
-    // Initialize with first 3 branches if available
+    // Initialize with first 3 branches if available - ONLY ONCE
     useEffect(() => {
-        if (selectedBranchIds.length === 0 && branches.length > 0) {
+        if (!hasInitialized && selectedBranchIds.length === 0 && branches.length > 0) {
             const validBranches = branches.filter(b => b.id !== 'main' && !b.data?.isMain)
             if (validBranches.length > 0) {
                 const initialIds = validBranches.slice(0, 3).map(b => b.id)
                 setSelectedBranchIds(initialIds)
                 setOrderedBranchIds(initialIds)
             }
+            setHasInitialized(true)
+        } else if (selectedBranchIds.length > 0) {
+            setHasInitialized(true)
         }
-    }, [branches, selectedBranchIds.length])
+    }, [branches, selectedBranchIds.length, hasInitialized])
 
     // Update ordered list when selection changes
     useEffect(() => {
         setOrderedBranchIds(prev => {
             const newIds = selectedBranchIds.filter(id => !prev.includes(id))
             const existingIds = prev.filter(id => selectedBranchIds.includes(id))
-            return [...existingIds, ...newIds]
+            // Prepend new IDs so they appear first (leftmost)
+            return [...newIds, ...existingIds]
         })
     }, [selectedBranchIds])
 
@@ -51,17 +56,16 @@ export function ComparisonView({
         if (selectedBranchIds.includes(branchId)) {
             setSelectedBranchIds(prev => prev.filter(id => id !== branchId))
         } else {
-            setSelectedBranchIds(prev => [...prev, branchId])
+            // Add to beginning of list
+            setSelectedBranchIds(prev => [branchId, ...prev])
         }
     }
 
     const handleReset = () => {
-        const validBranches = branches.filter(b => b.id !== 'main' && !b.data?.isMain)
-        if (validBranches.length > 0) {
-            const initialIds = validBranches.slice(0, 3).map(b => b.id)
-            setSelectedBranchIds(initialIds)
-            setOrderedBranchIds(initialIds)
-        }
+        // Clear all selected branches
+        setSelectedBranchIds([])
+        setOrderedBranchIds([])
+
         if (scrollContainerRef.current) {
             scrollContainerRef.current.scrollLeft = 0
         }
@@ -114,53 +118,38 @@ export function ComparisonView({
 
     return (
         <div className={`flex flex-col h-full bg-background ${className}`}>
-            {/* Header */}
-            <div className="flex items-center justify-between pl-20 pr-6 py-6 border-b border-border bg-card/80 backdrop-blur-sm z-10">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary/10 rounded-lg text-primary">
-                        <ArrowsRightLeftIcon className="w-5 h-5" />
+            {/* Header bar - tall and clean with safe spacing */}
+            <div className="flex items-center justify-between h-24 pl-24 pr-8 border-b border-border bg-background z-10 flex-shrink-0">
+                {/* Left: Title + Reset (No Logo) */}
+                <div className="flex items-center gap-6">
+                    {/* Title + Count */}
+                    <div className="flex items-center gap-3">
+                        <span className="text-2xl font-semibold text-foreground tracking-tight">Model Comparison</span>
+                        <span className="text-sm text-muted-foreground font-medium mt-1">({selectedBranchIds.length}/{validBranches.length})</span>
                     </div>
-                    <div>
-                        <h2 className="text-lg font-semibold text-foreground">Model Comparison</h2>
-                        <p className="text-sm text-muted-foreground">
-                            {selectedBranchIds.length} of {validBranches.length} branches selected
-                        </p>
-                    </div>
-                </div>
 
-                <div className="flex items-center gap-2">
+                    {/* Divider */}
+                    <div className="w-px h-8 bg-border/60"></div>
+
+                    {/* Reset */}
                     <button
                         onClick={handleReset}
-                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
-                        title="Reset to default"
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors"
+                        title="Clear all"
                     >
-                        <ArrowPathIcon className="w-4 h-4" />
-                        Reset
-                    </button>
-                    <button
-                        onClick={() => {
-                            // Synthesize logic to be implemented
-                            alert("Synthesize feature: Coming soon! This will combine the active branches into a final response.")
-                        }}
-                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-300 dark:hover:bg-purple-900/30 rounded-lg transition-colors border border-purple-200 dark:border-purple-800"
-                    >
-                        <SparklesIcon className="w-4 h-4" />
-                        Synthesize
-                    </button>
-                    <button
-                        onClick={handleExport}
-                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted rounded-lg transition-colors"
-                    >
-                        <ArrowDownTrayIcon className="w-4 h-4" />
-                        Export
-                    </button>
-                    <button
-                        onClick={onClose}
-                        className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full transition-colors"
-                    >
-                        <XMarkIcon className="w-5 h-5" />
+                        <ArrowPathIcon className="w-5 h-5" />
+                        Clear
                     </button>
                 </div>
+
+                {/* Right: X close with large margin */}
+                <button
+                    onClick={onClose}
+                    className="p-3 mr-48 text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors flex-shrink-0"
+                    title="Close"
+                >
+                    <XMarkIcon className="w-6 h-6" />
+                </button>
             </div>
 
             {/* Main Content */}

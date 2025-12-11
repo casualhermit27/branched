@@ -1494,11 +1494,28 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	)
 
 	useEffect(() => {
+		// Only recalculate layout when:
+		// 1. Node count changes (branch added/removed)
+		// 2. Minimize state changes
+		// NOT on message count changes - those shouldn't affect layout
 		if (
 			nodes.length > 0 &&
 			!layoutInProgressRef.current &&
 			shouldApplyLayout(nodes, edges)
 		) {
+			// Check if this is just a message update (not structural change)
+			const nodeCountChanged = nodes.length !== previousNodesRef.current.length
+			const minimizeChanged = nodes.some((node, i) => {
+				const prev = previousNodesRef.current[i]
+				return node.data?.isMinimized !== prev?.data?.isMinimized
+			})
+
+			// Only apply layout on structural changes
+			if (!nodeCountChanged && !minimizeChanged) {
+				previousNodesRef.current = nodes
+				return
+			}
+
 			layoutInProgressRef.current = true
 
 			const timeoutId = setTimeout(() => {
@@ -1519,7 +1536,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 
 			return () => clearTimeout(timeoutId)
 		}
-	}, [nodes.length, minimizedNodes.size, nodes.map((n) => n.data?.messages?.length).join(',')])
+	}, [nodes.length, minimizedNodes.size])
 
 	// ============================================
 	// EXPOSE FUNCTIONS
@@ -1690,14 +1707,20 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					onNodeDoubleClick={onNodeDoubleClickHandler}
 					onNodeDragStart={onNodeDragStartHandler}
 					onNodeDragStop={onNodeDragStopHandler}
-					onInit={setReactFlowInstance}
-					fitView
-					fitViewOptions={{
-						padding: 0.2,
-						maxZoom: 1.2, // Prevent zooming in too much - keeps background visible
-						minZoom: 0.1
+					onInit={(instance) => {
+						setReactFlowInstance(instance)
+						// Fit view after initialization to prevent NaN errors
+						window.requestAnimationFrame(() => {
+							instance.fitView({
+								padding: 0.2,
+								maxZoom: 1.2,
+								minZoom: 0.1
+							})
+						})
 					}}
-					defaultViewport={{ x: 0, y: 0, zoom: 0.8 }} // Default zoom that shows background
+					defaultViewport={{ x: 0, y: 0, zoom: 1 }} // Safe default to prevent NaN
+					// fitView prop removed to avoid init race condition
+
 					attributionPosition="bottom-left"
 					proOptions={{ hideAttribution: true }}
 					panOnScroll={true}
@@ -1706,7 +1729,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					panOnDrag={true}
 				>
 					<Background variant={"dots" as BackgroundVariant} gap={24} size={2} color="#64748b" className="opacity-40 dark:opacity-30" />
-					<Controls />
+					<Controls position="bottom-right" />
 					<MiniMap
 						nodeColor={(node) => {
 							if (node.id === 'main') return '#8b5cf6'
