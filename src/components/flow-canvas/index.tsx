@@ -18,6 +18,7 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import ChatNode from '../chat-node'
+import BadgeEdge from './badge-edge'
 import { useFlowCanvasState } from './hooks/use-flow-canvas-state'
 import { useBranchManagement } from '@/hooks/use-branch-management'
 import {
@@ -45,7 +46,8 @@ const nodeTypes: NodeTypes = {
 }
 
 const edgeTypes = {
-	default: SmoothStepEdge
+	default: SmoothStepEdge,
+	badge: BadgeEdge
 }
 
 export default function FlowCanvas(props: FlowCanvasProps) {
@@ -116,6 +118,107 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	const isInitializedRef = useRef(false)
 	const isRestoringRef = useRef(false)
 	const layoutInProgressRef = useRef(false)
+
+	// Active Path & Badge Logic
+	useEffect(() => {
+		// Debounce or check conditions to avoid loops.
+		// We only re-run if activeNodeId changes OR if the structure dimensions change (length).
+		// Modifying style/data triggers re-render, but length doesn't change.
+		if (!activeNodeId) return;
+
+		setNodes((prevNodes) => {
+			// 1. Trace Ancestry
+			const ancestry = new Set<string>();
+			let current = prevNodes.find(n => n.id === activeNodeId);
+			while (current) {
+				ancestry.add(current.id);
+				if (!current.data?.parentId) break;
+				current = prevNodes.find(n => n.id === current?.data?.parentId);
+			}
+
+			// Update Nodes Opacity
+			const newNodes = prevNodes.map(n => {
+				const isActivePath = ancestry.has(n.id);
+				const targetOpacity = isActivePath ? 1 : 0.4;
+				// Only update if changed to avoid unnecessary re-renders
+				if (n.style?.opacity === targetOpacity) return n;
+
+				return {
+					...n,
+					style: {
+						...n.style,
+						opacity: targetOpacity,
+						transition: 'opacity 0.3s ease-in-out'
+					}
+				};
+			});
+
+			// Check if any node actually changed
+			const hasChanges = newNodes.some((n, i) => n !== prevNodes[i]);
+			return hasChanges ? newNodes : prevNodes;
+		});
+
+		setEdges((prevEdges) => {
+			// Re-trace ancestry (needs access to current nodes, relying on closure or prevNodes isn't perfect if setNodes runs async, 
+			// but effectively we just need IDs which don't change often)
+			// Better: we can perform ancestry lookup here again independently.
+			const nodeMap = new Map(nodes.map(n => [n.id, n]));
+			const ancestry = new Set<string>();
+			let current = nodeMap.get(activeNodeId);
+			while (current) {
+				ancestry.add(current.id);
+				if (!current.data?.parentId) break;
+				current = nodeMap.get(current.data.parentId);
+			}
+
+			const newEdges = prevEdges.map(edge => {
+				const isActivePath = ancestry.has(edge.source) && ancestry.has(edge.target);
+				const sourceNode = nodeMap.get(edge.source);
+				const targetNode = nodeMap.get(edge.target);
+
+				// Determine Model Transition
+				// Assuming 'selectedAIs' for the node is the source of truth
+				const sourceAI = sourceNode?.data?.selectedAIs?.[0]?.id;
+				const targetAI = targetNode?.data?.selectedAIs?.[0]?.id;
+				const isTransition = sourceAI && targetAI && sourceAI !== targetAI;
+
+				const targetType = 'badge';
+				const targetStroke = isActivePath ? '#fff' : '#52525b'; // White vs Zinc-600
+				const targetOpacity = isActivePath ? 1 : 0.2;
+				const targetWidth = isActivePath ? 2 : 1;
+				const targetZIndex = isActivePath ? 10 : 0;
+
+				// Check changes
+				const styleChanged = edge.style?.stroke !== targetStroke || edge.style?.opacity !== targetOpacity;
+				const dataChanged = edge.data?.isTransition !== isTransition || edge.data?.targetModelId !== targetAI;
+				const typeChanged = edge.type !== targetType;
+
+				if (!styleChanged && !dataChanged && !typeChanged) return edge;
+
+				return {
+					...edge,
+					type: targetType,
+					data: {
+						...edge.data,
+						isTransition,
+						targetModelId: targetAI
+					},
+					style: {
+						...edge.style,
+						stroke: targetStroke,
+						opacity: targetOpacity,
+						strokeWidth: targetWidth
+					},
+					zIndex: targetZIndex,
+					animated: false // Ensure no default animation overrides our clean look
+				};
+			});
+
+			const hasChanges = newEdges.some((e, i) => e !== prevEdges[i]);
+			return hasChanges ? newEdges : prevEdges;
+		});
+
+	}, [activeNodeId, nodes.length, edges.length]); // Depend only on lengths to avoid loops with style updates
 
 	// Force layout update on mount to fix potential misalignments from tab switching
 	// Handle external navigation (e.g. from Command Palette)
