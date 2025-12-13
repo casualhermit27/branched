@@ -21,14 +21,14 @@ export const availableAIs: AI[] = [
   {
     id: 'gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
-    color: 'bg-blue-100 text-blue-800 border-blue-200',
+    color: 'bg-transparent text-foreground border-border hover:bg-muted/40',
     logo: <img src="/logos/gemini.svg" alt="Gemini" width="16" height="16" />,
     functional: true
   },
   {
     id: 'gemini-2.5-pro',
     name: 'Gemini 2.5 Pro',
-    color: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    color: 'bg-transparent text-foreground border-border hover:bg-muted/40',
     logo: <img src="/logos/gemini.svg" alt="Gemini" width="16" height="16" />,
     functional: true
   },
@@ -36,7 +36,7 @@ export const availableAIs: AI[] = [
   {
     id: 'mistral-small-latest',
     name: 'Mistral Small',
-    color: 'bg-purple-100 text-purple-800 border-purple-200',
+    color: 'bg-transparent text-foreground border-border hover:bg-muted/40',
     logo: <img src="/logos/mistral-ai_logo.svg" alt="Mistral" width="16" height="16" />,
     functional: true
   }
@@ -56,15 +56,7 @@ const getProviderLogo = (provider: string) => {
 }
 
 const getProviderColor = (provider: string) => {
-  switch (provider) {
-    case 'gemini': return 'bg-blue-100 text-blue-800 border-blue-200'
-    case 'mistral': return 'bg-purple-100 text-purple-800 border-purple-200'
-    case 'openai': return 'bg-green-100 text-green-800 border-green-200'
-    case 'claude': return 'bg-orange-100 text-orange-800 border-orange-200'
-    case 'grok': return 'bg-gray-100 text-gray-800 border-gray-200'
-    case 'openrouter': return 'bg-indigo-100 text-indigo-800 border-indigo-200'
-    default: return 'bg-slate-100 text-slate-800 border-slate-200'
-  }
+  return 'bg-transparent text-foreground border-border hover:bg-muted/40'
 }
 
 

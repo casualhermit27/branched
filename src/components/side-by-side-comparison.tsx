@@ -1,8 +1,8 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import ReactMarkdown from 'react-markdown'
-import { ArrowsOut, X } from '@phosphor-icons/react'
+import { ArrowsOut, X, Sparkle } from '@phosphor-icons/react'
+import { MarkdownRenderer } from './markdown-renderer'
 
 interface Message {
   id: string
@@ -27,6 +27,7 @@ interface SideBySideComparisonProps {
   selectedAIs: AI[]
   groupId: string
   onClose: () => void
+  onSynthesize?: () => void
   getAIColor: (aiId: string) => string
   getAILogo: (aiId: string) => React.JSX.Element | null
 }
@@ -36,6 +37,7 @@ export function SideBySideComparison({
   selectedAIs,
   groupId,
   onClose,
+  onSynthesize,
   getAIColor,
   getAILogo
 }: SideBySideComparisonProps) {
@@ -59,13 +61,25 @@ export function SideBySideComparison({
             <span className="text-sm font-semibold text-foreground">Side-by-Side Comparison</span>
             <span className="text-xs text-muted-foreground">({groupMessages.length} models)</span>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-muted dark:hover:bg-muted/80 transition-colors"
-            title="Close comparison view"
-          >
-            <X className="w-4 h-4 text-muted-foreground" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onSynthesize && (
+              <button
+                onClick={onSynthesize}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium transition-colors border border-primary/20"
+                title="Synthesize all responses into one summary"
+              >
+                <Sparkle className="w-3.5 h-3.5" />
+                Synthesize
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-full hover:bg-muted dark:hover:bg-muted/80 transition-colors"
+              title="Close comparison view"
+            >
+              <X className="w-4 h-4 text-muted-foreground" />
+            </button>
+          </div>
         </div>
 
         {/* User Message */}
@@ -122,35 +136,8 @@ export function SideBySideComparison({
                 {/* Message Content */}
                 <div className="flex-1 p-5 min-h-[200px] max-h-[600px] overflow-y-auto">
                   {displayText ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed">
-                      <ReactMarkdown
-                        components={{
-                          p: ({ children }) => <p className="mb-3 last:mb-0 text-foreground/90">{children}</p>,
-                          ul: ({ children }) => <ul className="mb-3 last:mb-0 space-y-1 ml-4">{children}</ul>,
-                          ol: ({ children }) => <ol className="mb-3 last:mb-0 space-y-1 ml-4">{children}</ol>,
-                          li: ({ children }) => <li className="text-foreground/90">{children}</li>,
-                          code: ({ children }) => (
-                            <code className="px-1.5 py-0.5 rounded bg-muted/50 text-foreground text-xs font-mono border border-border/30">
-                              {children}
-                            </code>
-                          ),
-                          pre: ({ children }) => (
-                            <pre className="p-3 rounded-xl bg-muted/50 overflow-x-auto mb-3 last:mb-0 border border-border/30">
-                              {children}
-                            </pre>
-                          ),
-                          blockquote: ({ children }) => (
-                            <blockquote className="border-l-2 border-primary/30 pl-4 italic text-muted-foreground mb-3 last:mb-0">
-                              {children}
-                            </blockquote>
-                          ),
-                          h1: ({ children }) => <h1 className="text-lg font-bold mb-2 text-foreground">{children}</h1>,
-                          h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
-                          h3: ({ children }) => <h3 className="text-sm font-semibold mb-2 text-foreground">{children}</h3>,
-                        }}
-                      >
-                        {displayText}
-                      </ReactMarkdown>
+                    <div className="max-w-none leading-relaxed">
+                      <MarkdownRenderer content={displayText} />
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-full text-muted-foreground/50 text-sm italic">

@@ -8,6 +8,8 @@ import type {
 	ConversationState
 } from './use-conversation-state'
 import { ConversationExport } from '@/services/conversation-export'
+import { messageStore } from '@/components/flow-canvas/message-store'
+import { branchStore } from '@/components/flow-canvas/branch-store'
 
 interface ToastOptions {
 	type: 'success' | 'error' | 'info' | 'warning'
@@ -189,16 +191,32 @@ export function useConversationBranchActions({
 		// Note: checkLimit removed here. Guest restrictions should be enforced 
 		// by the API or at a higher-level component (e.g., preventing guests from 
 		// loading the authenticated page entirely).
+
+		// Clear global stores to prevent stale data
+		messageStore.clear()
+		branchStore.clear()
+
+		// Force reset local state refs
+		currentConversationIdRef.current = null
+		branchCacheRef.current.clear()
+		creatingBranchRef.current.clear()
+
+		// Clear React state
 		setMessages([])
 		setSelectedAIs([defaultAI])
 		setBranches([])
 		setConversationNodes([])
 		setCurrentBranch(null)
 		setActiveBranchId(null)
+		setSavedBranches([])
 
-		currentConversationIdRef.current = null
-		branchCacheRef.current.clear()
-		creatingBranchRef.current.clear()
+		// Clear URL if strictly new
+		if (typeof window !== 'undefined') {
+			window.history.pushState({}, '', '/')
+			// We might want to reload to completely flush React Flow internal state if it persists
+			// window.location.href = '/'  <-- Aggressive, but effective if all else fails
+		}
+
 
 		try {
 			const uniqueTitle = 'New Conversation'
@@ -312,6 +330,15 @@ export function useConversationBranchActions({
 			branchCacheRef.current.clear()
 			creatingBranchRef.current.clear()
 
+			// Clear global stores to prevent stale data
+			messageStore.clear()
+			branchStore.clear()
+
+			setSavedBranches([])
+
+			if (currentConversationIdRef.current) {
+				// Save current before switching? (optional, usually handled by autosave)
+			}
 			const response = await fetch(`/api/conversations/${conversationId}`)
 			const data = await response.json()
 
@@ -368,6 +395,11 @@ export function useConversationBranchActions({
 					setBranches([])
 					setConversationNodes([])
 					setCurrentBranch(null)
+
+					// Clear global stores to prevent stale data
+					messageStore.clear()
+					branchStore.clear()
+
 					currentConversationIdRef.current = null
 
 					const conversationsResponse = await fetch('/api/conversations')

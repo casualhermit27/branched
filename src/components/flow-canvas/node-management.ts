@@ -37,10 +37,12 @@ export function createMainNode(
 		onToggleMinimize?: (nodeId: string) => void
 	}
 ): Node<ChatNodeData> {
+	const dims = calculateNodeDimensions(messages.length, state.isMinimized)
+
 	return {
 		id: 'main',
 		type: 'chatNode',
-		position: { x: 0, y: 0 },
+		position: { x: -dims.width / 2, y: 100 },
 		data: {
 			label: 'Main Conversation',
 			messages,

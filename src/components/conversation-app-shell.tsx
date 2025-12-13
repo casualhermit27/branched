@@ -531,9 +531,61 @@ export default function ConversationAppShell({
                         </div>
                     </>
                 ) : (
-                    // Show empty state or content
-                    branches.length === 0 && conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length === 0 && !pendingBranchMessageId ? (
-                        messages.length === 0 ? (
+                    // Unified View: Always render FlowCanvas, overlay EmptyState if empty
+                    <>
+                        <div className="absolute inset-0 z-0">
+                            <FlowCanvas
+                                selectedAIs={selectedAIs}
+                                onAddAI={addAI}
+                                onRemoveAI={removeAI}
+                                mainMessages={messages}
+                                onSendMainMessage={sendMessage}
+                                onBranchFromMain={branchFromMessage}
+                                pendingBranchMessageId={pendingBranchMessageId}
+                                pendingBranchData={pendingBranchData}
+                                onPendingBranchProcessed={() => {
+                                    setPendingBranchMessageId(null)
+                                    setPendingBranchData(null)
+                                }}
+                                onNodesUpdate={updateConversationNodes}
+                                onNodeDoubleClick={(nodeId) => {
+                                    console.log('Node double-clicked:', nodeId)
+                                }}
+                                onPillClick={(aiId) => {
+                                    console.log('Pill clicked:', aiId)
+                                }}
+                                getBestAvailableModel={getBestAvailableModel}
+                                onSelectSingle={selectSingleAIById}
+                                onExportImport={() => setShowExportImport(true)}
+                                restoredConversationNodes={conversationNodes}
+                                selectedBranchId={activeBranchId}
+                                onBranchWarning={handleBranchWarning}
+                                onMinimizeAllRef={(fn) => { minimizeAllRef.current = fn }}
+                                onMaximizeAllRef={(fn) => { maximizeAllRef.current = fn }}
+                                onAllNodesMinimizedChange={(minimized) => setAllNodesMinimized(minimized)}
+                                onSelectionChange={setSelectedBranchIds}
+                                onMessageSelectionChange={setSelectedMessageIds}
+                                conversationId={currentConversationIdRef.current}
+                                onActiveNodeChange={(nodeId) => {
+                                    // Update active branch ID when node focus changes in canvas
+                                    // This ensures persistence works correctly
+                                    if (nodeId && nodeId !== activeBranchId) {
+                                        setActiveBranchId(nodeId)
+                                        if (nodeId === 'main') {
+                                            setCurrentBranch(null)
+                                        } else {
+                                            setCurrentBranch(nodeId)
+                                        }
+                                    }
+                                }}
+                                onEditMessage={editMessage}
+                                activeNodeId={state.activeNodeId} // Pass navigation target
+                                checkLimit={checkLimit}
+                            />
+                        </div>
+
+                        {/* Empty State Overlay */}
+                        {branches.length === 0 && conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length === 0 && !pendingBranchMessageId && messages.length === 0 && (
                             <EmptyState
                                 onSendMessage={sendMessage}
                                 selectedAIs={selectedAIs}
@@ -544,107 +596,8 @@ export default function ConversationAppShell({
                                 tier={tier}
                                 checkLimit={checkLimit}
                             />
-                        ) : (
-                            <div className="flex items-center justify-center h-screen p-4">
-                                {/* Optional: Add a loading spinner here if needed */}
-                                <div className="w-full max-w-4xl rounded-2xl p-[1px] bg-gradient-to-br from-indigo-500/30 via-purple-500/30 to-pink-500/30 dark:from-indigo-500/20 dark:via-purple-500/20 dark:to-pink-500/20 shadow-md h-auto max-h-[85vh] flex flex-col">
-                                    <div className="flex-1 w-full bg-card rounded-2xl flex flex-col overflow-hidden relative">
-                                        {conversationNodes.length > 0 && (
-                                            <BranchNavigation
-                                                branches={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).map(n => ({
-                                                    id: n.id,
-                                                    label: n.title || 'Branch',
-                                                    parentId: n.parentId,
-                                                    parentMessageId: n.parentMessageId
-                                                }))}
-                                                currentBranchId={activeBranchId}
-                                                onNavigateToBranch={handleSelectBranch}
-                                                onNavigateToMain={() => {
-                                                    setActiveBranchId('main')
-                                                    setCurrentBranch(null)
-                                                }}
-                                            />
-                                        )}
-
-                                        <div className="flex items-center justify-between">
-                                            {/* AIPills moved to ChatInterface */}
-                                        </div>
-
-                                        <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
-                                            <ChatInterface
-                                                messages={messages}
-                                                onSendMessage={sendMessage}
-                                                selectedAIs={selectedAIs}
-                                                onBranchFromMessage={branchFromMessage}
-                                                currentBranch={currentBranch}
-                                                isGenerating={isGenerating}
-                                                onStopGeneration={stopGeneration}
-                                                existingBranchesCount={conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length}
-                                                isMain={true}
-                                                onExportImport={() => setShowExportImport(true)}
-                                                onAddAI={addAI}
-                                                onRemoveAI={removeAI}
-                                                onSelectSingle={selectSingleAIById}
-                                                getBestAvailableModel={getBestAvailableModel}
-                                                tier={tier}
-                                                onEditMessage={(msgId, newText) => editMessage(activeBranchId || 'main', msgId, newText)}
-                                                checkLimit={checkLimit}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )
-                    ) : (
-                        <FlowCanvas
-                            selectedAIs={selectedAIs}
-                            onAddAI={addAI}
-                            onRemoveAI={removeAI}
-                            mainMessages={messages}
-                            onSendMainMessage={sendMessage}
-                            onBranchFromMain={branchFromMessage}
-                            pendingBranchMessageId={pendingBranchMessageId}
-                            pendingBranchData={pendingBranchData}
-                            onPendingBranchProcessed={() => {
-                                setPendingBranchMessageId(null)
-                                setPendingBranchData(null)
-                            }}
-                            onNodesUpdate={updateConversationNodes}
-                            onNodeDoubleClick={(nodeId) => {
-                                console.log('Node double-clicked:', nodeId)
-                            }}
-                            onPillClick={(aiId) => {
-                                console.log('Pill clicked:', aiId)
-                            }}
-                            getBestAvailableModel={getBestAvailableModel}
-                            onSelectSingle={selectSingleAIById}
-                            onExportImport={() => setShowExportImport(true)}
-                            restoredConversationNodes={conversationNodes}
-                            selectedBranchId={activeBranchId}
-                            onBranchWarning={handleBranchWarning}
-                            onMinimizeAllRef={(fn) => { minimizeAllRef.current = fn }}
-                            onMaximizeAllRef={(fn) => { maximizeAllRef.current = fn }}
-                            onAllNodesMinimizedChange={(minimized) => setAllNodesMinimized(minimized)}
-                            onSelectionChange={setSelectedBranchIds}
-                            onMessageSelectionChange={setSelectedMessageIds}
-                            conversationId={currentConversationIdRef.current}
-                            onActiveNodeChange={(nodeId) => {
-                                // Update active branch ID when node focus changes in canvas
-                                // This ensures persistence works correctly
-                                if (nodeId && nodeId !== activeBranchId) {
-                                    setActiveBranchId(nodeId)
-                                    if (nodeId === 'main') {
-                                        setCurrentBranch(null)
-                                    } else {
-                                        setCurrentBranch(nodeId)
-                                    }
-                                }
-                            }}
-                            onEditMessage={editMessage}
-                            activeNodeId={state.activeNodeId} // Pass navigation target
-                            checkLimit={checkLimit}
-                        />
-                    )
+                        )}
+                    </>
                 )
             }
 

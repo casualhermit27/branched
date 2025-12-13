@@ -430,13 +430,13 @@ export default function Sidebar({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             onClick={() => setIsOpen(!isOpen)}
-            className="fixed top-7 left-4 z-50 p-2.5 bg-card dark:bg-card border-[1.5px] border-slate-300 dark:border-border/80 rounded-xl transition-all duration-200 hover:bg-muted dark:hover:bg-muted/80 hover:border-slate-400 dark:hover:border-border/90"
+            className="fixed top-4 left-4 z-50 p-2.5 bg-card border border-border shadow-sm rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all duration-200"
             aria-label="Open sidebar"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
           >
-            <List size={18} className="text-foreground dark:text-foreground" />
+            <List size={20} className="text-foreground" />
           </motion.button>
         )}
       </AnimatePresence>
@@ -463,11 +463,11 @@ export default function Sidebar({
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -320, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              className="fixed top-0 left-0 z-40 h-full bg-card dark:bg-card border-r border-border/60 dark:border-border/40 shadow-2xl w-80 flex flex-col"
+              className="fixed top-0 left-0 z-40 h-full bg-background/95 backdrop-blur-xl border-r border-border/40 w-80 flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-5 border-b border-border/80 dark:border-border/60 bg-card dark:bg-card">
+              <div className="flex items-center justify-between px-6 py-5 bg-transparent">
                 <div className="flex items-center gap-3">
                   {/* Light Mode Logo */}
                   <div className="dark:hidden">
@@ -502,14 +502,14 @@ export default function Sidebar({
               </div>
 
               {/* Tabs */}
-              <div className="flex border-b border-border/80 dark:border-border/60 bg-card">
+              <div className="flex border-b border-border/40 bg-transparent px-2">
                 <motion.button
                   onClick={() => setActiveTab('history')}
-                  className={`flex-1 py-3.5 text-sm font-medium relative transition-colors duration-200 ${activeTab === 'history'
-                    ? 'text-purple-600 dark:text-purple-400'
-                    : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground'
+                  className={`flex-1 py-3 text-sm font-medium relative transition-colors duration-200 ${activeTab === 'history'
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
                     }`}
-                  whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)' }}
+                  whileHover={{ backgroundColor: 'transparent' }}
                   whileTap={{ scale: 0.98 }}
                 >
                   <span className="flex items-center justify-center gap-2 relative z-10">
@@ -519,7 +519,7 @@ export default function Sidebar({
                   {activeTab === 'history' && (
                     <motion.div
                       layoutId="activeTab"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600 dark:bg-purple-400"
+                      className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground"
                       initial={false}
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
                     />
@@ -527,11 +527,11 @@ export default function Sidebar({
                 </motion.button>
                 <motion.button
                   onClick={() => setActiveTab('settings')}
-                  className={`flex-1 py-3.5 text-sm font-medium relative transition-colors duration-200 ${activeTab === 'settings'
-                    ? 'text-purple-600 dark:text-purple-400'
-                    : 'text-muted-foreground dark:text-muted-foreground/80 hover:text-foreground dark:hover:text-foreground'
+                  className={`flex-1 py-3 text-sm font-medium relative transition-colors duration-200 ${activeTab === 'settings'
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
                     }`}
-                  whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)' }}
+                  whileHover={{ backgroundColor: 'transparent' }}
                   whileTap={{ scale: 0.98 }}
                 >
                   <span className="flex items-center justify-center gap-2 relative z-10">

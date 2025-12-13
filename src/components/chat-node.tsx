@@ -308,7 +308,7 @@ function ChatNode({ data, id }: { data: ChatNodeData; id: string }) {
                   <span className="text-xs text-muted-foreground/60">{data.messages.length} messages</span>
                 </div>
                 {data.showAIPill && data.selectedAIs.length > 0 && (
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/40 border border-border/30 flex-shrink-0">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-transparent border border-border flex-shrink-0">
                     <span className="w-3 h-3 flex items-center justify-center opacity-80">
                       {data.selectedAIs[0].logo}
                     </span>

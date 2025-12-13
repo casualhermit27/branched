@@ -7,6 +7,7 @@ import type {
 	ConversationState,
 	Branch as ConversationBranch
 } from './use-conversation-state'
+import { messageStore } from '@/components/flow-canvas/message-store'
 import { aiService, type ConversationContext } from '@/services/ai-api'
 
 interface ToastOptions {
@@ -142,6 +143,8 @@ export function useConversationMessageActions({
 		})
 	}, [conversationNodes])
 
+	// Re-linking for sendMessage below logic
+	// eslint-disable-next-line react-hooks/exhaustive-deps
 	const sendMessage = useCallback(async (text: string, branchId?: string) => {
 		// Validate input - like ChatGPT, we don't allow empty messages
 		const trimmedText = text.trim()
@@ -170,6 +173,9 @@ export function useConversationMessageActions({
 			parentId: branchId || undefined,
 			children: []
 		}
+
+		// SYNC: Update global store immediately
+		messageStore.set(newMessage)
 
 		// Add user message to UI immediately
 		if (!targetBranchId || targetBranchId === activeBranchId) {
@@ -276,6 +282,9 @@ export function useConversationMessageActions({
 					streamingText: ''
 				}
 
+				// SYNC: Update store
+				messageStore.set(streamingMessage)
+
 				return { ai, modelName, streamingMessageId, streamingMessage }
 			})
 
@@ -316,6 +325,15 @@ export function useConversationMessageActions({
 						// Use the context built at the start of sendMessage (single source of truth)
 
 						const onChunk = (chunk: string) => {
+							// SYNC: Get current message from store, update text, write back
+							const currentStored = messageStore.get(streamingMessageId)
+							if (currentStored) {
+								messageStore.set({
+									...currentStored,
+									streamingText: (currentStored.streamingText || '') + chunk
+								})
+							}
+
 							setMessages(prev => prev.map((msg: Message) =>
 								msg.id === streamingMessageId
 									? { ...msg, streamingText: (msg.streamingText || '') + chunk }
@@ -366,6 +384,15 @@ export function useConversationMessageActions({
 
 							const chunk = `${i === 0 ? '' : ' '}${words[i]}`
 
+							// SYNC: Update store for mock stream
+							const currentStored = messageStore.get(streamingMessageId)
+							if (currentStored) {
+								messageStore.set({
+									...currentStored,
+									streamingText: (currentStored.streamingText || '') + chunk
+								})
+							}
+
 							setMessages(prev => prev.map((msg: Message) =>
 								msg.id === streamingMessageId
 									? { ...msg, streamingText: (msg.streamingText || '') + chunk }
@@ -396,6 +423,18 @@ export function useConversationMessageActions({
 					}
 
 					// Finalize message
+					// SYNC: Finalize store
+					const beforeFinal = messageStore.get(streamingMessageId)
+					if (beforeFinal) {
+						messageStore.set({
+							...beforeFinal,
+							text: finalResponse,
+							isStreaming: false,
+							streamingText: undefined,
+							timestamp: Date.now()
+						})
+					}
+
 					setMessages(prev => prev.map(msg =>
 						msg.id === streamingMessageId
 							? { ...msg, text: finalResponse, isStreaming: false, streamingText: undefined }
@@ -433,6 +472,21 @@ export function useConversationMessageActions({
 					const wasAborted = error instanceof Error && (error.message.includes('aborted') || error.message.includes('AbortError'))
 
 					if (wasAborted) {
+						// SYNC: Update aborted state in store
+						const abortedMsg = messageStore.get(streamingMessageId)
+						if (abortedMsg && abortedMsg.isStreaming) {
+							if (abortedMsg.streamingText && abortedMsg.streamingText.trim().length > 0) {
+								messageStore.set({
+									...abortedMsg,
+									text: abortedMsg.streamingText,
+									isStreaming: false,
+									streamingText: undefined
+								})
+							} else {
+								messageStore.delete(streamingMessageId)
+							}
+						}
+
 						setMessages(prev => prev.map(msg => {
 							if (msg.id === streamingMessageId && msg.isStreaming) {
 								return {
@@ -510,6 +564,9 @@ export function useConversationMessageActions({
 						streamingText: ''
 					}
 
+					// SYNC: Store streaming message
+					messageStore.set(streamingMessage)
+
 					// Only update global messages if viewing the target branch
 					if (!targetBranchId || targetBranchId === activeBranchId) {
 						setMessages(prev => [...prev, streamingMessage])
@@ -540,6 +597,15 @@ export function useConversationMessageActions({
 						// Use the context built at the start of sendMessage (single source of truth)
 
 						const onChunk = (chunk: string) => {
+							// SYNC: Update streaming text
+							const currentStored = messageStore.get(streamingMessageId)
+							if (currentStored) {
+								messageStore.set({
+									...currentStored,
+									streamingText: (currentStored.streamingText || '') + chunk
+								})
+							}
+
 							setMessages(prev => prev.map(msg =>
 								msg.id === streamingMessageId
 									? { ...msg, streamingText: (msg.streamingText || '') + chunk }
@@ -590,6 +656,15 @@ export function useConversationMessageActions({
 
 							const chunk = `${i === 0 ? '' : ' '}${words[i]}`
 
+							// SYNC: Mock streaming
+							const currentStored = messageStore.get(streamingMessageId)
+							if (currentStored) {
+								messageStore.set({
+									...currentStored,
+									streamingText: (currentStored.streamingText || '') + chunk
+								})
+							}
+
 							setMessages(prev => prev.map(msg =>
 								msg.id === streamingMessageId
 									? { ...msg, streamingText: (msg.streamingText || '') + chunk }
@@ -621,6 +696,18 @@ export function useConversationMessageActions({
 					}
 
 					// Final update to set isStreaming: false
+					// SYNC: Finalize single AI
+					const beforeFinal = messageStore.get(streamingMessageId)
+					if (beforeFinal) {
+						messageStore.set({
+							...beforeFinal,
+							text: finalResponse,
+							isStreaming: false,
+							streamingText: undefined,
+							timestamp: Date.now()
+						})
+					}
+
 					setMessages(prev => prev.map((msg: Message) =>
 						msg.id === streamingMessageId
 							? { ...msg, text: finalResponse, isStreaming: false, streamingText: undefined, timestamp: Date.now() }
@@ -666,6 +753,8 @@ export function useConversationMessageActions({
 						children: [],
 						aiModel: (selectedAI as AI | undefined)?.id
 					}
+					// SYNC: Store error msg
+					messageStore.set(aiResponse)
 				}
 
 				if (!aiResponse.isStreaming) {
@@ -721,6 +810,17 @@ export function useConversationMessageActions({
 						if (msg.isStreaming) {
 							// If we have streamed text, keep it
 							if (msg.streamingText && msg.streamingText.trim().length > 0) {
+								// SYNC: Finalize aborted state
+								const stored = messageStore.get(msg.id)
+								if (stored) {
+									messageStore.set({
+										...stored,
+										text: msg.streamingText,
+										isStreaming: false,
+										streamingText: undefined
+									})
+								}
+
 								return {
 									...msg,
 									text: msg.streamingText,
@@ -729,6 +829,8 @@ export function useConversationMessageActions({
 								}
 							}
 							// If no text was streamed, remove the message entirely
+							// SYNC: delete
+							messageStore.delete(msg.id)
 							return null
 						}
 						return msg
@@ -743,6 +845,9 @@ export function useConversationMessageActions({
 						children: [],
 						aiModel: selectedAIs[0]?.id
 					}
+
+					// SYNC: store error
+					messageStore.set(errorResponse)
 
 					setMessages(prev => [...prev, errorResponse])
 				}

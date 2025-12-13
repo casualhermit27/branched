@@ -34,12 +34,29 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
 }
 
+import { z } from 'zod'
+
+const updateConversationSchema = z.object({
+    title: z.string().optional(),
+    messages: z.array(z.any()).optional(), // Consider a more strict schema for messages if possible
+    branches: z.array(z.any()).optional(),
+    conversationNodes: z.array(z.any()).optional(),
+    userId: z.string().optional()
+})
+
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const session = await auth()
         await connectDB()
         const { id } = await params
-        const data = await req.json()
+        const rawBody = await req.json()
+
+        const parseResult = updateConversationSchema.safeParse(rawBody)
+        if (!parseResult.success) {
+            return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 })
+        }
+
+        const data = parseResult.data
 
         const existing = await Conversation.findById(id)
         if (!existing) {

@@ -509,7 +509,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 				const groupId = effectiveAIs.length > 1 ? `group-${Date.now()}` : undefined
 				const responseContext = [...contextMessages, userMessage]
 
-				for (const ai of effectiveAIs) {
+				const promises = effectiveAIs.map(async (ai) => {
 					const { modelName, supported, reason, displayName } = mapAIModel(ai)
 					const streamingMessageId = `msg-${Date.now()}-${ai.id}`
 					const streamingMessage: Message = {
@@ -631,7 +631,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 						}
 
 						finalizeStreamingMessage(mockText)
-						continue
+						return
 					}
 
 					setNodes((prev) =>
@@ -733,12 +733,17 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					} catch (error) {
 						const errorMessage =
 							error instanceof Error ? error.message : 'Unknown model error'
-						console.error(`Error generating response for ${ai.name}:`, error)
-						finalizeStreamingMessage(
-							buildMockResponse(displayName, message) + `\n\n⚠️ ${errorMessage}`
-						)
+						// Only show error if not aborted
+						if (errorMessage !== 'The user aborted a request.') {
+							console.error(`Error generating response for ${ai.name}:`, error)
+							finalizeStreamingMessage(
+								buildMockResponse(displayName, message) + `\n\n⚠️ ${errorMessage}`
+							)
+						}
 					}
-				}
+				})
+
+				await Promise.all(promises)
 			} catch (error) {
 				if (error instanceof Error && error.name === 'AbortError') {
 					// Generation aborted
@@ -971,9 +976,13 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	// ============================================
 
 	useEffect(() => {
-		if (!isInitializedRef.current && nodes.length === 0) {
-			isInitializedRef.current = true
-			const mainNode = createMainNode(
+		// Check if main node already exists
+		const mainNodeExists = nodes.some(n => n.id === 'main')
+
+		// Only create main node if we have messages to show and it doesn't exist yet
+		// This prevents the empty "ghost" node from appearing behind the empty state overlay
+		if (!mainNodeExists && mainMessages.length > 0) {
+			let mainNode = createMainNode(
 				mainMessages,
 				selectedAIs,
 				{
@@ -993,9 +1002,31 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					onToggleMinimize: toggleNodeMinimize
 				}
 			)
-			setNodes([mainNode])
+
+			// Pre-calculate layout to ensure node is centered before first render
+			// This prevents the "jump" where fitView centers on (0,0) but node moves to (-650, 0)
+			const layoutResult = getLayoutedElements([mainNode], [])
+			setNodes(layoutResult.nodes)
+
+			// Center the new main node immediately
+			if (reactFlowInstance) {
+				requestAnimationFrame(() => {
+					setTimeout(() => {
+						reactFlowInstance.fitView({
+							padding: 0.35,
+							minZoom: 0.1,
+							maxZoom: 0.7,
+							duration: 500, // Add duration for smooth transition
+							nodes: [{ id: 'main' }]
+						})
+					}, 150) // Increased delay to ensure node is rendered in DOM
+				})
+			}
+
+			// Ensure canvas is visible
+			setIsReady(true)
 		}
-	}, []) // Run once on mount
+	}, [nodes, mainMessages, reactFlowInstance])
 
 	// ============================================
 	// RESTORE NODES
@@ -1433,7 +1464,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			if (activeNode) {
 				// Only auto-focus if we haven't just done a programmatic focus (within last 1s)
 				const timeSinceProgrammaticFocus = Date.now() - (lastProgrammaticFocusRef.current || 0)
-	
+		
 				if (timeSinceProgrammaticFocus > 1000) {
 					// Use requestAnimationFrame for smoother timing than setTimeout
 					requestAnimationFrame(() => {
@@ -1693,7 +1724,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		<ReactFlowProvider>
 			<div className={`w-full h-screen transition-opacity duration-700 ${isReady ? 'opacity-100' : 'opacity-0'}`}>
 				<ReactFlow
-					nodes={nodesWithHandlers}
+					nodes={mainMessages.length > 0 ? nodesWithHandlers : []}
 					edges={edges}
 					nodeTypes={nodeTypes}
 					edgeTypes={edgeTypes}

@@ -199,23 +199,40 @@ function ChatInterface({
         setTimeout(() => setCopiedMessageId(null), 2000)
     }
 
-    const startEditing = (msg: Message) => {
+    // Handle synthesis of multiple responses
+    const handleSynthesize = (groupId: string) => {
+        const groupMessages = messages.filter(m => m.groupId === groupId && !m.isUser)
+        if (groupMessages.length === 0) return
+
+        // Construct synthesis prompt
+        const prompt = `Please synthesize the following ${groupMessages.length} AI responses into a single, comprehensive answer. Identify the best parts of each, resolve any conflicts, and provide the most accurate summary.
+
+${groupMessages.map((m, i) => `[Response ${i + 1} from ${m.aiModel || 'AI'}]:\n${m.text}\n`).join('\n')}
+
+Synthesized Answer:`
+
         if (checkLimit && !checkLimit('message')) return
-        setEditingMessageId(msg.id)
-        setEditValue(msg.text)
+        setComparisonViewGroupId(null)
+        onSendMessage(prompt)
     }
 
-    const cancelEditing = () => {
-        setEditingMessageId(null)
-        setEditValue('')
-    }
-
-    const saveEdit = () => {
-        if (checkLimit && !checkLimit('message')) return
-        if (editingMessageId && editValue.trim() && onEditMessage) {
-            onEditMessage(editingMessageId, editValue)
+    const { startEditing, cancelEditing, saveEdit } = {
+        startEditing: (msg: Message) => {
+            if (checkLimit && !checkLimit('message')) return
+            setEditingMessageId(msg.id)
+            setEditValue(msg.text)
+        },
+        cancelEditing: () => {
             setEditingMessageId(null)
             setEditValue('')
+        },
+        saveEdit: () => {
+            if (checkLimit && !checkLimit('message')) return
+            if (editingMessageId && editValue.trim() && onEditMessage) {
+                onEditMessage(editingMessageId, editValue)
+                setEditingMessageId(null)
+                setEditValue('')
+            }
         }
     }
 
@@ -312,12 +329,12 @@ function ChatInterface({
                             {/* Multi-model Group Header */}
                             {isMultiModel && (
                                 <div className="flex items-center justify-center gap-3 py-2 opacity-80 hover:opacity-100 transition-opacity">
-                                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-muted rounded-full text-[10px] text-muted-foreground font-medium border border-border/30">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-transparent rounded-full text-[10px] text-muted-foreground font-medium border border-border">
                                         <span>{groupMessages.length} Responses</span>
                                     </div>
                                     <button
                                         onClick={() => setComparisonViewGroupId(isComparisonView ? null : groupId)}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-background/50 hover:bg-muted border border-border/30 rounded-full text-[10px] font-medium text-foreground transition-all"
+                                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-transparent hover:bg-muted border border-border rounded-full text-[10px] font-medium text-foreground transition-all"
                                     >
                                         {isComparisonView ? (
                                             <>
@@ -332,11 +349,8 @@ function ChatInterface({
                                         )}
                                     </button>
                                     <button
-                                        onClick={() => {
-                                            if (checkLimit && !checkLimit('branch')) return
-                                            alert("Synthesize feature: Coming soon! This will combine these responses into a final summary.")
-                                        }}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-full text-[10px] font-medium text-purple-500 transition-all"
+                                        onClick={() => handleSynthesize(groupId)}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-full text-[10px] font-medium text-purple-500 transition-all shadow-sm hover:shadow-purple-500/10"
                                     >
                                         <SparklesIcon className="w-3 h-3" />
                                         <span>Synthesize</span>
@@ -351,6 +365,7 @@ function ChatInterface({
                                     selectedAIs={selectedAIs}
                                     groupId={groupId}
                                     onClose={() => setComparisonViewGroupId(null)}
+                                    onSynthesize={() => handleSynthesize(groupId)}
                                     getAIColor={getAIColor}
                                     getAILogo={getAILogo}
                                 />
@@ -409,61 +424,63 @@ function ChatInterface({
                                                             </div>
                                                         ) : (
                                                             <>
-                                                                <div
-                                                                    onClick={(e) => {
-                                                                        if (e.ctrlKey || e.metaKey || e.altKey) {
-                                                                            e.preventDefault()
-                                                                            e.stopPropagation()
-                                                                            onMessageSelect?.(msg.id, true)
-                                                                        }
-                                                                    }}
-                                                                    className={`bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white px-5 py-3 rounded-[1.5rem] rounded-tr-sm shadow-sm overflow-hidden max-w-full ${selectedMessageIds?.has(msg.id)
-                                                                        ? 'ring-2 ring-zinc-400 dark:ring-zinc-500 ring-offset-2 ring-offset-background'
-                                                                        : ''
-                                                                        }`}
-                                                                    title="Ctrl + Click to select"
-                                                                >
-                                                                    {/* User messages shown as plain text - no markdown rendering */}
-                                                                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{msg.text}</p>
-                                                                </div>
+                                                                <div className="relative group/user-message">
+                                                                    <div
+                                                                        onClick={(e) => {
+                                                                            if (e.ctrlKey || e.metaKey || e.altKey) {
+                                                                                e.preventDefault()
+                                                                                e.stopPropagation()
+                                                                                onMessageSelect?.(msg.id, true)
+                                                                            }
+                                                                        }}
+                                                                        className={`relative pl-4 border-l-2 border-primary/20 hover:border-primary/50 transition-colors ${selectedMessageIds?.has(msg.id)
+                                                                            ? 'ring-2 ring-zinc-400 dark:ring-zinc-500 ring-offset-4 ring-offset-background rounded-sm'
+                                                                            : ''
+                                                                            }`}
+                                                                    >
+                                                                        <div className="text-base text-foreground whitespace-pre-wrap break-words leading-relaxed font-normal">
+                                                                            {msg.text}
+                                                                        </div>
+                                                                    </div>
 
-                                                                {/* Floating Toolbar - Left Side */}
-                                                                <div className="absolute right-full top-1/2 -translate-y-1/2 mr-3 opacity-0 group-hover/message:opacity-100 transition-all duration-200 z-10">
-                                                                    <div className="flex items-center gap-0.5 p-1 rounded-full bg-background border border-border/50 text-muted-foreground backdrop-blur-sm">
-                                                                        {onEditMessage && (
+                                                                    {/* Minimal Hover Toolbar */}
+                                                                    <div className="absolute top-0 right-0 -translate-y-full pb-1 opacity-0 group-hover/user-message:opacity-100 transition-opacity duration-200 z-10">
+                                                                        <div className="flex items-center gap-1 p-1 bg-background/80 backdrop-blur border border-border/50 rounded-lg shadow-sm">
+                                                                            {onEditMessage && (
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.preventDefault(); e.stopPropagation();
+                                                                                        startEditing(msg)
+                                                                                    }}
+                                                                                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                                                                    title="Edit"
+                                                                                >
+                                                                                    <PencilSimple className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                            )}
                                                                             <button
                                                                                 onClick={(e) => {
                                                                                     e.preventDefault(); e.stopPropagation();
-                                                                                    startEditing(msg)
+                                                                                    handleCopy(msg.text, msg.id)
                                                                                 }}
-                                                                                className="p-1.5 rounded-full hover:bg-muted hover:text-foreground transition-colors"
-                                                                                title="Edit"
+                                                                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                                                                title="Copy"
                                                                             >
-                                                                                <PencilSimple className="w-4 h-4" />
+                                                                                {copiedMessageId === msg.id ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                                                                             </button>
-                                                                        )}
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.preventDefault(); e.stopPropagation();
-                                                                                handleCopy(msg.text, msg.id)
-                                                                            }}
-                                                                            className="p-1.5 rounded-full hover:bg-muted hover:text-foreground transition-colors"
-                                                                            title="Copy"
-                                                                        >
-                                                                            {copiedMessageId === msg.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                                                                        </button>
-                                                                        <div className="w-px h-4 bg-border/50 mx-0.5" />
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.preventDefault(); e.stopPropagation();
-                                                                                if (checkLimit && !checkLimit('branch')) return;
-                                                                                onBranchFromMessage(msg.id, true)
-                                                                            }}
-                                                                            className="p-1.5 rounded-full hover:bg-muted hover:text-primary transition-colors"
-                                                                            title="Branch all models"
-                                                                        >
-                                                                            <GitBranch className="w-4 h-4" />
-                                                                        </button>
+                                                                            <div className="w-px h-3 bg-border mx-0.5" />
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.preventDefault(); e.stopPropagation();
+                                                                                    if (checkLimit && !checkLimit('branch')) return;
+                                                                                    onBranchFromMessage(msg.id, true)
+                                                                                }}
+                                                                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
+                                                                                title="Branch from here"
+                                                                            >
+                                                                                <GitBranch className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             </>
@@ -592,12 +609,9 @@ function ChatInterface({
 
             {/* Fixed Footer Input Area */}
             {!readOnly && (
-                <div className="flex-shrink-0 z-30 p-4 md:p-6">
+                <div className="flex-shrink-0 z-30 p-4 md:p-6 bg-transparent">
                     <div className="max-w-4xl mx-auto relative group">
-                        {/* Gradient Glow Effect */}
-                        <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
-
-                        <div className="relative bg-card border border-border/50 shadow-lg rounded-2xl overflow-hidden transition-all duration-300 focus-within:ring-1 focus-within:ring-ring/20 focus-within:border-primary/20">
+                        <div className="relative bg-card dark:bg-zinc-900/50 border border-border/40 shadow-sm rounded-2xl overflow-hidden transition-all duration-300 focus-within:ring-1 focus-within:ring-primary/20 focus-within:border-primary/30">
                             <form
                                 onSubmit={handleSubmit}
                                 className="flex flex-col"
@@ -636,7 +650,7 @@ function ChatInterface({
                                 />
 
                                 {/* Bottom Actions */}
-                                <div className="flex items-center justify-between px-4 py-3 bg-muted/30 border-t border-border/30">
+                                <div className="flex items-center justify-between px-4 py-3 bg-transparent border-t border-border/20">
                                     <div className="flex items-center gap-4">
                                         {/* AI Pills */}
                                         {onAddAI && onRemoveAI && (

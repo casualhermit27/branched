@@ -71,11 +71,12 @@ export function getLayoutedElements(
 			node.data?.isMinimized || false
 		)
 
+		// Center the node at (0,0) - top-left coordinate will be (-width/2, 0)
 		return {
 			nodes: [
 				{
 					...node,
-					position: { x: 400, y: 50 },
+					position: { x: -dims.width / 2, y: 100 },
 					width: dims.width,
 					height: dims.height,
 					targetPosition: Position.Top,
@@ -231,10 +232,11 @@ export function getLayoutedElements(
 	})
 
 	// Re-center the entire graph around the main node
+	// We want the main node to be centered at X=0 (so TopLeft X = -width/2)
 	const mainNode = layoutedNodes.find(n => n.id === 'main' || n.data?.isMain)
 	if (mainNode) {
-		const targetMainX = 400
-		const targetMainY = 50
+		const targetMainX = -mainNode.width! / 2
+		const targetMainY = 0
 		const offsetX = targetMainX - mainNode.position.x
 		const offsetY = targetMainY - mainNode.position.y
 
@@ -260,7 +262,7 @@ export function getLayoutedElements(
 					? node.data.parentId
 					: node.data?.parentId || (node.id === 'main' ? undefined : 'main')
 			},
-			position: node.position || { x: 400, y: 50 },
+			position: node.position || { x: -dims.width / 2, y: 0 },
 			width: dims.width,
 			height: dims.height,
 			targetPosition: Position.Top,
@@ -283,11 +285,11 @@ export function validateNodePositions(nodes: Node[]): Node[] {
 		const x =
 			typeof position.x === 'number' && isFinite(position.x) && !isNaN(position.x)
 				? position.x
-				: 400
+				: -650
 		const y =
 			typeof position.y === 'number' && isFinite(position.y) && !isNaN(position.y)
 				? position.y
-				: 50
+				: 0
 
 		const dims = calculateNodeDimensions(
 			node.data?.messages?.length || 0,
