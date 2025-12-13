@@ -118,6 +118,22 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 	const isInitializedRef = useRef(false)
 	const isRestoringRef = useRef(false)
 	const layoutInProgressRef = useRef(false)
+	const prevConversationIdRef = useRef<string | null | undefined>(null)
+
+	// Reset restoration state when conversation changes
+	useEffect(() => {
+		if (conversationId !== prevConversationIdRef.current) {
+			console.log('[FlowCanvas] Conversation changed:', prevConversationIdRef.current, '->', conversationId)
+			prevConversationIdRef.current = conversationId
+			isRestoringRef.current = false
+			isInitializedRef.current = false
+			setIsReady(false) // Reset ready state for new conversation
+
+			// Clear React Flow state to prevent stale nodes from previous conversation
+			setNodes([])
+			setEdges([])
+		}
+	}, [conversationId, setNodes, setEdges])
 
 	// Active Path & Badge Logic
 	useEffect(() => {
@@ -1082,9 +1098,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		// Check if main node already exists
 		const mainNodeExists = nodes.some(n => n.id === 'main')
 
-		// Only create main node if we have messages to show and it doesn't exist yet
-		// This prevents the empty "ghost" node from appearing behind the empty state overlay
-		if (!mainNodeExists && mainMessages.length > 0) {
+		// Only create main node if it doesn't exist yet and we're not restoring
+		// This ensures we have a starting point for new conversations
+		if (!mainNodeExists && (!restoredConversationNodes || restoredConversationNodes.length === 0)) {
 			let mainNode = createMainNode(
 				mainMessages,
 				selectedAIs,
@@ -1108,28 +1124,30 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 
 			// Pre-calculate layout to ensure node is centered before first render
 			// This prevents the "jump" where fitView centers on (0,0) but node moves to (-650, 0)
+			console.log('[FlowCanvas] Creating main node for empty state')
 			const layoutResult = getLayoutedElements([mainNode], [])
 			setNodes(layoutResult.nodes)
 
-			// Center the new main node immediately
+			// Set viewport using focusOnNode for natural centering (same as focus feature)
+			// Use the freshly computed layoutResult.nodes instead of stale state
 			if (reactFlowInstance) {
-				requestAnimationFrame(() => {
-					setTimeout(() => {
-						reactFlowInstance.fitView({
-							padding: 0.35,
-							minZoom: 0.1,
-							maxZoom: 0.7,
-							duration: 500, // Add duration for smooth transition
-							nodes: [{ id: 'main' }]
-						})
-					}, 150) // Increased delay to ensure node is rendered in DOM
-				})
+				// Use a multi-pass approach to ensure centering persists after layout/sidebar shifts
+				const forceCenter = () => {
+					console.log('[FlowCanvas] Forcing center view with focusOnNode')
+					// IMPORTANT: Use layoutResult.nodes, not the stale `nodes` state
+					focusOnNode(reactFlowInstance, 'main', layoutResult.nodes, 0.2, 0)
+				}
+
+				// Execute immediately, then again shortly after to catch any layout shifts
+				forceCenter()
+				setTimeout(forceCenter, 100)
+				setTimeout(forceCenter, 300)
 			}
 
 			// Ensure canvas is visible
 			setIsReady(true)
 		}
-	}, [nodes, mainMessages, reactFlowInstance])
+	}, [nodes, mainMessages, reactFlowInstance, restoredConversationNodes])
 
 	// ============================================
 	// RESTORE NODES
@@ -1143,6 +1161,18 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 			!isRestoringRef.current
 		) {
 			isRestoringRef.current = true
+
+			// Debug: Log what we're restoring
+			console.log('[FlowCanvas] Restoring nodes:', {
+				totalNodes: restoredConversationNodes.length,
+				branchNodes: restoredConversationNodes.filter((n: any) => n.id !== 'main' && !n.isMain && !n.data?.isMain).length,
+				nodeDetails: restoredConversationNodes.map((n: any) => ({
+					id: n.id,
+					position: n.position,
+					hasParentId: !!(n.parentId || n.data?.parentId),
+					messageCount: (n.data?.messages || n.messages || []).length
+				}))
+			})
 
 			// Populate stores before restoring nodes
 			// 1. Populate messageStore with all messages from nodes
@@ -1342,7 +1372,18 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					setIsReady(true)
 				}, 300) // Slight delay to allow layout to settle
 			} else {
-				// If no specific branch to focus (e.g. only main node), just show it
+				// If no specific branch to focus (e.g. only main node), center on main
+				// This handles the "New Conversation" case where only main node exists
+				if (reactFlowInstance && finalNodes.length > 0) {
+					const centerOnMain = () => {
+						console.log('[FlowCanvas] Centering on main node (new conversation)')
+						focusOnNode(reactFlowInstance, 'main', finalNodes, 0.2, 0)
+					}
+					// Center immediately and after a short delay to catch any layout shifts
+					centerOnMain()
+					setTimeout(centerOnMain, 100)
+					setTimeout(centerOnMain, 300)
+				}
 				isRestoringRef.current = false
 				setIsReady(true)
 			}
@@ -1827,7 +1868,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 		<ReactFlowProvider>
 			<div className={`w-full h-screen transition-opacity duration-700 ${isReady ? 'opacity-100' : 'opacity-0'}`}>
 				<ReactFlow
-					nodes={mainMessages.length > 0 ? nodesWithHandlers : []}
+					nodes={nodesWithHandlers}
 					edges={edges}
 					nodeTypes={nodeTypes}
 					edgeTypes={edgeTypes}
@@ -1843,16 +1884,20 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 					onNodeDragStop={onNodeDragStopHandler}
 					onInit={(instance) => {
 						setReactFlowInstance(instance)
-						// Fit view after initialization to prevent NaN errors
-						window.requestAnimationFrame(() => {
-							instance.fitView({
-								padding: 0.2,
-								maxZoom: 1.2,
-								minZoom: 0.1
+						// Only fit view if we already have nodes (e.g., restoring a conversation)
+						// For new conversations, the node creation will handle centering
+						if (nodes.length > 0) {
+							window.requestAnimationFrame(() => {
+								instance.fitView({
+									padding: 0.2,
+									maxZoom: 1.2,
+									minZoom: 0.1,
+									duration: 0 // No animation
+								})
 							})
-						})
+						}
 					}}
-					defaultViewport={{ x: 0, y: 0, zoom: 1 }} // Safe default to prevent NaN
+					defaultViewport={{ x: 0, y: 0, zoom: 0.8 }} // Start at zoom 0.8 for better initial view
 					// fitView prop removed to avoid init race condition
 
 					attributionPosition="bottom-left"
@@ -1864,15 +1909,18 @@ export default function FlowCanvas(props: FlowCanvasProps) {
 				>
 					<Background variant={"dots" as BackgroundVariant} gap={24} size={2} color="#64748b" className="opacity-40 dark:opacity-30" />
 					<Controls position="bottom-right" />
-					<MiniMap
-						nodeColor={(node) => {
-							if (node.id === 'main') return '#8b5cf6'
-							if (node.data?.isActive) return '#3b82f6'
-							if (node.data?.isMinimized) return '#94a3b8'
-							return '#64748b'
-						}}
-						maskColor="rgba(0, 0, 0, 0.1)"
-					/>
+					{/* Only show MiniMap when there are branches */}
+					{nodes.filter(n => n.id !== 'main' && !n.data?.isMain).length > 0 && (
+						<MiniMap
+							nodeColor={(node) => {
+								if (node.id === 'main') return '#8b5cf6'
+								if (node.data?.isActive) return '#3b82f6'
+								if (node.data?.isMinimized) return '#94a3b8'
+								return '#64748b'
+							}}
+							maskColor="rgba(0, 0, 0, 0.1)"
+						/>
+					)}
 					<GroupedBranchesContainer nodes={nodesWithHandlers} />
 				</ReactFlow>
 

@@ -33,7 +33,7 @@ export function calculateNodeDimensions(
 	}
 
 	// Base height for header + input
-	const baseHeight = 450
+	const baseHeight = messageCount === 0 ? 200 : 450
 	// Height per message (approximate)
 	const messageHeight = 100
 	// Maximum height before scrolling
@@ -76,7 +76,7 @@ export function getLayoutedElements(
 			nodes: [
 				{
 					...node,
-					position: { x: -dims.width / 2, y: 100 },
+					position: { x: 0, y: 0 },
 					width: dims.width,
 					height: dims.height,
 					targetPosition: Position.Top,
@@ -235,7 +235,7 @@ export function getLayoutedElements(
 	// We want the main node to be centered at X=0 (so TopLeft X = -width/2)
 	const mainNode = layoutedNodes.find(n => n.id === 'main' || n.data?.isMain)
 	if (mainNode) {
-		const targetMainX = -mainNode.width! / 2
+		const targetMainX = 0
 		const targetMainY = 0
 		const offsetX = targetMainX - mainNode.position.x
 		const offsetY = targetMainY - mainNode.position.y
@@ -262,7 +262,7 @@ export function getLayoutedElements(
 					? node.data.parentId
 					: node.data?.parentId || (node.id === 'main' ? undefined : 'main')
 			},
-			position: node.position || { x: -dims.width / 2, y: 0 },
+			position: node.position || { x: 0, y: 0 },
 			width: dims.width,
 			height: dims.height,
 			targetPosition: Position.Top,
@@ -285,7 +285,7 @@ export function validateNodePositions(nodes: Node[]): Node[] {
 		const x =
 			typeof position.x === 'number' && isFinite(position.x) && !isNaN(position.x)
 				? position.x
-				: -650
+				: 0
 		const y =
 			typeof position.y === 'number' && isFinite(position.y) && !isNaN(position.y)
 				? position.y
@@ -348,9 +348,7 @@ export function calculateViewportFit(
 	const contentWidth = maxX - minX
 	const contentHeight = maxY - minY
 	const centerX = (minX + maxX) / 2
-	// Add visual offset to move content up (camera down)
-	// User reported focus was "off little down" (content too low)
-	const centerY = (minY + maxY) / 2 + 50
+	const centerY = (minY + maxY) / 2
 
 	// Calculate zoom to fit
 	const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920

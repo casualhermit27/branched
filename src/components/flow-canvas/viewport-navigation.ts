@@ -12,7 +12,8 @@ export function focusOnNode(
 	reactFlowInstance: ReactFlowInstance | null,
 	nodeId: string,
 	nodes: Node[],
-	padding: number = 0.15
+	padding: number = 0.15,
+	duration: number = 350
 ): void {
 	if (!reactFlowInstance) return
 
@@ -40,7 +41,7 @@ export function focusOnNode(
 			zoom: viewport.zoom
 		},
 		{
-			duration: 350
+			duration: duration
 		}
 	)
 }

@@ -40,7 +40,8 @@ export default function ConversationPage({ initialConversationId }: Conversation
 	const {
 		autoSaveConversation,
 		loadConversations,
-		currentConversationId
+		currentConversationId,
+		setCurrentConversationId
 	} = useMongoDB({
 		autoSave: true,
 		autoSaveDelay: 500,
@@ -90,7 +91,8 @@ export default function ConversationPage({ initialConversationId }: Conversation
 		defaultAI,
 		addToast,
 		restoreConversationState,
-		checkLimit
+		checkLimit,
+		setCurrentConversationId
 	})
 
 	useConversationPageEffects({
@@ -190,6 +192,7 @@ export default function ConversationPage({ initialConversationId }: Conversation
 				actions={actions}
 				commandPaletteCommands={commandPaletteCommands}
 				onLoginClick={() => setShowLoginModal(true)}
+				currentConversationId={currentConversationId}
 			/>
 			<LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
 		</>

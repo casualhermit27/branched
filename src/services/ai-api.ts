@@ -321,14 +321,19 @@ export class GeminiAPI extends BaseAIAPI {
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
     let fullResponse = ''
+    let chunkCount = 0
     if (!reader) throw new Error('No response body')
 
     try {
       while (true) {
         if (signal?.aborted) { reader.cancel(); throw new Error('Aborted'); }
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) {
+          console.log(`[GeminiAPI] Stream complete. Total chunks: ${chunkCount}, Final length: ${fullResponse.length} chars`)
+          break
+        }
         const chunk = decoder.decode(value)
+        chunkCount++
 
         // Gemini returns a JSON array stream like "[{...},\n,{...}]"
         // Extract text content from the JSON structure
@@ -354,6 +359,7 @@ export class GeminiAPI extends BaseAIAPI {
           }
         }
       }
+      console.log(`[GeminiAPI] Returning response with ${fullResponse.length} characters`)
       return { text: fullResponse, model: this.provider, timestamp: Date.now() }
     } finally { reader.releaseLock() }
   }

@@ -38,6 +38,7 @@ interface ConversationAppShellProps {
     actions: ConversationActions
     commandPaletteCommands: CommandPaletteCommand[]
     onLoginClick: () => void
+    currentConversationId?: string | null
 }
 
 const MAX_DUPLICATE_BRANCHES = 6
@@ -46,7 +47,8 @@ export default function ConversationAppShell({
     state,
     actions,
     commandPaletteCommands,
-    onLoginClick
+    onLoginClick,
+    currentConversationId
 }: ConversationAppShellProps) {
     const { data: session } = useSession()
     const {
@@ -514,7 +516,7 @@ export default function ConversationAppShell({
                                 onAllNodesMinimizedChange={(minimized) => setAllNodesMinimized(minimized)}
                                 onSelectionChange={setSelectedBranchIds}
                                 onMessageSelectionChange={setSelectedMessageIds}
-                                conversationId={currentConversationIdRef.current}
+                                conversationId={currentConversationId}
                                 onActiveNodeChange={(nodeId) => {
                                     if (nodeId && nodeId !== activeBranchId) {
                                         setActiveBranchId(nodeId)
@@ -565,7 +567,7 @@ export default function ConversationAppShell({
                                 onAllNodesMinimizedChange={(minimized) => setAllNodesMinimized(minimized)}
                                 onSelectionChange={setSelectedBranchIds}
                                 onMessageSelectionChange={setSelectedMessageIds}
-                                conversationId={currentConversationIdRef.current}
+                                conversationId={currentConversationId}
                                 onActiveNodeChange={(nodeId) => {
                                     // Update active branch ID when node focus changes in canvas
                                     // This ensures persistence works correctly
@@ -584,19 +586,7 @@ export default function ConversationAppShell({
                             />
                         </div>
 
-                        {/* Empty State Overlay */}
-                        {branches.length === 0 && conversationNodes.filter(n => n.id !== 'main' && !n.isMain).length === 0 && !pendingBranchMessageId && messages.length === 0 && (
-                            <EmptyState
-                                onSendMessage={sendMessage}
-                                selectedAIs={selectedAIs}
-                                onAddAI={addAI}
-                                onRemoveAI={removeAI}
-                                onSelectSingle={selectSingleAI}
-                                getBestAvailableModel={getBestAvailableModel}
-                                tier={tier}
-                                checkLimit={checkLimit}
-                            />
-                        )}
+
                     </>
                 )
             }

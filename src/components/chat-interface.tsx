@@ -311,7 +311,7 @@ Synthesized Answer:`
 
             {/* Messages Area */}
             <div
-                className="flex-1 overflow-y-auto overflow-x-hidden space-y-8 px-4 pb-4 pt-4 overscroll-contain"
+                className="flex-1 overflow-y-auto overflow-x-hidden space-y-8 px-6 pb-4 pt-6 overscroll-contain"
                 ref={messagesContainerRef}
                 onScroll={handleScroll}
                 data-scrollable
@@ -609,9 +609,9 @@ Synthesized Answer:`
 
             {/* Fixed Footer Input Area */}
             {!readOnly && (
-                <div className="flex-shrink-0 z-30 p-4 md:p-6 bg-transparent">
+                <div className="flex-shrink-0 z-30 bg-card/50 backdrop-blur-sm border-t border-border/40">
                     <div className="max-w-4xl mx-auto relative group">
-                        <div className="relative bg-card dark:bg-zinc-900/50 border border-border/40 shadow-sm rounded-2xl overflow-hidden transition-all duration-300 focus-within:ring-1 focus-within:ring-primary/20 focus-within:border-primary/30">
+                        <div className="relative transition-all duration-300">
                             <form
                                 onSubmit={handleSubmit}
                                 className="flex flex-col"
@@ -628,7 +628,6 @@ Synthesized Answer:`
                                     }}
                                     onFocus={() => {
                                         if (checkLimit && !checkLimit('message')) {
-                                            // Immediately blur if limit reached to prevent typing (since limit is 0 for guest)
                                             textareaRef.current?.blur()
                                             return
                                         }
@@ -640,18 +639,18 @@ Synthesized Answer:`
                                         }, 100)
                                     }}
                                     placeholder={selectedAIs.length > 1 ? `Message ${selectedAIs.length} models...` : "Type a message..."}
-                                    className="w-full bg-transparent border-none outline-none p-4 text-base placeholder:text-muted-foreground/40 min-h-[60px] resize-none"
-                                    style={{ maxHeight: '200px' }}
+                                    className="w-full bg-transparent border-none outline-none px-6 py-5 text-base placeholder:text-muted-foreground/40 min-h-[60px] resize-none focus:ring-0"
+                                    style={{ maxHeight: '300px' }}
                                     onInput={(e) => {
                                         const target = e.target as HTMLTextAreaElement
                                         target.style.height = 'auto'
-                                        target.style.height = Math.min(target.scrollHeight, 200) + 'px'
+                                        target.style.height = Math.min(target.scrollHeight, 300) + 'px'
                                     }}
                                 />
 
                                 {/* Bottom Actions */}
-                                <div className="flex items-center justify-between px-4 py-3 bg-transparent border-t border-border/20">
-                                    <div className="flex items-center gap-4">
+                                <div className="flex items-center justify-between px-4 pb-4 bg-transparent">
+                                    <div className="flex items-center gap-3">
                                         {/* AI Pills */}
                                         {onAddAI && onRemoveAI && (
                                             <AIPills
@@ -674,39 +673,39 @@ Synthesized Answer:`
                                             />
                                         )}
 
-                                        <div className="h-6 w-px bg-border/50 mx-2"></div>
+                                        <div className="h-5 w-px bg-border/50 mx-1"></div>
 
                                         {/* Attachment Button */}
                                         <button
                                             type="button"
                                             onClick={() => alert('Attachments coming soon!')}
-                                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                                         >
-                                            <Plus weight="bold" className="w-4 h-4" />
+                                            <Plus weight="bold" className="w-3.5 h-3.5" />
                                             <span>Add Files</span>
                                         </button>
                                     </div>
 
-                                    <div className="flex-shrink-0">
+                                    <div className="flex-shrink-0 ml-4">
                                         {isGenerating ? (
                                             <button
                                                 type="button"
                                                 onClick={onStopGeneration}
-                                                className="w-10 h-10 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors"
+                                                className="w-9 h-9 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors shadow-sm"
                                                 title="Stop generation"
                                             >
-                                                <Stop weight="fill" className="w-5 h-5" />
+                                                <Stop weight="fill" className="w-4 h-4" />
                                             </button>
                                         ) : (
                                             <button
                                                 type="submit"
                                                 disabled={!message.trim()}
-                                                className={`p-2 rounded-full transition-all duration-200 ${message.trim()
-                                                    ? 'bg-primary text-primary-foreground shadow-md hover:scale-105'
-                                                    : 'bg-muted text-muted-foreground cursor-not-allowed'
+                                                className={`p-2.5 rounded-xl transition-all duration-200 ${message.trim()
+                                                    ? 'bg-primary text-primary-foreground shadow-md hover:scale-105 hover:shadow-lg'
+                                                    : 'bg-muted/50 text-muted-foreground/50 cursor-not-allowed'
                                                     }`}
                                             >
-                                                <PaperPlaneRight weight="fill" className="w-5 h-5" />
+                                                <PaperPlaneRight weight="fill" className="w-4 h-4 translate-x-px translate-y-px" />
                                             </button>
                                         )}
                                     </div>
@@ -716,16 +715,16 @@ Synthesized Answer:`
 
                         {/* Branch Context Indicator (Floating above input) */}
                         {currentBranch && (
-                            <div className="absolute -top-10 left-4 flex items-center gap-2 px-3 py-1.5 bg-background border border-border/50 rounded-full shadow-sm text-xs text-muted-foreground">
+                            <div className="absolute -top-12 left-6 flex items-center gap-2 px-3 py-1.5 bg-background/95 backdrop-blur border border-border/50 rounded-full shadow-sm text-xs text-muted-foreground z-40">
                                 <GitBranch className="w-3.5 h-3.5" />
                                 <span className="max-w-[200px] truncate">
                                     Branch from: {messages.find(m => m.id === currentBranch)?.text || '...'}
                                 </span>
                                 <button
                                     onClick={() => onBranchFromMessage('')}
-                                    className="ml-1 hover:text-foreground"
+                                    className="ml-1 hover:text-foreground p-0.5 rounded-full hover:bg-muted"
                                 >
-                                    ×
+                                    <X className="w-3 h-3" />
                                 </button>
                             </div>
                         )}

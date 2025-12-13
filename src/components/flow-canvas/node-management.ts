@@ -42,7 +42,7 @@ export function createMainNode(
 	return {
 		id: 'main',
 		type: 'chatNode',
-		position: { x: -dims.width / 2, y: 100 },
+		position: { x: 0, y: 100 },
 		data: {
 			label: 'Main Conversation',
 			messages,
@@ -270,10 +270,17 @@ export function restoreNodesFromState(
 		}
 
 		if (savedNode.id === 'main') {
-			return createMainNode(messages, selectedAIs, handlers, {
+			const mainNode = createMainNode(messages, selectedAIs, handlers, {
 				...state,
 				isMinimized: savedNode.data?.isMinimized ?? false
 			})
+
+			// Preserve position if saved
+			if (savedNode.position) {
+				mainNode.position = savedNode.position
+			}
+
+			return mainNode
 		}
 
 		// Restore branch node - handle cases where data might be undefined

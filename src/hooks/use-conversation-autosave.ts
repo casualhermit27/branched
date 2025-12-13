@@ -87,6 +87,14 @@ export function useConversationAutosave({
 					})
 				}
 
+				// Debug: Log what we're about to save
+				console.log('[Autosave] Saving conversation:', {
+					conversationId: currentConversationIdRef.current,
+					totalNodes: allNodes.length,
+					branchNodes: allNodes.filter(n => n.id !== 'main' && !n.isMain).length,
+					nodePositions: allNodes.map(n => ({ id: n.id, position: n.position }))
+				})
+
 				const branchesForSave = allNodes.map(node => {
 					const isMainNode = node.id === 'main' || node.isMain
 					let nodeMessages: any[] = []

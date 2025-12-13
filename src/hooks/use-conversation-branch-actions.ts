@@ -23,6 +23,7 @@ interface UseConversationBranchActionsParams {
 	addToast: (toast: ToastOptions) => void
 	restoreConversationState: (conversation: any) => void
 	checkLimit?: (type: 'branch' | 'message') => boolean
+	setCurrentConversationId?: (id: string | null) => void
 }
 
 export function useConversationBranchActions({
@@ -30,7 +31,8 @@ export function useConversationBranchActions({
 	defaultAI,
 	addToast,
 	restoreConversationState,
-	checkLimit
+	checkLimit,
+	setCurrentConversationId
 }: UseConversationBranchActionsParams) {
 	const {
 		selectedAIs,
@@ -254,6 +256,8 @@ export function useConversationBranchActions({
 
 			if (data.success && data.data?._id) {
 				currentConversationIdRef.current = data.data._id
+				// Also update the state-based ID to trigger re-renders
+				setCurrentConversationId?.(data.data._id)
 
 				const mainNode = {
 					id: 'main',
@@ -268,7 +272,7 @@ export function useConversationBranchActions({
 					isMain: true,
 					isMinimized: false,
 					showAIPill: false,
-					position: { x: 400, y: 50 },
+					position: { x: 0, y: 0 }, // Centered position for viewport alignment
 					nodeData: {},
 					parentMessageId: undefined,
 					inheritedMessages: [],
@@ -316,7 +320,9 @@ export function useConversationBranchActions({
 		setConversationNodes,
 		setCurrentBranch,
 		setMessages,
-		setSelectedAIs
+		setSelectedAIs,
+		setSavedBranches,
+		setCurrentConversationId
 	])
 
 	const handleSelectConversation = useCallback(async (conversationId: string) => {

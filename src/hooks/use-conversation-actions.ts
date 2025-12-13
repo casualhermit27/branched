@@ -15,6 +15,7 @@ interface UseConversationActionsParams {
 	defaultAI: AI
 	addToast: (toast: ToastOptions) => void
 	restoreConversationState: (conversation: any) => void
+	setCurrentConversationId?: (id: string | null) => void
 }
 
 export function useConversationActions({
@@ -22,14 +23,16 @@ export function useConversationActions({
 	defaultAI,
 	addToast,
 	restoreConversationState,
-	checkLimit
+	checkLimit,
+	setCurrentConversationId
 }: UseConversationActionsParams & { checkLimit?: (type: 'branch' | 'message') => boolean }) {
 	const branchActions = useConversationBranchActions({
 		state,
 		defaultAI,
 		addToast,
 		restoreConversationState,
-		checkLimit
+		checkLimit,
+		setCurrentConversationId
 	})
 
 	const messageActions = useConversationMessageActions({

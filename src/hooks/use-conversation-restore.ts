@@ -42,7 +42,7 @@ export function useConversationRestore() {
 
 		if (conversation._id) {
 			currentConversationIdRef.current = conversation._id
-			currentConversationIdRef.current = conversation._id
+			console.log('[Restore] Setting conversation ID:', conversation._id)
 		}
 
 		if (conversation.mainMessages && Array.isArray(conversation.mainMessages)) {
@@ -55,7 +55,7 @@ export function useConversationRestore() {
 					streamingText: undefined
 				}))
 
-			setMessages(validMessages)
+			console.log('[Restore] Setting main messages:', validMessages.length)
 			setMessages(validMessages)
 		} else {
 			setMessages([])
@@ -63,7 +63,7 @@ export function useConversationRestore() {
 
 		if (conversation.selectedAIs && conversation.selectedAIs.length > 0) {
 			const restoredAIs = conversation.selectedAIs.map((ai: any) => restoreAILogos(ai))
-			setSelectedAIs(restoredAIs)
+			console.log('[Restore] Setting AIs:', restoredAIs.length)
 			setSelectedAIs(restoredAIs)
 		} else {
 			setSelectedAIs([defaultAI])
